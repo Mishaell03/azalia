@@ -1,0 +1,7 @@
+include
+Lib
+Scripts
+pyvenv.cfg
+app
+app.py
+*.db
