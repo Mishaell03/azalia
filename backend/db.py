@@ -1,10 +1,13 @@
+import os
 import sqlite3
 from datetime import datetime, timedelta
 
 def create_database():
     conn = sqlite3.connect('flower_shop.db')
     cursor = conn.cursor()
-    
+    base_dir = os.path.abspath(os.path.dirname(__file__))
+    db_path = os.path.join(base_dir, 'flower_shop.db')
+
     cursor.execute('PRAGMA foreign_keys = ON')
 
     # должности
