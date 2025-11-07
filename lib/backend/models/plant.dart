@@ -32,10 +32,10 @@ class Plant {
       description: json['description'] ?? '',
       basePrice: (json['basePrice'] as num).toDouble(),
       inStock: json['inStock'] ?? false,
-      careInstructions: json['in_stock'] ?? '',
-      lightRequirements: json['light_requiments'] ?? '',
+      careInstructions: json['care_instructions'] ?? '',
+      lightRequirements: json['light_requirements'] ?? '',
       wateringFrequency: json['watering_frequency'] ?? '',
-      heightCm: json['hightCm'] ?? 0,
+      heightCm: json['heightCm'] ?? 0,
       plantType: json['plant_type'],
       recommendedPotSize: json['recommended_pot_size'],
     );

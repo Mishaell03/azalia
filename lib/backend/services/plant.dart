@@ -41,25 +41,25 @@ class PlantService {
     }
   }
 
-  Future<List<Category>> getCategory() async{
-    try{
+  Future<List<Category>> getCategory() async {
+    try {
       final response = await http
-        .get(
-          Uri.parse(ApiConfig.categories),
-          headers: ApiConfig.headers,
-        ).timeout(ApiConfig.timeout); 
-        if (response.statusCode == 200) {
-          final Map<String, dynamic> data = json.decode(response.body);
-          if (data['success']) {
-            return (data['data'] as List).map((categoryJson) => Category.fromJson(categoryJson)).toList();
-          } else{
-            throw Exception('Оштибка API: ${data['error']}');
-          }
-        }else{
-          throw Exception('Ошибка сервера: ${response.statusCode}');
+          .get(Uri.parse(ApiConfig.categories), headers: ApiConfig.headers)
+          .timeout(ApiConfig.timeout);
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        if (data['success']) {
+          return (data['data'] as List)
+              .map((categoryJson) => Category.fromJson(categoryJson))
+              .toList();
+        } else {
+          throw Exception('Оштибка API: ${data['error']}');
         }
+      } else {
+        throw Exception('Ошибка сервера: ${response.statusCode}');
+      }
     } catch (e) {
-      throw('Ошибка загрузки категорий: $e');
+      throw Exception('Ошибка загрузки категорий: $e');
     }
   }
 }

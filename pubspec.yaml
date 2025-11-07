@@ -42,3 +42,17 @@ flutter:
           weight: 700
         - asset: assets/fonts/Montserrat-ExtraBold.ttf
           weight: 800
+    - family: MontserratAlternates
+      fonts:
+        - asset: assets/fonts/MontserratAlternates-Light.ttf
+          weight: 300
+        - asset: assets/fonts/MontserratAlternates-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/MontserratAlternates-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/MontserratAlternates-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/MontserratAlternates-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/MontserratAlternates-ExtraBold.ttf
+          weight: 800
