@@ -101,6 +101,8 @@ class PotPlant(db.Model):
     light_requirements = db.Column(db.String(20))
     watering_frequency = db.Column(db.String(50))
     in_stock = db.Column(db.Boolean, default=True)
+    rating = db.Column(db.Float)
+    image_url = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     order_items = db.relationship('OrderItem', backref='plant', lazy=True)
@@ -120,6 +122,8 @@ class PotPlant(db.Model):
             'light_requirements': self.light_requirements,
             'watering_frequency': self.watering_frequency,
             'in_stock': self.in_stock,
+            'rating': self.rating,
+            'image_url': self.image_url,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 

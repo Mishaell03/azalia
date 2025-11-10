@@ -7,11 +7,13 @@ import 'package:azalia/components/text_styles.dart';
 class HomeCategory extends StatefulWidget {
   final Function(Category?) onCategorySelected;
   final Category? selectedCategory;
+  final List<Category>? categories;
 
   const HomeCategory({
     Key? key,
     required this.onCategorySelected,
     this.selectedCategory,
+    this.categories,
   }) : super(key: key);
 
   @override
@@ -28,16 +30,25 @@ class _HomeCategory extends State<HomeCategory> {
   void initState() {
     super.initState();
     _plantService = PlantService();
-    _loadCategory();
+    
+    if (widget.categories != null && widget.categories!.isNotEmpty) {
+      setState(() {
+        _categories = widget.categories!;
+        _isLoading = false;
+      });
+    } else {
+      _loadCategories();
+    }
   }
 
-  Future<void> _loadCategory() async {
+  Future<void> _loadCategories() async {
     try {
       setState(() {
         _isLoading = true;
         _error = null;
       });
-      final categories = await _plantService.getCategory();
+      
+      final categories = await _plantService.getCategories();
 
       setState(() {
         _categories = categories;
@@ -73,10 +84,21 @@ class _HomeCategory extends State<HomeCategory> {
               ),
               const SizedBox(width: 8),
               IconButton(
-                onPressed: _loadCategory, 
-                icon: Icon(Icons.refresh)
+                onPressed: _loadCategories,
+                icon: const Icon(Icons.refresh),
               ),
             ],
+          ),
+        ),
+      );
+    }
+    if (_categories.isEmpty) {
+      return SizedBox(
+        height: 50,
+        child: Center(
+          child: Text(
+            'Нет доступных категорий',
+            style: AppText.medium_16.copyWith(color: AppColors.grey),
           ),
         ),
       );
@@ -89,7 +111,7 @@ class _HomeCategory extends State<HomeCategory> {
         padding: const EdgeInsets.only(left: 24),
         children: [
           _buildCategoryItem(
-            name: 'All',
+            name: 'Все',
             isSelected: widget.selectedCategory == null,
             onTap: () => widget.onCategorySelected(null),
           ),
@@ -109,29 +131,29 @@ class _HomeCategory extends State<HomeCategory> {
       ),
     );
   }
-}
 
-Widget _buildCategoryItem({
-  required String name,
-  required bool isSelected,
-  required VoidCallback onTap,
-}) {
-  return GestureDetector(
-    onTap: onTap,
-    child: Container(
-      decoration: BoxDecoration(
-        color: isSelected ? AppColors.brown : AppColors.white_dark,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 9),
-      child: Center(
-        child: Text(
-          name,
-          style: AppText.medium_14.copyWith(
-            color: isSelected ? AppColors.white : AppColors.grey,
+  Widget _buildCategoryItem({
+    required String name,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.brown : AppColors.white_dark,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 9),
+        child: Center(
+          child: Text(
+            name,
+            style: AppText.medium_14.copyWith(
+              color: isSelected ? AppColors.white : AppColors.grey,
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

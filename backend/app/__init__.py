@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 import os
@@ -18,6 +18,11 @@ def create_app():
     
     db.init_app(app)
     CORS(app)
+    
+    @app.route('/api/img/<path:filename>')
+    def serve_image(filename):
+        img_dir = os.path.join(base_dir, 'img')
+        return send_from_directory(img_dir, filename)
     
     from app.routes import plants, orders, users, categories, employees
     

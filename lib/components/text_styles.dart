@@ -6,8 +6,8 @@ class AppText {
     fontWeight: FontWeight.w700,
     fontFamily: "MontserratAlternates",
   );
-  static const bold_15 = TextStyle(
-    fontSize: 15,
+  static const bold_18 = TextStyle(
+    fontSize: 18,
     fontWeight: FontWeight.w700,
     fontFamily: "MontserratAlternates",
   );
@@ -17,8 +17,8 @@ class AppText {
     fontWeight: FontWeight.w600,
     fontFamily: "Montserrat",
   );
-  static const semibold_20 = TextStyle(
-    fontSize: 20,
+  static const semibold_25 = TextStyle(
+    fontSize: 25,
     fontWeight: FontWeight.w600,
     fontFamily: "MontserratAlternates",
   );

@@ -18,14 +18,14 @@ class _HomeHeader extends State<HomeHeader> {
   @override
   Widget build(BuildContext context) {
     return AppBar(
-      title:const Text("Azalia"),
+      title: const Text("Azalia"),
       titleSpacing: 24,
-      titleTextStyle: AppText.semibold_20.copyWith(color: AppColors.black),
+      titleTextStyle: AppText.semibold_25.copyWith(color: AppColors.black),
       backgroundColor: AppColors.white,
       actions: [
         if (_searchActive)
           Container(
-            margin: const EdgeInsets.only(right: 24, top: 12, bottom: 8),
+            margin: const EdgeInsets.only(right: 24, top: 10, bottom: 8),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
@@ -42,7 +42,11 @@ class _HomeHeader extends State<HomeHeader> {
             child: Row(
               children: [
                 const SizedBox(width: 12),
-                Icon(Icons.search, color: AppColors.grey_light, size: 20),
+                SvgPicture.asset(
+                  'assets/icons/Searh.svg',
+                  color: AppColors.grey_light,
+                  height: 18, width: 18,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
@@ -51,14 +55,14 @@ class _HomeHeader extends State<HomeHeader> {
                     decoration: const InputDecoration(
                       hintText: "Поиск растений...",
                       border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(vertical: 9),
+                      contentPadding: EdgeInsets.symmetric(vertical: 11),
                       hintStyle: TextStyle(color: Colors.grey),
                     ),
                     style: const TextStyle(fontSize: 16),
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.only(right: 2, bottom: 12),
+                  padding: const EdgeInsets.only(right: 2),
                   child: IconButton(
                     icon: Icon(Icons.close, color: AppColors.grey),
                     onPressed: () {
@@ -74,7 +78,7 @@ class _HomeHeader extends State<HomeHeader> {
           )
         else
           Container(
-            margin: const EdgeInsets.only(right: 24, top: 10),
+            margin: const EdgeInsets.only(right: 24),
             child: IconButton(
               onPressed: () {
                 setState(() {
