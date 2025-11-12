@@ -6,6 +6,7 @@ import 'package:azalia/pages/home/widgets/categories.dart';
 import 'package:azalia/pages/home/widgets/cards.dart';
 import 'package:azalia/backend/models/plant.dart';
 import 'package:azalia/backend/services/plant.dart';
+import 'package:azalia/components/widgets/footer.dart'; 
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -17,9 +18,14 @@ class HomePage extends StatefulWidget {
 class _HomePage extends State<HomePage> {
   Category? _selectedCategory;
   List<Plant> _plants = [];
+  List<Plant> _displayedPlants = [];
   List<Category> _categories = [];
   bool _isLoading = true;
+  bool _isLoadingMore = false;
   String _error = '';
+  final int _batchSize = 10;
+  int _currentIndex = 0;
+  final ScrollController _scrollController = ScrollController();
 
   final PlantService _plantService = PlantService();
 
@@ -27,6 +33,22 @@ class _HomePage extends State<HomePage> {
   void initState() {
     super.initState();
     _loadInitialData();
+    _setupScrollListener();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _setupScrollListener() {
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels >=
+          _scrollController.position.maxScrollExtent - 200) {
+        _loadMorePlants();
+      }
+    });
   }
 
   Future<void> _loadInitialData() async {
@@ -37,6 +59,8 @@ class _HomePage extends State<HomePage> {
       setState(() {
         _categories = categories;
         _plants = plants.data;
+        _currentIndex = 0;
+        _loadNextBatch();
         _isLoading = false;
       });
     } catch (e) {
@@ -47,10 +71,41 @@ class _HomePage extends State<HomePage> {
     }
   }
 
+  void _loadNextBatch() {
+    final nextIndex = _currentIndex + _batchSize;
+    final newPlants = _plants.sublist(
+      _currentIndex,
+      nextIndex < _plants.length ? nextIndex : _plants.length,
+    );
+
+    setState(() {
+      _displayedPlants.addAll(newPlants);
+      _currentIndex = nextIndex;
+    });
+  }
+
+  Future<void> _loadMorePlants() async {
+    if (_isLoadingMore || _currentIndex >= _plants.length) return;
+
+    setState(() {
+      _isLoadingMore = true;
+    });
+
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    _loadNextBatch();
+
+    setState(() {
+      _isLoadingMore = false;
+    });
+  }
+
   void _onCategorySelected(Category? category) async {
     setState(() {
       _selectedCategory = category;
       _isLoading = true;
+      _displayedPlants.clear();
+      _currentIndex = 0;
     });
 
     try {
@@ -58,6 +113,7 @@ class _HomePage extends State<HomePage> {
 
       setState(() {
         _plants = plants.data;
+        _loadNextBatch();
         _isLoading = false;
       });
     } catch (e) {
@@ -68,11 +124,25 @@ class _HomePage extends State<HomePage> {
     }
   }
 
+  Widget _buildLoadingMoreIndicator() {
+    return const Padding(
+      padding: EdgeInsets.all(16.0),
+      child: Center(
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.white,
       appBar: HomeHeader(),
+      bottomNavigationBar: const AppFooter(),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _error.isNotEmpty
@@ -99,9 +169,13 @@ class _HomePage extends State<HomePage> {
                 ),
                 Expanded(
                   child: ListView.builder(
-                    itemCount: _plants.length,
+                    controller: _scrollController,
+                    itemCount: _displayedPlants.length + (_isLoadingMore ? 1 : 0),
                     itemBuilder: (context, index) {
-                      final plant = _plants[index];
+                      if (index == _displayedPlants.length) {
+                        return _buildLoadingMoreIndicator();
+                      }
+                      final plant = _displayedPlants[index];
                       return PlantCard(plant: plant);
                     },
                   ),

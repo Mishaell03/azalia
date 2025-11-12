@@ -15,78 +15,16 @@ class PlantCard extends StatefulWidget {
 }
 
 class _PlantCardState extends State<PlantCard> {
-  bool _isLoading = true;
   bool _hasImageError = false;
-  int _retryCount = 0;
-  final int _maxRetries = 2;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadImage();
-  }
-
-  Future<void> _loadImage() async {
-    // предзагрузка в кэш
-    await CachedNetworkImage.evictFromCache(widget.plant.fullImageUrl);
-    final ImageProvider = CachedNetworkImageProvider(widget.plant.fullImageUrl);
-    await ImageProvider.resolve(const ImageConfiguration());
-
-    if (widget.plant.imageUrl == null) {
-      setState(() {
-        _isLoading = false;
-        _hasImageError = true;
-      });
-      return;
-    }
-
-    try {
-      await precacheImage(
-        NetworkImage(widget.plant.fullImageUrl),
-        context,
-        onError: (exception, stackTrace) {
-          _handleImageError();
-        },
-      );
-
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _hasImageError = false;
-        });
-      }
-    } catch (e) {
-      _handleImageError();
-    }
-  }
-
-  void _handleImageError() {
-    if (_retryCount < _maxRetries) {
-      _retryCount++;
-      // Повторная попытка через 500 мс
-      Future.delayed(const Duration(milliseconds: 500), _loadImage);
-    } else {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _hasImageError = true;
-        });
-      }
-    }
-  }
 
   void _retryLoadImage() {
     setState(() {
-      _isLoading = true;
       _hasImageError = false;
-      _retryCount = 0;
     });
-    _loadImage();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Отображаем карточку даже если нет изображения, но скрываем если нет в наличии
     if (!widget.plant.inStock) {
       return const SizedBox.shrink();
     }
@@ -108,51 +46,9 @@ class _PlantCardState extends State<PlantCard> {
       width: 113,
       height: 88,
       decoration: BoxDecoration(),
-      child: _isLoading
-          ? _buildLoadingIndicator()
-          : _hasImageError
+      child: _hasImageError
           ? _buildErrorPlaceholder()
-          : widget.plant.imageUrl != null
-          ? ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.network(
-                widget.plant.fullImageUrl,
-                width: 113,
-                height: 88,
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) {
-                  // При ошибке отображения показываем плейсхолдер, но не скрываем карточку
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted && !_hasImageError) {
-                      setState(() {
-                        _hasImageError = true;
-                      });
-                    }
-                  });
-                  return _buildPlaceholderWithBackground();
-                },
-              ),
-            )
-          : _buildPlaceholderWithBackground(),
-    );
-  }
-
-  Widget _buildLoadingIndicator() {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        color: AppColors.grey_light,
-      ),
-      child: const Center(
-        child: SizedBox(
-          width: 20,
-          height: 20,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            valueColor: AlwaysStoppedAnimation<Color>(AppColors.grey),
-          ),
-        ),
-      ),
+          : _buildCachedImage(),
     );
   }
 
@@ -179,14 +75,47 @@ class _PlantCardState extends State<PlantCard> {
     );
   }
 
-  Widget _buildPlaceholderWithBackground() {
+  Widget _buildCachedImage() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: CachedNetworkImage(
+        imageUrl: widget.plant.fullImageUrl,
+        width: 113,
+        height: 88,
+        fit: BoxFit.contain,
+        placeholder: (context, url) => _buildLoadingIndicator(),
+        errorWidget: (context, url, error) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {
+                _hasImageError = true;
+              });
+            }
+          });
+          return _buildErrorPlaceholder();
+        },
+        cacheKey: widget.plant.fullImageUrl,
+        maxWidthDiskCache: 300,
+        maxHeightDiskCache: 300,
+      ),
+    );
+  }
+
+  Widget _buildLoadingIndicator() {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
         color: AppColors.grey_light,
       ),
       child: const Center(
-        child: Icon(Icons.photo, size: 40, color: AppColors.grey),
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.grey),
+          ),
+        ),
       ),
     );
   }
@@ -239,31 +168,6 @@ class _PlantCardState extends State<PlantCard> {
             style: AppText.medium_16.copyWith(color: AppColors.black),
           ),
         ],
-      ),
-    );
-  }
-  Widget _buildCachedImage() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: CachedNetworkImage(
-        imageUrl: widget.plant.fullImageUrl,
-        width: 113,
-        height: 88,
-        fit: BoxFit.contain,
-        placeholder: (context, url) => _buildLoadingIndicator(),
-        errorWidget: (context, url, error) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted && !_hasImageError) {
-              setState(() {
-                _hasImageError = true;
-              });
-            }
-          });
-          return _buildErrorPlaceholder();
-        },
-        cacheKey: widget.plant.fullImageUrl,
-        maxWidthDiskCache: 300,
-        maxHeightDiskCache: 300,
       ),
     );
   }

@@ -1,4 +1,3 @@
-// api_config.dart - добавьте новый метод
 class ApiConfig {
   static const String baseURL = 'http://10.0.0.250:5000/api';
   static const Duration timeout = Duration(seconds: 10);
