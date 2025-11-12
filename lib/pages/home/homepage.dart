@@ -211,7 +211,7 @@ class _HomePage extends State<HomePage> {
                               : const SizedBox.shrink();
                         }
                         final plant = _displayedPlants[index];
-                        return PlantCard(plant: plant);
+                        return HomeCard(plant: plant);
                       },
                       childCount:
                           _displayedPlants.length + (_isLoadingMore ? 1 : 0),

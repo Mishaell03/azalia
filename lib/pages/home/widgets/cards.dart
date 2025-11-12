@@ -6,16 +6,16 @@ import 'package:azalia/components/colors.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:azalia/pages/error/loading_error.dart';
 
-class PlantCard extends StatefulWidget {
+class HomeCard extends StatefulWidget {
   final Plant plant;
 
-  const PlantCard({super.key, required this.plant});
+  const HomeCard({super.key, required this.plant});
 
   @override
-  State<PlantCard> createState() => _PlantCardState();
+  State<HomeCard> createState() => _HomeCardState();
 }
 
-class _PlantCardState extends State<PlantCard> {
+class _HomeCardState extends State<HomeCard> {
   bool _hasImageError = false;
   bool _isFavorite = false;
 
@@ -71,12 +71,15 @@ class _PlantCardState extends State<PlantCard> {
                 width: 24,
                 height: 24,
                 decoration: BoxDecoration(
-                  color: AppColors.white.withOpacity(0.9),
+                  color: _isFavorite
+                      ? AppColors.brown
+                      : AppColors.white.withOpacity(0.9),
                   borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: AppColors.white),
                   boxShadow: [
                     BoxShadow(
                       color: AppColors.black.withOpacity(0.1),
-                      blurRadius: 2,
+                      blurRadius: 4,
                       offset: const Offset(0, 1),
                     ),
                   ],
@@ -87,7 +90,7 @@ class _PlantCardState extends State<PlantCard> {
                     'assets/icons/Love.svg',
                     width: 16,
                     height: 16,
-                    color: _isFavorite ? AppColors.brown : AppColors.grey,
+                    color: _isFavorite ? AppColors.white : AppColors.brown,
                   ),
                 ),
               ),
