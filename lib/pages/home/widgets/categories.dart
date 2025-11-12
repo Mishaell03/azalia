@@ -3,6 +3,7 @@ import 'package:azalia/backend/models/plant.dart';
 import 'package:azalia/backend/services/plant.dart';
 import 'package:azalia/components/colors.dart';
 import 'package:azalia/components/text_styles.dart';
+import 'package:azalia/pages/error/loading_error.dart';
 
 class HomeCategory extends StatefulWidget {
   final Function(Category?) onCategorySelected;
@@ -30,7 +31,7 @@ class _HomeCategory extends State<HomeCategory> {
   void initState() {
     super.initState();
     _plantService = PlantService();
-    
+
     if (widget.categories != null && widget.categories!.isNotEmpty) {
       setState(() {
         _categories = widget.categories!;
@@ -47,7 +48,7 @@ class _HomeCategory extends State<HomeCategory> {
         _isLoading = true;
         _error = null;
       });
-      
+
       final categories = await _plantService.getCategories();
 
       setState(() {
@@ -65,42 +66,20 @@ class _HomeCategory extends State<HomeCategory> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const SizedBox(
-        height: 50,
-        child: Center(child: CircularProgressIndicator()),
-      );
+      return const LoadingWidget(size: 50,);
     }
 
     if (_error != null) {
-      return SizedBox(
+      return ErrorWidgetWithRetry(
+        errorMessage: _error!,
+        onRetry: _loadCategories,
         height: 50,
-        child: Center(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                _error!,
-                style: AppText.medium_16.copyWith(color: AppColors.grey),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                onPressed: _loadCategories,
-                icon: const Icon(Icons.refresh),
-              ),
-            ],
-          ),
-        ),
       );
     }
     if (_categories.isEmpty) {
-      return SizedBox(
+      return const EmptyStateWidget(
+        message: 'Нет доступных категорий',
         height: 50,
-        child: Center(
-          child: Text(
-            'Нет доступных категорий',
-            style: AppText.medium_16.copyWith(color: AppColors.grey),
-          ),
-        ),
       );
     }
 

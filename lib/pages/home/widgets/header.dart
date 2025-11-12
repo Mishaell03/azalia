@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 class HomeHeader extends StatefulWidget implements PreferredSizeWidget {
+  const HomeHeader({super.key});
+
   @override
   State<HomeHeader> createState() => _HomeHeader();
 
@@ -22,6 +24,8 @@ class _HomeHeader extends State<HomeHeader> {
       titleSpacing: 24,
       titleTextStyle: AppText.semibold_25.copyWith(color: AppColors.black),
       backgroundColor: AppColors.white,
+      elevation: 0,
+      surfaceTintColor: AppColors.white,
       actions: [
         if (_searchActive)
           Container(

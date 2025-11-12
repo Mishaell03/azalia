@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:azalia/backend/models/plant.dart';
 import 'package:azalia/components/colors.dart';
 import 'package:flutter_svg/svg.dart';
+import 'package:azalia/pages/error/loading_error.dart';
 
 class PlantCard extends StatefulWidget {
   final Plant plant;
@@ -16,11 +17,23 @@ class PlantCard extends StatefulWidget {
 
 class _PlantCardState extends State<PlantCard> {
   bool _hasImageError = false;
+  bool _isFavorite = false;
 
   void _retryLoadImage() {
     setState(() {
       _hasImageError = false;
     });
+  }
+
+  void _toggleFavorite() {
+    setState(() {
+      _isFavorite = !_isFavorite;
+    });
+  }
+
+  void _addToCart() {
+    // временная заглушка
+    print('Добавлено в корзину: ${widget.plant.name}');
   }
 
   @override
@@ -46,9 +59,42 @@ class _PlantCardState extends State<PlantCard> {
       width: 113,
       height: 88,
       decoration: BoxDecoration(),
-      child: _hasImageError
-          ? _buildErrorPlaceholder()
-          : _buildCachedImage(),
+      child: Stack(
+        children: [
+          _hasImageError ? _buildErrorPlaceholder() : _buildCachedImage(),
+          Positioned(
+            bottom: 4,
+            right: 4,
+            child: GestureDetector(
+              onTap: _toggleFavorite,
+              child: Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: AppColors.white.withOpacity(0.9),
+                  borderRadius: BorderRadius.circular(6),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.black.withOpacity(0.1),
+                      blurRadius: 2,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: SvgPicture.asset(
+                    'assets/icons/Love.svg',
+                    width: 16,
+                    height: 16,
+                    color: _isFavorite ? AppColors.brown : AppColors.grey,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -107,16 +153,7 @@ class _PlantCardState extends State<PlantCard> {
         borderRadius: BorderRadius.circular(8),
         color: AppColors.grey_light,
       ),
-      child: const Center(
-        child: SizedBox(
-          width: 20,
-          height: 20,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            valueColor: AlwaysStoppedAnimation<Color>(AppColors.grey),
-          ),
-        ),
-      ),
+      child: const LoadingWidget(size: 20, strokeWidth: 2),
     );
   }
 
@@ -163,9 +200,34 @@ class _PlantCardState extends State<PlantCard> {
               ),
             ),
           const SizedBox(height: 6),
-          Text(
-            '${widget.plant.basePrice} ₽',
-            style: AppText.medium_16.copyWith(color: AppColors.black),
+          Row(
+            children: [
+              Text(
+                '${widget.plant.basePrice} ₽',
+                style: AppText.medium_16.copyWith(color: AppColors.black),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: _addToCart,
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: AppColors.white_dark.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: SvgPicture.asset(
+                      'assets/icons/Bag.svg',
+                      width: 20,
+                      height: 20,
+                      color: AppColors.brown,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

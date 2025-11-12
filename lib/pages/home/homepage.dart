@@ -6,7 +6,8 @@ import 'package:azalia/pages/home/widgets/categories.dart';
 import 'package:azalia/pages/home/widgets/cards.dart';
 import 'package:azalia/backend/models/plant.dart';
 import 'package:azalia/backend/services/plant.dart';
-import 'package:azalia/components/widgets/footer.dart'; 
+import 'package:azalia/components/widgets/footer.dart';
+import 'package:azalia/pages/error/loading_error.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -26,8 +27,13 @@ class _HomePage extends State<HomePage> {
   final int _batchSize = 10;
   int _currentIndex = 0;
   final ScrollController _scrollController = ScrollController();
-
+  final GlobalKey<RefreshIndicatorState> _refreshIndicatorKey =
+      GlobalKey<RefreshIndicatorState>();
   final PlantService _plantService = PlantService();
+
+  Future<void> _handleRefresh() async {
+    await _loadInitialData();
+  }
 
   @override
   void initState() {
@@ -45,7 +51,9 @@ class _HomePage extends State<HomePage> {
   void _setupScrollListener() {
     _scrollController.addListener(() {
       if (_scrollController.position.pixels >=
-          _scrollController.position.maxScrollExtent - 200) {
+              _scrollController.position.maxScrollExtent - 200 &&
+          !_isLoadingMore &&
+          _currentIndex < _plants.length) {
         _loadMorePlants();
       }
     });
@@ -53,6 +61,11 @@ class _HomePage extends State<HomePage> {
 
   Future<void> _loadInitialData() async {
     try {
+      setState(() {
+        _error = '';
+        _isLoading = true;
+      });
+
       final categories = await _plantService.getCategories();
       final plants = await _plantService.getPlants();
 
@@ -60,12 +73,13 @@ class _HomePage extends State<HomePage> {
         _categories = categories;
         _plants = plants.data;
         _currentIndex = 0;
+        _displayedPlants.clear();
         _loadNextBatch();
         _isLoading = false;
       });
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = 'Что-то пошло не так';
         _isLoading = false;
       });
     }
@@ -92,7 +106,7 @@ class _HomePage extends State<HomePage> {
     });
 
     await Future.delayed(const Duration(milliseconds: 500));
-    
+
     _loadNextBatch();
 
     setState(() {
@@ -106,6 +120,7 @@ class _HomePage extends State<HomePage> {
       _isLoading = true;
       _displayedPlants.clear();
       _currentIndex = 0;
+      _error = '';
     });
 
     try {
@@ -118,23 +133,10 @@ class _HomePage extends State<HomePage> {
       });
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = 'Что-то пошло не так';
         _isLoading = false;
       });
     }
-  }
-
-  Widget _buildLoadingMoreIndicator() {
-    return const Padding(
-      padding: EdgeInsets.all(16.0),
-      child: Center(
-        child: SizedBox(
-          width: 24,
-          height: 24,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-      ),
-    );
   }
 
   @override
@@ -144,43 +146,79 @@ class _HomePage extends State<HomePage> {
       appBar: HomeHeader(),
       bottomNavigationBar: const AppFooter(),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const LoadingWidget()
           : _error.isNotEmpty
-          ? Center(child: Text('Ошибка: $_error'))
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(
-                    top: 0,
-                    bottom: 20,
-                    left: 24,
-                    right: 0,
+          ? GenericErrorWidget(onRetry: _loadInitialData)
+          : RefreshIndicator(
+              key: _refreshIndicatorKey,
+              color: AppColors.brown,
+              backgroundColor: AppColors.white,
+              displacement: 70,
+              onRefresh: _handleRefresh,
+              child: CustomScrollView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(
+                            bottom: 20,
+                            left: 24,
+                            right: 24,
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  "Растения для \nдомашнего уюта",
+                                  style: AppText.semibold_28.copyWith(
+                                    color: AppColors.black,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Image.asset(
+                                'assets/images/cactus.png',
+                                fit: BoxFit.contain,
+                                height: 70,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          height: 33,
+                          child: HomeCategory(
+                            onCategorySelected: _onCategorySelected,
+                            selectedCategory: _selectedCategory,
+                            categories: _categories,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+                    ),
                   ),
-                  child: Text(
-                    "Растения для \nдомашнего уюта",
-                    style: AppText.semibold_28.copyWith(color: AppColors.black),
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        if (index == _displayedPlants.length) {
+                          return _isLoadingMore
+                              ? const LoadingMoreIndicator()
+                              : const SizedBox.shrink();
+                        }
+                        final plant = _displayedPlants[index];
+                        return PlantCard(plant: plant);
+                      },
+                      childCount:
+                          _displayedPlants.length + (_isLoadingMore ? 1 : 0),
+                    ),
                   ),
-                ),
-                HomeCategory(
-                  onCategorySelected: _onCategorySelected,
-                  selectedCategory: _selectedCategory,
-                  categories: _categories,
-                ),
-                Expanded(
-                  child: ListView.builder(
-                    controller: _scrollController,
-                    itemCount: _displayedPlants.length + (_isLoadingMore ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index == _displayedPlants.length) {
-                        return _buildLoadingMoreIndicator();
-                      }
-                      final plant = _displayedPlants[index];
-                      return PlantCard(plant: plant);
-                    },
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
     );
   }
