@@ -132,15 +132,18 @@ class User(db.Model):
     __tablename__ = 'users'
     
     id = db.Column(db.Integer, primary_key=True)
-    telegram_id = db.Column(db.Integer, unique=True)
+    telegram_id = db.Column(db.Integer, unique=True, nullable=False)
     name = db.Column(db.String(100), nullable=False)
     phone = db.Column(db.String(20), nullable=False)
+    session_token = db.Column(db.String(255), unique=True)
+    token_expires_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     orders = db.relationship('Order', backref='user', lazy=True)
     payment_links = db.relationship('PaymentLink', backref='user', lazy=True)
     reviews = db.relationship('Review', backref='user', lazy=True)
+    employee_info = db.relationship('Employee', backref='user', lazy=True, uselist=False)
     
     def to_dict(self):
         return {
@@ -148,42 +151,56 @@ class User(db.Model):
             'telegram_id': self.telegram_id,
             'name': self.name,
             'phone': self.phone,
+            'session_token': self.session_token,
+            'token_expires_at': self.token_expires_at.isoformat() if self.token_expires_at else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'is_employee': self.is_employee()
         }
+    
+    def is_employee(self):
+        """Проверяет, является ли пользователь сотрудником"""
+        return self.employee_info is not None and self.employee_info.is_active
 
 class Employee(db.Model):
     """модель для таблицы сотрудников"""
     __tablename__ = 'employees'
     
     id = db.Column(db.Integer, primary_key=True)
-    telegram_id = db.Column(db.Integer, unique=True)
-    full_name = db.Column(db.String(100), nullable=False)
-    phone = db.Column(db.String(20), nullable=False)
-    age = db.Column(db.Integer)
-    address = db.Column(db.Text)
-    passport_data = db.Column(db.Text)
+    telegram_id = db.Column(db.Integer, db.ForeignKey('users.telegram_id'), unique=True, nullable=False)
     position_id = db.Column(db.Integer, db.ForeignKey('positions.id'), nullable=False)
     salary = db.Column(db.Float)
+    hire_date = db.Column(db.DateTime, default=datetime.utcnow)
+    is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     assigned_orders = db.relationship('Order', backref='assigned_employee', lazy=True)
+    status_changes = db.relationship('OrderStatusHistory', backref='employee', lazy=True)
     
     def to_dict(self):
         return {
             'id': self.id,
             'telegram_id': self.telegram_id,
-            'full_name': self.full_name,
-            'phone': self.phone,
-            'age': self.age,
-            'address': self.address,
-            'passport_data': self.passport_data,
             'position_id': self.position_id,
             'salary': self.salary,
+            'hire_date': self.hire_date.isoformat() if self.hire_date else None,
+            'is_active': self.is_active,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
+    
+    def to_dict_with_details(self):
+        """Возвращает расширенную информацию о сотруднике"""
+        data = self.to_dict()
+        if self.position:
+            data['position'] = self.position.to_dict()
+        if self.user:
+            data['user_info'] = {
+                'name': self.user.name,
+                'phone': self.user.phone
+            }
+        return data
 
 class Order(db.Model):
     """модель для таблицы заказов"""
@@ -327,3 +344,32 @@ class Review(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
     
+class OAuthCode(db.Model):
+    """Модель для хранения одноразовых кодов авторизации"""
+    __tablename__ = 'oauth_codes'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    telegram_id = db.Column(db.Integer, db.ForeignKey('users.telegram_id'), nullable=False)
+    device_id = db.Column(db.String(255), nullable=False)
+    code = db.Column(db.String(6), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used = db.Column(db.Boolean, default=False)
+    used_at = db.Column(db.DateTime)
+    
+    user = db.relationship('User', foreign_keys=[telegram_id], primaryjoin="OAuthCode.telegram_id == User.telegram_id", backref='oauth_codes')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'telegram_id': self.telegram_id,
+            'device_id': self.device_id,
+            'code': self.code,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'expires_at': self.expires_at.isoformat() if self.expires_at else None,
+            'used': self.used,
+            'used_at': self.used_at.isoformat() if self.used_at else None
+        }
+    
+    def is_valid(self):
+        return not self.used and self.expires_at > datetime.utcnow()

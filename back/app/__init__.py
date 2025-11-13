@@ -24,12 +24,16 @@ def create_app():
         img_dir = os.path.join(base_dir, 'img')
         return send_from_directory(img_dir, filename)
     
-    from app.routes import plants, orders, users, categories, employees
+    from app.routes.plants import bp as plants_bp
+    from app.routes.orders import bp as orders_bp
+    from app.routes.categories import bp as categories_bp
+    from app.routes.employees import bp as employees_bp
+    from app.routes.auth import bp as auth_bp
     
-    app.register_blueprint(plants.bp)
-    app.register_blueprint(orders.bp)
-    app.register_blueprint(users.bp)
-    app.register_blueprint(categories.bp)
-    app.register_blueprint(employees.bp)
+    app.register_blueprint(plants_bp)
+    app.register_blueprint(orders_bp)
+    app.register_blueprint(categories_bp)
+    app.register_blueprint(employees_bp)
+    app.register_blueprint(auth_bp)
     
     return app

@@ -80,32 +80,32 @@ def create_database():
         )
     ''')
 
-    # пользователи
+    # пользователи (основная таблица для всех)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            telegram_id INTEGER UNIQUE,
+            telegram_id INTEGER UNIQUE NOT NULL,
             name TEXT NOT NULL,
             phone TEXT NOT NULL,
+            session_token TEXT UNIQUE,
+            token_expires_at TIMESTAMP,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
 
-    # сотрудники
+    # сотрудники (дополнительная информация для работников)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS employees (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            telegram_id INTEGER UNIQUE,
-            full_name TEXT NOT NULL,
-            phone TEXT NOT NULL,
-            age INTEGER CHECK(age >= 0),
-            address TEXT,
-            passport_data TEXT,
+            telegram_id INTEGER UNIQUE NOT NULL,
             position_id INTEGER NOT NULL,
             salary DECIMAL(10,2),
+            hire_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_active BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (telegram_id) REFERENCES users(telegram_id) ON DELETE CASCADE,
             FOREIGN KEY (position_id) REFERENCES positions (id) ON DELETE RESTRICT
         )
     ''')
@@ -149,7 +149,7 @@ def create_database():
         )
     ''')
 
-    # ссыли на оплату
+    # ссылки на оплату
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS payment_links (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -167,7 +167,7 @@ def create_database():
         )
     ''')
 
-    # статус заказв
+    # статус заказа
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS order_status_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -195,24 +195,37 @@ def create_database():
             FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE CASCADE
         )
     ''')
+    
+    # OAuth коды для авторизации по device_id
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS oauth_codes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            telegram_id INTEGER NOT NULL,
+            device_id TEXT NOT NULL,
+            code TEXT NOT NULL UNIQUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP NOT NULL,
+            used BOOLEAN DEFAULT FALSE,
+            used_at TIMESTAMP,
+            FOREIGN KEY (telegram_id) REFERENCES users(telegram_id) ON DELETE CASCADE
+        )
+    ''')
 
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_payment_links_user_id ON payment_links(user_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_payment_links_status ON payment_links(status)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_employees_telegram_id ON employees(telegram_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_employees_is_active ON employees(is_active)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_orders_user_status ON orders(user_id, status)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_pot_plants_category_stock ON pot_plants(category_id, in_stock)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_order_items_plant_id ON order_items(plant_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_employees_position_id ON employees(position_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_pot_plants_supplier_id ON pot_plants(supplier_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_pot_plants_category_id ON pot_plants(category_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_pot_plants_in_stock ON pot_plants(in_stock)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_payment_links_user_status ON payment_links(user_id, status)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_pot_prices_size_material ON pot_prices(size, material)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_categories_parent_id ON categories(parent_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_order_status_history_order_id ON order_status_history(order_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_reviews_user_id ON reviews(user_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_reviews_order_id ON reviews(order_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_orders_delivery_date ON orders(delivery_date)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_payment_links_expires_at ON payment_links(expires_at)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_pot_plants_category_id ON pot_plants(category_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_pot_plants_in_stock ON pot_plants(in_stock)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_oauth_codes_device_id ON oauth_codes(device_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_oauth_codes_code ON oauth_codes(code)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_oauth_codes_telegram_id ON oauth_codes(telegram_id)')
 
     conn.commit()
     conn.close()
@@ -311,28 +324,30 @@ def add_sample_data():
         ('Сосна горная', 'Пышная сосна с колючими веточками', 2200.00, 3, 3, 'foliage', 'L', 60, 'Редкий полив, много свежего воздуха', 'full_sun', '1 раз в 2 недели', 4.9, True, 'img/10.png'),
         ('Китайская ель Коника', 'Высокая ель с конусовидной формой, выведенная искусственно', 2800.00, 3, 3, 'foliage', 'L', 70, 'Умеренный полив, защита от прямого солнца', 'partial_shade', '1 раз в неделю', 4.7, True, 'img/11.png'),
         ('Туя', 'Медленнорастущая с компактной кроной ель с мягкими колючками', 1900.00, 3, 3, 'foliage', 'M', 50, 'Регулярный полив, опрыскивание', 'full_sun', '1 раз в неделю', 4.5, True, 'img/12.png')
-        
-       
     ])
     
-    # тестовые пользователи
+    # тестовые пользователи (все пользователи, включая работников)
     cursor.executemany('''
         INSERT OR IGNORE INTO users (telegram_id, name, phone)
         VALUES (?, ?, ?)
     ''', [
         (123456789, 'Анна Петрова', '+79161234567'),
         (987654321, 'Иван Сидоров', '+79167654321'),
-        (555555555, 'Мария Иванова', '+79165554433')
+        (555555555, 'Мария Иванова', '+79165554433'),
+        # Работники тоже являются пользователями
+        (111111111, 'Ольга Цветкова', '+79161112233'),
+        (222222222, 'Дмитрий Доставкин', '+79162223344'),
+        (333333333, 'Екатерина Менеджерова', '+79163334455')
     ])
     
-    # тестовые сотрудники
+    # тестовые сотрудники (только те, кто является работниками)
     cursor.executemany('''
-        INSERT OR IGNORE INTO employees (telegram_id, full_name, phone, age, address, position_id, salary)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT OR IGNORE INTO employees (telegram_id, position_id, salary)
+        VALUES (?, ?, ?)
     ''', [
-        (111111111, 'Ольга Цветкова', '+79161112233', 28, 'ул. Флористическая, 10', 1, 45000.00),
-        (222222222, 'Дмитрий Доставкин', '+79162223344', 32, 'ул. Транспортная, 25', 2, 40000.00),
-        (333333333, 'Екатерина Менеджерова', '+79163334455', 26, 'ул. Офисная, 7', 3, 50000.00)
+        (111111111, 1, 45000.00),  # Ольга - флорист
+        (222222222, 2, 40000.00),  # Дмитрий - курьер
+        (333333333, 3, 50000.00)   # Екатерина - менеджер
     ])
     
     conn.commit()
@@ -412,6 +427,37 @@ def calculate_order_total(order_id):
     conn.commit()
     conn.close()
     return total
+
+def is_employee(telegram_id):
+    """является ли user воркером"""
+    conn = sqlite3.connect('flower_shop.db')
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT COUNT(*) FROM employees 
+        WHERE telegram_id = ? AND is_active = TRUE
+    ''', (telegram_id,))
+    
+    result = cursor.fetchone()[0] > 0
+    conn.close()
+    return result
+
+def get_employee_info(telegram_id):
+    """инфа о работнике"""
+    conn = sqlite3.connect('flower_shop.db')
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT e.*, p.title as position_title, u.name, u.phone
+        FROM employees e
+        JOIN positions p ON e.position_id = p.id
+        JOIN users u ON e.telegram_id = u.telegram_id
+        WHERE e.telegram_id = ? AND e.is_active = TRUE
+    ''', (telegram_id,))
+    
+    employee = cursor.fetchone()
+    conn.close()
+    return employee
 
 if __name__ == "__main__":
     create_database()
