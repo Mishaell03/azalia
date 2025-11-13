@@ -3,6 +3,7 @@ from app import db
 from app.models import OAuthCode, User, Employee
 from datetime import datetime, timedelta
 import random
+import re
 
 bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
@@ -14,20 +15,64 @@ def generate_auth_code():
         if not existing_code:
             return code
 
+def validate_telegram_id(telegram_id):
+    """Валидация telegram_id"""
+    if not telegram_id:
+        return False
+    try:
+        return isinstance(telegram_id, int) or (isinstance(telegram_id, str) and telegram_id.isdigit())
+    except (ValueError, TypeError):
+        return False
+
+def validate_code_format(code):
+    """Валидация формата кода"""
+    return isinstance(code, str) and len(code) == 4 and code.isdigit()
+
+def validate_user_id(user_id):
+    """Валидация user_id"""
+    if not user_id:
+        return False
+    try:
+        return isinstance(user_id, int) or (isinstance(user_id, str) and user_id.isdigit())
+    except (ValueError, TypeError):
+        return False
+
+def safe_int(value, default=None):
+    """Безопасное преобразование в int"""
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return default
+
 @bp.route('/bot/generate_code', methods=['POST'])
 def bot_generate_code():
     """Бот генерирует код"""
     try:
         data = request.get_json()
-        if not data or 'telegram_id' not in data:
+        if not data:
             return jsonify({
                 'success': False,
-                'error': 'telegram_id is required'
+                'error': 'No data provided'
             }), 400
         
-        telegram_id = data['telegram_id']
-        user_name = data.get('user_name', 'User')
+        telegram_id = data.get('telegram_id')
+        if not validate_telegram_id(telegram_id):
+            return jsonify({
+                'success': False,
+                'error': 'Valid telegram_id is required'
+            }), 400
         
+        telegram_id = safe_int(telegram_id)
+        if telegram_id is None:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid telegram_id format'
+            }), 400
+
+        user_name = data.get('user_name', 'User')
+        if user_name:
+            user_name = re.sub(r'[<>"\']', '', user_name[:100])
+
         code = generate_auth_code()
         
         user = User.query.filter_by(telegram_id=telegram_id).first()
@@ -43,7 +88,7 @@ def bot_generate_code():
         auth_code = OAuthCode(
             code=code,
             user_id=user.id,
-            expires_at=datetime.utcnow() + timedelta(minutes=10),  # 10 минут
+            expires_at=datetime.utcnow() + timedelta(minutes=10),
             used=False
         )
         
@@ -70,13 +115,18 @@ def verify_code():
     """Приложение проверяет код"""
     try:
         data = request.get_json()
-        if not data or 'code' not in data:
+        if not data:
             return jsonify({
                 'success': False,
-                'error': 'Code is required'
+                'error': 'No data provided'
             }), 400
         
-        code = data['code']
+        code = data.get('code')
+        if not validate_code_format(code):
+            return jsonify({
+                'success': False,
+                'error': 'Valid 4-digit code is required'
+            }), 400
         
         auth_code = OAuthCode.query.filter_by(code=code).first()
         
@@ -140,6 +190,12 @@ def check_code_status(code):
     Проверка статуса кода авторизации
     """
     try:
+        if not validate_code_format(code):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid code format'
+            }), 400
+
         auth_code = OAuthCode.query.filter_by(code=code).first()
         
         if not auth_code:
@@ -220,6 +276,19 @@ def get_user_profile():
                 'error': 'User ID is required'
             }), 400
         
+        if not validate_user_id(user_id):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid user ID format'
+            }), 400
+        
+        user_id = safe_int(user_id)
+        if user_id is None:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid user ID'
+            }), 400
+
         user = User.query.get(user_id)
         if not user:
             return jsonify({
@@ -256,6 +325,19 @@ def check_employee_status(telegram_id):
     Проверка, является ли пользователь сотрудником
     """
     try:
+        if not validate_telegram_id(telegram_id):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid telegram ID format'
+            }), 400
+        
+        telegram_id = safe_int(telegram_id)
+        if telegram_id is None:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid telegram ID'
+            }), 400
+
         employee = Employee.query.filter_by(telegram_id=telegram_id).first()
         
         if employee:

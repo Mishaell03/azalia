@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import logging
+import re
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler
@@ -56,12 +57,35 @@ class FlowerShopBot:
             if count == 0:
                 return code
 
+    def validate_device_id(self, device_id: str) -> bool:
+        """Валидация device_id для предотвращения инъекций"""
+        if not device_id or len(device_id) > 255:
+            return False
+        # Разрешаем только буквы, цифры и некоторые безопасные символы
+        if not re.match(r'^[a-zA-Z0-9_\-.:]+$', device_id):
+            return False
+        return True
+
+    def escape_markdown(self, text: str) -> str:
+        """Экранирует спецсимволы MarkdownV2"""
+        escape_chars = r'_*[]()~`>#+-=|{}.!'
+        return ''.join(f'\\{char}' if char in escape_chars else char for char in text)
+
     async def start_handler(self, update: Update, context: CallbackContext):
         user = update.effective_user
         args = context.args
         
         if args:
             device_id = args[0]
+            
+            # Валидация device_id
+            if not self.validate_device_id(device_id):
+                await update.message.reply_text(
+                    "❌ Неверный формат идентификатора устройства.\n"
+                    "Используйте ссылку из мобильного приложения."
+                )
+                return
+                
             await self.process_device_auth(update, context, device_id, user)
         else:
             keyboard = [
@@ -82,6 +106,7 @@ class FlowerShopBot:
             conn = self.get_db_connection()
             cursor = conn.cursor()
             
+            # Проверяем/создаем пользователя
             cursor.execute("SELECT * FROM users WHERE telegram_id = ?", (user.id,))
             existing_user = cursor.fetchone()
             
@@ -95,6 +120,7 @@ class FlowerShopBot:
             else:
                 user_id = existing_user['id']
             
+            # Проверяем, есть ли уже активный код для этого устройства и пользователя
             cursor.execute(
                 """SELECT * FROM oauth_codes 
                 WHERE telegram_id = ? AND device_id = ? AND used = 0 AND expires_at > datetime('now')""",
@@ -108,11 +134,13 @@ class FlowerShopBot:
             else:
                 auth_code = self.generate_auth_code()
                 
+                # Удаляем старые записи для этого устройства и пользователя
                 cursor.execute(
-                    "DELETE FROM oauth_codes WHERE telegram_id = ? AND device_id = ?",
+                    "DELETE FROM oauth_codes WHERE telegram_id = ? AND device_id = ? AND used = 0",
                     (user.id, device_id)
                 )
                 
+                # Сохраняем код в базу
                 cursor.execute(
                     """INSERT INTO oauth_codes 
                     (telegram_id, device_id, code, expires_at, used) 
@@ -126,6 +154,7 @@ class FlowerShopBot:
             
             role_text = await self.get_user_role_text(user.id)
             
+            # Безопасное создание callback_data - используем только device_id (валидированный)
             keyboard = [
                 [InlineKeyboardButton("🔄 Обновить код", callback_data=f"refresh_{device_id}")],
                 [InlineKeyboardButton("❓ Помощь", callback_data="help")]
@@ -133,13 +162,13 @@ class FlowerShopBot:
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await update.message.reply_text(
-                f"✅ *Код подтверждения сгенерирован!*\n\n"
+                f"✅ *Код подтверждения сгенерирован\\!*\n\n"
                 f"{role_text}\n"
-                f"📱 Device ID: `{device_id}`\n"
+                f"📱 Device ID: `{self.escape_markdown(device_id)}`\n"
                 f"🔢 Код подтверждения: `{auth_code}`\n"
                 f"⏰ Действует 10 минут\n\n"
-                f"Введите этот код в мобильном приложении для завершения авторизации.",
-                parse_mode='Markdown',
+                f"Введите этот код в мобильном приложении для завершения авторизации\\.",
+                parse_mode='MarkdownV2',
                 reply_markup=reply_markup
             )
             
@@ -155,11 +184,17 @@ class FlowerShopBot:
             query = update.callback_query
             await query.answer()
             
+            # Дополнительная валидация device_id из callback
+            if not self.validate_device_id(device_id):
+                await query.answer("❌ Неверный идентификатор устройства", show_alert=True)
+                return
+            
             conn = self.get_db_connection()
             cursor = conn.cursor()
             
             new_auth_code = self.generate_auth_code()
             
+            # Обновляем существующую запись
             cursor.execute(
                 """UPDATE oauth_codes 
                 SET code = ?, expires_at = datetime('now', '+10 minutes'), used = 0
@@ -168,6 +203,7 @@ class FlowerShopBot:
             )
             
             if cursor.rowcount == 0:
+                # Если записи не было (маловероятно), создаем новую
                 cursor.execute(
                     """INSERT INTO oauth_codes 
                     (telegram_id, device_id, code, expires_at, used) 
@@ -187,13 +223,13 @@ class FlowerShopBot:
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await query.edit_message_text(
-                f"✅ *Код подтверждения обновлен!*\n\n"
+                f"✅ *Код подтверждения обновлен\\!*\n\n"
                 f"{role_text}\n"
-                f"📱 Device ID: `{device_id}`\n"
+                f"📱 Device ID: `{self.escape_markdown(device_id)}`\n"
                 f"🔢 Новый код: `{new_auth_code}`\n"
                 f"⏰ Действует 10 минут\n\n"
-                f"Введите этот код в мобильном приложении для завершения авторизации.",
-                parse_mode='Markdown',
+                f"Введите этот код в мобильном приложении для завершения авторизации\\.",
+                parse_mode='MarkdownV2',
                 reply_markup=reply_markup
             )
             
@@ -222,7 +258,7 @@ class FlowerShopBot:
         conn.close()
         
         if employee_info:
-            return f"👔 *Сотрудник* ({employee_info['position_title']})"
+            return f"👔 *Сотрудник* \\({self.escape_markdown(employee_info['position_title'])}\\)"
         else:
             return "👤 *Клиент*"
 
@@ -234,6 +270,16 @@ class FlowerShopBot:
             if len(args) >= 2:
                 code = args[0]
                 device_id = args[1]
+                
+                # Валидация входных данных
+                if not self.validate_device_id(device_id):
+                    await update.message.reply_text("❌ Неверный формат идентификатора устройства.")
+                    return
+                    
+                if not re.match(r'^\d{4}$', code):
+                    await update.message.reply_text("❌ Код должен состоять из 4 цифр.")
+                    return
+                    
                 await self.process_manual_auth(update, context, code, device_id, user)
             else:
                 await update.message.reply_text(
@@ -245,14 +291,14 @@ class FlowerShopBot:
             await update.message.reply_text(
                 "🔐 *Авторизация в мобильном приложении*\n\n"
                 "Чтобы авторизоваться:\n"
-                "1. Откройте мобильное приложение\n"
-                "2. Нажмите 'Войти через Telegram'\n"
-                "3. Используйте полученную ссылку\n\n"
+                "1\\. Откройте мобильное приложение\n"
+                "2\\. Нажмите 'Войти через Telegram'\n"
+                "3\\. Используйте полученную ссылку\n\n"
                 "Или введите команду:\n"
                 "`/auth КОД DEVICE_ID`\n\n"
                 "🔗 *Формат ссылки:*\n"
-                "`https://t.me/for_the_future_bot?start=DEVICE_ID`",
-                parse_mode='Markdown'
+                "`https://t\\.me/for_the_future_bot?start=DEVICE_ID`",
+                parse_mode='MarkdownV2'
             )
 
     async def process_manual_auth(self, update: Update, context: CallbackContext, code: str, device_id: str, user):
@@ -271,6 +317,7 @@ class FlowerShopBot:
                 )
                 user_id = cursor.lastrowid
             
+            # Проверяем код с использованием параметризованных запросов
             cursor.execute(
                 "SELECT * FROM oauth_codes WHERE code = ? AND device_id = ?",
                 (code, device_id)
@@ -305,12 +352,12 @@ class FlowerShopBot:
             role_text = await self.get_user_role_text(user.id)
             
             await update.message.reply_text(
-                f"✅ *Авторизация успешна!*\n\n"
+                f"✅ *Авторизация успешна\\!*\n\n"
                 f"{role_text}\n"
                 f"📱 Код: `{code}`\n"
                 f"⏰ Действует 10 минут\n\n"
-                f"Вернитесь в мобильное приложение для завершения входа.",
-                parse_mode='Markdown'
+                f"Вернитесь в мобильное приложение для завершения входа\\.",
+                parse_mode='MarkdownV2'
             )
             
             logger.info(f"User {user.id} successfully linked code {code} for device {device_id}")
@@ -323,18 +370,18 @@ class FlowerShopBot:
 
     async def help_handler(self, update: Update, context: CallbackContext):
         help_text = (
-            "🌸 *Цветочный магазин - Помощь*\n\n"
+            "🌸 *Цветочный магазин \\- Помощь*\n\n"
             "🔐 *Авторизация в приложении:*\n"
-            "1. Откройте мобильное приложение\n"
-            "2. Нажмите 'Войти через Telegram'\n"
-            "3. Используйте полученную ссылку\n\n"
+            "1\\. Откройте мобильное приложение\n"
+            "2\\. Нажмите 'Войти через Telegram'\n"
+            "3\\. Используйте полученную ссылку\n\n"
             "📱 *Доступные команды:*\n"
-            "/start - Начать работу с ботом\n"
-            "/auth КОД DEVICE_ID - Ручная авторизация\n"
-            "/help - Показать эту справку\n\n"
+            "/start \\- Начать работу с ботом\n"
+            "/auth КОД DEVICE_ID \\- Ручная авторизация\n"
+            "/help \\- Показать эту справку\n\n"
             "🔗 *Формат ссылки:*\n"
-            "`https://t.me/for_the_future_bot?start=DEVICE_ID`\n\n"
-            "❓ *Проблемы с авторизацией?*\n"
+            "`https://t\\.me/for_the_future_bot?start=DEVICE_ID`\n\n"
+            "❓ *Проблемы с авторизацией\\?*\n"
             "Убедитесь, что:\n"
             "• Используете актуальную ссылку из приложения\n"
             "• Код состоит из 4 цифр\n"
@@ -342,7 +389,7 @@ class FlowerShopBot:
             "• Если код устарел, нажмите 'Обновить код'"
         )
         
-        await update.message.reply_text(help_text, parse_mode='Markdown')
+        await update.message.reply_text(help_text, parse_mode='MarkdownV2')
 
     async def button_handler(self, update: Update, context: CallbackContext):
         query = update.callback_query
@@ -354,19 +401,25 @@ class FlowerShopBot:
             await query.edit_message_text(
                 "🔐 *Авторизация в мобильном приложении*\n\n"
                 "Чтобы авторизоваться:\n"
-                "1. Откройте мобильное приложение\n"
-                "2. Нажмите 'Войти через Telegram'\n"
-                "3. Используйте полученную ссылку\n\n"
+                "1\\. Откройте мобильное приложение\n"
+                "2\\. Нажмите 'Войти через Telegram'\n"
+                "3\\. Используйте полученную ссылку\n\n"
                 "Или введите команду:\n"
                 "`/auth КОД DEVICE_ID`\n\n"
                 "🔗 *Формат ссылки:*\n"
-                "`https://t.me/for_the_future_bot?start=DEVICE_ID`",
-                parse_mode='Markdown'
+                "`https://t\\.me/for_the_future_bot?start=DEVICE_ID`",
+                parse_mode='MarkdownV2'
             )
         elif query.data == "help":
             await self.help_handler(update, context)
         elif query.data.startswith("refresh_"):
-            device_id = query.data[8:]
+            device_id = query.data[8:]  # Извлекаем device_id после "refresh_"
+            
+            # Валидация device_id из callback_data
+            if not self.validate_device_id(device_id):
+                await query.answer("❌ Неверный идентификатор устройства", show_alert=True)
+                return
+                
             await self.refresh_auth_code(update, context, device_id, user)
 
     def run(self):

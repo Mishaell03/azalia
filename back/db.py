@@ -201,7 +201,7 @@ def create_database():
         CREATE TABLE IF NOT EXISTS oauth_codes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             telegram_id INTEGER NOT NULL,
-            device_id TEXT NOT NULL,
+            device_id TEXT NOT NULL CHECK(length(device_id) <= 255),
             code TEXT NOT NULL UNIQUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             expires_at TIMESTAMP NOT NULL,
@@ -226,6 +226,7 @@ def create_database():
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_oauth_codes_device_id ON oauth_codes(device_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_oauth_codes_code ON oauth_codes(code)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_oauth_codes_telegram_id ON oauth_codes(telegram_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_oauth_codes_telegram_device ON oauth_codes(telegram_id, device_id)')
 
     conn.commit()
     conn.close()

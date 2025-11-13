@@ -1,5 +1,6 @@
 from app import db
 from datetime import datetime
+import re
 
 class Position(db.Model):
     """модель для таблицы должностей"""

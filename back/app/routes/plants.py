@@ -4,17 +4,26 @@ from app.models import PotPlant, Category, Supplier
 from sqlalchemy import or_
 import os
 import uuid
+import re
 from werkzeug.utils import secure_filename
 
 bp = Blueprint('plants', __name__, url_prefix='/api/plants')
 
-# Настройки для загрузки файлов
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
-MAX_FILE_SIZE = 16 * 1024 * 1024  # 16mb
+MAX_FILE_SIZE = 16 * 1024 * 1024
 
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def safe_filename(filename):
+    """Извлекает безопасное имя файла из URL"""
+    if not filename:
+        return None
+    base_name = os.path.basename(filename)
+    if re.match(r'^[a-f0-9]{32}_[a-zA-Z0-9_\-\.]+$', base_name):
+        return base_name
+    return None
 
 def save_uploaded_file(file):
     if file and allowed_file(file.filename):
@@ -30,18 +39,54 @@ def save_uploaded_file(file):
         return unique_filename
     return None
 
+def safe_float(value, default=None, min_val=None, max_val=None):
+    """Безопасное преобразование в float с валидацией"""
+    if value is None:
+        return default
+    try:
+        result = float(value)
+        if min_val is not None and result < min_val:
+            return default
+        if max_val is not None and result > max_val:
+            return default
+        return result
+    except (ValueError, TypeError):
+        return default
+
+def safe_int(value, default=None, min_val=None, max_val=None):
+    """Безопасное преобразование в int с валидацией"""
+    if value is None:
+        return default
+    try:
+        result = int(value)
+        if min_val is not None and result < min_val:
+            return default
+        if max_val is not None and result > max_val:
+            return default
+        return result
+    except (ValueError, TypeError):
+        return default
+
+def validate_string_input(text, max_length=255):
+    """Валидация строкового ввода"""
+    if not text or not isinstance(text, str):
+        return None
+    cleaned = re.sub(r'[<>"\']', '', text.strip())
+    return cleaned[:max_length] if cleaned else None
+
 # список растений с фильтрами
 @bp.route('/', methods=['GET'], endpoint='plants_list')
 def get_plants():
     try:
-        category_id = request.args.get('category_id', type=int)
+        category_id = safe_int(request.args.get('category_id'), min_val=1)
         in_stock = request.args.get('in_stock', type=lambda v: v.lower() == 'true')
-        plant_type = request.args.get('plant_type')
-        search = request.args.get('search')
-        min_price = request.args.get('min_price', type=float)
-        max_price = request.args.get('max_price', type=float)
-        min_rating = request.args.get('min_rating', type=float)
-        max_rating = request.args.get('max_rating', type=float)
+        plant_type = validate_string_input(request.args.get('plant_type'), 20)
+        search = validate_string_input(request.args.get('search'), 100)
+        
+        min_price = safe_float(request.args.get('min_price'), min_val=0, max_val=1000000)
+        max_price = safe_float(request.args.get('max_price'), min_val=0, max_val=1000000)
+        min_rating = safe_float(request.args.get('min_rating'), min_val=0, max_val=5)
+        max_rating = safe_float(request.args.get('max_rating'), min_val=0, max_val=5)
     
         query = PotPlant.query
 
@@ -55,10 +100,11 @@ def get_plants():
             query = query.filter(PotPlant.plant_type == plant_type)
         
         if search:
+            safe_search = search.replace('%', '\\%').replace('_', '\\_')
             query = query.filter(
                 or_(
-                    PotPlant.name.ilike(f'%{search}%'),
-                    PotPlant.description.ilike(f'%{search}%')
+                    PotPlant.name.ilike(f'%{safe_search}%'),
+                    PotPlant.description.ilike(f'%{safe_search}%')
                 )
             )
         
@@ -85,13 +131,20 @@ def get_plants():
     except Exception as e:
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal server error'
         }), 500
     
 # растение по ID
 @bp.route('/<int:plant_id>', methods=['GET'], endpoint='plant_detail')
 def get_plant(plant_id):
     try:
+        plant_id = safe_int(plant_id, min_val=1)
+        if not plant_id:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid plant ID'
+            }), 400
+            
         plant = PotPlant.query.get(plant_id)
         
         if not plant:
@@ -116,7 +169,7 @@ def get_plant(plant_id):
     except Exception as e:
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal server error'
         }), 500
 
 # новое растение
@@ -139,8 +192,29 @@ def create_plant():
                     'error': f'Missing required field: {field}'
                 }), 400
         
+        name = validate_string_input(data.get('name'), 100)
+        if not name:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid plant name'
+            }), 400
+            
+        base_price = safe_float(data.get('base_price'), min_val=0, max_val=1000000)
+        if base_price is None:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid base price'
+            }), 400
+            
+        category_id = safe_int(data.get('category_id'), min_val=1)
+        if not category_id:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid category ID'
+            }), 400
+        
         # проверка категории
-        category = Category.query.get(data['category_id'])
+        category = Category.query.get(category_id)
         if not category:
             return jsonify({
                 'success': False,
@@ -148,7 +222,7 @@ def create_plant():
             }), 400
         
         # проверка уникальности имени
-        existing_plant = PotPlant.query.filter_by(name=data['name']).first()
+        existing_plant = PotPlant.query.filter_by(name=name).first()
         if existing_plant:
             return jsonify({
                 'success': False,
@@ -156,36 +230,23 @@ def create_plant():
             }), 400
         
         # валидация рейтинга
-        rating = data.get('rating')
-        if rating is not None:
-            try:
-                rating = float(rating)
-                if rating < 0 or rating > 5:
-                    return jsonify({
-                        'success': False,
-                        'error': 'Rating must be between 0 and 5'
-                    }), 400
-            except (ValueError, TypeError):
-                return jsonify({
-                    'success': False,
-                    'error': 'Rating must be a valid number'
-                }), 400
+        rating = safe_float(data.get('rating'), min_val=0, max_val=5)
         
         plant = PotPlant(
-            name=data['name'],
-            description=data.get('description'),
-            base_price=data['base_price'],
-            supplier_id=data.get('supplier_id'),
-            category_id=data['category_id'],
-            plant_type=data.get('plant_type'),
-            recommended_pot_size=data.get('recommended_pot_size'),
-            height_cm=data.get('height_cm'),
-            care_instructions=data.get('care_instructions'),
-            light_requirements=data.get('light_requirements'),
-            watering_frequency=data.get('watering_frequency'),
+            name=name,
+            description=validate_string_input(data.get('description')),
+            base_price=base_price,
+            supplier_id=safe_int(data.get('supplier_id'), min_val=1),
+            category_id=category_id,
+            plant_type=validate_string_input(data.get('plant_type'), 20),
+            recommended_pot_size=validate_string_input(data.get('recommended_pot_size'), 2),
+            height_cm=safe_int(data.get('height_cm'), min_val=0, max_val=10000),
+            care_instructions=validate_string_input(data.get('care_instructions')),
+            light_requirements=validate_string_input(data.get('light_requirements'), 20),
+            watering_frequency=validate_string_input(data.get('watering_frequency'), 50),
             rating=rating,
-            in_stock=data.get('in_stock', True),
-            image_url=data.get('image_url')
+            in_stock=bool(data.get('in_stock', True)),
+            image_url=validate_string_input(data.get('image_url'), 255)
         )
         
         db.session.add(plant)
@@ -201,13 +262,20 @@ def create_plant():
         db.session.rollback()
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal server error'
         }), 500
 
 # обновление растения
 @bp.route('/<int:plant_id>', methods=['PUT'], endpoint='plant_update')
 def update_plant(plant_id):
     try:
+        plant_id = safe_int(plant_id, min_val=1)
+        if not plant_id:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid plant ID'
+            }), 400
+            
         plant = PotPlant.query.get(plant_id)
         
         if not plant:
@@ -224,37 +292,48 @@ def update_plant(plant_id):
                 'error': 'No data provided'
             }), 400
         
-        updatable_fields = [
-            'name', 'description', 'base_price', 'supplier_id', 'category_id',
-            'plant_type', 'recommended_pot_size', 'height_cm', 'care_instructions',
-            'light_requirements', 'watering_frequency', 'rating', 'in_stock', 'image_url'
-        ]
-        
-        for field in updatable_fields:
-            if field in data:
-                if field == 'rating' and data[field] is not None:
-                    try:
-                        rating = float(data[field])
-                        if rating < 0 or rating > 5:
-                            return jsonify({
-                                'success': False,
-                                'error': 'Rating must be between 0 and 5'
-                            }), 400
-                    except (ValueError, TypeError):
-                        return jsonify({
-                            'success': False,
-                            'error': 'Rating must be a valid number'
-                        }), 400
-                setattr(plant, field, data[field])
-        
-        # уникальность имени
-        if 'name' in data and data['name'] != plant.name:
-            existing_plant = PotPlant.query.filter_by(name=data['name']).first()
-            if existing_plant and existing_plant.id != plant_id:
+        if 'name' in data:
+            name = validate_string_input(data.get('name'), 100)
+            if not name:
                 return jsonify({
                     'success': False,
-                    'error': 'Plant with this name already exists'
+                    'error': 'Invalid plant name'
                 }), 400
+            if name != plant.name:
+                existing_plant = PotPlant.query.filter_by(name=name).first()
+                if existing_plant and existing_plant.id != plant_id:
+                    return jsonify({
+                        'success': False,
+                        'error': 'Plant with this name already exists'
+                    }), 400
+            plant.name = name
+        
+        updatable_fields = {
+            'description': (validate_string_input, None),
+            'base_price': (safe_float, {'min_val': 0, 'max_val': 1000000}),
+            'supplier_id': (safe_int, {'min_val': 1}),
+            'category_id': (safe_int, {'min_val': 1}),
+            'plant_type': (validate_string_input, {'max_length': 20}),
+            'recommended_pot_size': (validate_string_input, {'max_length': 2}),
+            'height_cm': (safe_int, {'min_val': 0, 'max_val': 10000}),
+            'care_instructions': (validate_string_input, None),
+            'light_requirements': (validate_string_input, {'max_length': 20}),
+            'watering_frequency': (validate_string_input, {'max_length': 50}),
+            'rating': (safe_float, {'min_val': 0, 'max_val': 5}),
+            'image_url': (validate_string_input, {'max_length': 255})
+        }
+        
+        for field, (validator, kwargs) in updatable_fields.items():
+            if field in data:
+                if kwargs:
+                    value = validator(data[field], **kwargs)
+                else:
+                    value = validator(data[field])
+                if value is not None or field in ['description', 'care_instructions']:  # Разрешаем пустые описания
+                    setattr(plant, field, value)
+        
+        if 'in_stock' in data:
+            plant.in_stock = bool(data['in_stock'])
         
         db.session.commit()
         
@@ -268,13 +347,20 @@ def update_plant(plant_id):
         db.session.rollback()
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal server error'
         }), 500
 
 # удаление
 @bp.route('/<int:plant_id>', methods=['DELETE'], endpoint='plant_delete')
 def delete_plant(plant_id):
     try:
+        plant_id = safe_int(plant_id, min_val=1)
+        if not plant_id:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid plant ID'
+            }), 400
+            
         plant = PotPlant.query.get(plant_id)
         
         if not plant:
@@ -302,13 +388,20 @@ def delete_plant(plant_id):
         db.session.rollback()
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal server error'
         }), 500
 
 # загрузка картинки для растения
 @bp.route('/<int:plant_id>/image', methods=['POST'], endpoint='plant_upload_image')
 def upload_plant_image(plant_id):
     try:
+        plant_id = safe_int(plant_id, min_val=1)
+        if not plant_id:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid plant ID'
+            }), 400
+            
         plant = PotPlant.query.get(plant_id)
         
         if not plant:
@@ -363,13 +456,20 @@ def upload_plant_image(plant_id):
         db.session.rollback()
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal server error'
         }), 500
 
 # удаление картинки растения
 @bp.route('/<int:plant_id>/image', methods=['DELETE'], endpoint='plant_delete_image')
 def delete_plant_image(plant_id):
     try:
+        plant_id = safe_int(plant_id, min_val=1)
+        if not plant_id:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid plant ID'
+            }), 400
+            
         plant = PotPlant.query.get(plant_id)
         
         if not plant:
@@ -386,7 +486,14 @@ def delete_plant_image(plant_id):
         
         try:
             img_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'img')
-            filename = plant.image_url.replace('img/', '')
+            filename = safe_filename(plant.image_url)
+            
+            if not filename:
+                return jsonify({
+                    'success': False,
+                    'error': 'Invalid filename format'
+                }), 400
+                
             file_path = os.path.join(img_dir, filename)
             
             if os.path.exists(file_path):
@@ -407,7 +514,7 @@ def delete_plant_image(plant_id):
         db.session.rollback()
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal server error'
         }), 500
 
 # все категории
@@ -424,7 +531,7 @@ def get_categories():
     except Exception as e:
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal server error'
         }), 500
 
 # все фильтры 
@@ -465,13 +572,20 @@ def get_filters():
     except Exception as e:
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal server error'
         }), 500
     
 # обновить наличие 
 @bp.route('/<int:plant_id>/stock', methods=['PATCH'], endpoint='plant_update_stock')
 def update_stock(plant_id):
     try:
+        plant_id = safe_int(plant_id, min_val=1)
+        if not plant_id:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid plant ID'
+            }), 400
+            
         plant = PotPlant.query.get(plant_id)
         
         if not plant:
@@ -501,7 +615,7 @@ def update_stock(plant_id):
         db.session.rollback()
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal server error'
         }), 500
 
 # растения с картинками
@@ -519,15 +633,15 @@ def get_plants_with_images():
     except Exception as e:
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal server error'
         }), 500
     
 # растения с высоким рейтингом
 @bp.route('/top-rated', methods=['GET'], endpoint='plants_top_rated')
 def get_top_rated_plants():
     try:
-        min_rating = request.args.get('min_rating', 4.0, type=float)
-        limit = request.args.get('limit', 10, type=int)
+        min_rating = safe_float(request.args.get('min_rating', 4.0), min_val=0, max_val=5)
+        limit = safe_int(request.args.get('limit', 10), min_val=1, max_val=100)
         
         plants = PotPlant.query.filter(
             PotPlant.rating >= min_rating,
@@ -543,5 +657,5 @@ def get_top_rated_plants():
     except Exception as e:
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal server error'
         }), 500

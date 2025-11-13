@@ -2,8 +2,30 @@ from flask import Blueprint, request, jsonify
 from app import db
 from app.models import Category, PotPlant
 from sqlalchemy import or_
+import re
 
 bp = Blueprint('categories', __name__, url_prefix='/api/categories')
+
+def safe_int(value, default=None, min_val=None, max_val=None):
+    """Безопасное преобразование в int с валидацией"""
+    if value is None:
+        return default
+    try:
+        result = int(value)
+        if min_val is not None and result < min_val:
+            return default
+        if max_val is not None and result > max_val:
+            return default
+        return result
+    except (ValueError, TypeError):
+        return default
+
+def validate_string_input(text, max_length=255):
+    """Валидация строкового ввода"""
+    if not text or not isinstance(text, str):
+        return None
+    cleaned = re.sub(r'[<>"\']', '', text.strip())
+    return cleaned[:max_length] if cleaned else None
 
 # все категории
 @bp.route('/', methods=['GET'])
@@ -39,13 +61,20 @@ def get_categories():
     except Exception as e:
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal server error'
         }), 500
 
 # категория по ID
 @bp.route('/<int:category_id>', methods=['GET'])
 def get_category(category_id):
     try:
+        category_id = safe_int(category_id, min_val=1)
+        if not category_id:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid category ID'
+            }), 400
+            
         category = Category.query.get(category_id)
         
         if not category:
@@ -78,7 +107,7 @@ def get_category(category_id):
     except Exception as e:
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal server error'
         }), 500
 
 # создать категорию
@@ -102,8 +131,18 @@ def create_category():
                     'error': f'Missing required field: {field}'
                 }), 400
         
+        name = validate_string_input(data.get('name'), 100)
+        if not name:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid category name'
+            }), 400
+        
+        description = validate_string_input(data.get('description'))
+        parent_id = safe_int(data.get('parent_id'), min_val=1)
+        
         # проверка уникальности имени
-        existing_category = Category.query.filter_by(name=data['name']).first()
+        existing_category = Category.query.filter_by(name=name).first()
         if existing_category:
             return jsonify({
                 'success': False,
@@ -111,8 +150,8 @@ def create_category():
             }), 400
         
         # проверка на родителя
-        if 'parent_id' in data and data['parent_id'] is not None:
-            parent_category = Category.query.get(data['parent_id'])
+        if parent_id:
+            parent_category = Category.query.get(parent_id)
             if not parent_category:
                 return jsonify({
                     'success': False,
@@ -120,9 +159,9 @@ def create_category():
                 }), 400
         
         category = Category(
-            name=data['name'],
-            description=data.get('description'),
-            parent_id=data.get('parent_id')
+            name=name,
+            description=description,
+            parent_id=parent_id
         )
         
         db.session.add(category)
@@ -138,13 +177,20 @@ def create_category():
         db.session.rollback()
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal server error'
         }), 500
 
 # обновление категории
 @bp.route('/<int:category_id>', methods=['PUT'])
 def update_category(category_id):
     try:
+        category_id = safe_int(category_id, min_val=1)
+        if not category_id:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid category ID'
+            }), 400
+            
         category = Category.query.get(category_id)
         
         if not category:
@@ -169,8 +215,9 @@ def update_category(category_id):
             }), 400
         
         # проверка на родительскую категорию
-        if 'parent_id' in data and data['parent_id'] is not None:
-            parent_category = Category.query.get(data['parent_id'])
+        parent_id = safe_int(data.get('parent_id'), min_val=1)
+        if parent_id:
+            parent_category = Category.query.get(parent_id)
             if not parent_category:
                 return jsonify({
                     'success': False,
@@ -178,19 +225,28 @@ def update_category(category_id):
                 }), 400
         
         # обновление поля
-        updatable_fields = ['name', 'description', 'parent_id']
-        for field in updatable_fields:
-            if field in data:
-                setattr(category, field, data[field])
-        
-        # проверка на уникальность имени
-        if 'name' in data and data['name'] != category.name:
-            existing_category = Category.query.filter_by(name=data['name']).first()
-            if existing_category and existing_category.id != category_id:
+        if 'name' in data:
+            name = validate_string_input(data.get('name'), 100)
+            if not name:
                 return jsonify({
                     'success': False,
-                    'error': 'Category with this name already exists'
+                    'error': 'Invalid category name'
                 }), 400
+            # проверка на уникальность имени
+            if name != category.name:
+                existing_category = Category.query.filter_by(name=name).first()
+                if existing_category and existing_category.id != category_id:
+                    return jsonify({
+                        'success': False,
+                        'error': 'Category with this name already exists'
+                    }), 400
+            category.name = name
+        
+        if 'description' in data:
+            category.description = validate_string_input(data.get('description'))
+        
+        if 'parent_id' in data:
+            category.parent_id = parent_id
         
         db.session.commit()
         
@@ -204,13 +260,20 @@ def update_category(category_id):
         db.session.rollback()
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal server error'
         }), 500
 
 # удалить категорию
 @bp.route('/<int:category_id>', methods=['DELETE'])
 def delete_category(category_id):
     try:
+        category_id = safe_int(category_id, min_val=1)
+        if not category_id:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid category ID'
+            }), 400
+            
         category = Category.query.get(category_id)
         
         if not category:
@@ -247,13 +310,20 @@ def delete_category(category_id):
         db.session.rollback()
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal server error'
         }), 500
 
 # растения в категориям
 @bp.route('/<int:category_id>/plants', methods=['GET'])
 def get_category_plants(category_id):
     try:
+        category_id = safe_int(category_id, min_val=1)
+        if not category_id:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid category ID'
+            }), 400
+            
         category = Category.query.get(category_id)
         
         if not category:
@@ -264,7 +334,7 @@ def get_category_plants(category_id):
         
         # параметры фильтров 
         in_stock = request.args.get('in_stock', type=lambda v: v.lower() == 'true')
-        plant_type = request.args.get('plant_type')
+        plant_type = validate_string_input(request.args.get('plant_type'), 20)
         
         query = PotPlant.query.filter_by(category_id=category_id)
         
@@ -288,7 +358,7 @@ def get_category_plants(category_id):
     except Exception as e:
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal server error'
         }), 500
 
 # статистика по категориям
@@ -319,5 +389,5 @@ def get_categories_stats():
     except Exception as e:
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal server error'
         }), 500
