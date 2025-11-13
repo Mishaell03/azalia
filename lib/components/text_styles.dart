@@ -6,6 +6,11 @@ class AppText {
     fontWeight: FontWeight.w700,
     fontFamily: "MontserratAlternates",
   );
+  static const bold_23 = TextStyle(
+    fontSize: 23,
+    fontWeight: FontWeight.w700,
+    fontFamily: "MontserratAlternates",
+  );
   static const bold_18 = TextStyle(
     fontSize: 18,
     fontWeight: FontWeight.w700,
@@ -48,13 +53,18 @@ class AppText {
     fontWeight: FontWeight.w500,
     fontFamily: "MontserratAlternates",
   );
+  static const medium_20 = TextStyle(
+    fontSize: 20,
+    fontWeight: FontWeight.w500,
+    fontFamily: "MontserratAlternates",
+  );
   static const medium_16 = TextStyle(
     fontSize: 16,
     fontWeight: FontWeight.w500,
     fontFamily: "MontserratAlternates",
   );
-  static const medium_20 = TextStyle(
-    fontSize: 20,
+  static const medium_18 = TextStyle(
+    fontSize: 18,
     fontWeight: FontWeight.w500,
     fontFamily: "MontserratAlternates",
   );

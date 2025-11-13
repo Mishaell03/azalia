@@ -1,3 +1,4 @@
+import 'package:azalia/pages/auth/auth.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:azalia/pages/home/homepage.dart';
@@ -11,6 +12,11 @@ class AppRouter {
         path: '/',
         name: 'home',
         builder: (context, state) => const HomePage(),
+      ),
+      GoRoute(
+        path: '/auth',
+        name: 'auth',
+        builder: (context, state) => const AuthPage(),
       ),
     ],
     errorBuilder:(context, state) => ErrorPage(),

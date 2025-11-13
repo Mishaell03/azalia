@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:azalia/components/colors.dart';
 import 'package:flutter_svg/svg.dart';
+import 'package:azalia/router.dart';
+import 'package:go_router/go_router.dart';
 
 class AppFooter extends StatefulWidget {
   const AppFooter({super.key});
@@ -23,7 +25,14 @@ class _AppFooter extends State<AppFooter> {
     setState(() {
       _currentIndex = index;
     });
-    // навигация
+    switch (index) {
+      case 0:
+      context.go('/');
+    }
+    switch (index) {
+      case 3:
+      context.go('/auth');
+    }
   }
 
   @override
