@@ -142,7 +142,6 @@ class _HomePage extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.white,
       appBar: HomeHeader(),
       bottomNavigationBar: const AppFooter(),
       body: _isLoading
@@ -151,8 +150,6 @@ class _HomePage extends State<HomePage> {
           ? GenericErrorWidget(onRetry: _loadInitialData)
           : RefreshIndicator(
               key: _refreshIndicatorKey,
-              color: AppColors.brown,
-              backgroundColor: AppColors.white,
               displacement: 70,
               onRefresh: _handleRefresh,
               child: CustomScrollView(

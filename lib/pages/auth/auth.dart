@@ -1,8 +1,11 @@
 import 'package:azalia/components/colors.dart';
 import 'package:azalia/components/text_styles.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:azalia/backend/services/device_id.dart';
+import 'package:azalia/backend/services/auth.dart';
+import 'package:azalia/backend/models/auth.dart';
 
 class AuthPage extends StatefulWidget {
   const AuthPage({super.key});
@@ -19,6 +22,7 @@ class _AuthPageState extends State<AuthPage> {
   final List<FocusNode> _focusNodes = List.generate(4, (_) => FocusNode());
   String _errorText = '';
   bool _allFieldsFilled = false;
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -74,17 +78,51 @@ class _AuthPageState extends State<AuthPage> {
     return _controllers.map((controller) => controller.text).join();
   }
 
-  void _verifyCode() {
+  Future<void> _verifyCode() async {
+    if (_isLoading) return;
+
     final code = _getEnteredCode();
 
-    // TODO: Заменить на реальную проверку кода
-    if (code == '1234') {
-      _showSuccessDialog();
-    } else {
+    if (!AuthService.validateCodeFormat(code)) {
       setState(() {
-        _errorText = 'Неверный код';
+        _errorText = 'Неверный формат кода';
       });
       _clearAllFields();
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorText = '';
+    });
+
+    try {
+      final authResponse = await AuthService.verifyCode(code);
+
+      if (authResponse.success) {
+        _showSuccessDialog(authResponse);
+      } else {
+        setState(() {
+          _errorText = 'Что-то пошло не так';
+        });
+        _clearAllFields();
+      }
+    } on AuthException catch (e) {
+      setState(() {
+        _errorText = 'Что-то пошло не так';
+      });
+      _clearAllFields();
+    } catch (e) {
+      setState(() {
+        _errorText = 'Что-то пошло не так';
+      });
+      _clearAllFields();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -98,18 +136,30 @@ class _AuthPageState extends State<AuthPage> {
     });
   }
 
-  void _showSuccessDialog() {
+  void _showSuccessDialog(AuthResponse authResponse) {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('Успешно!'),
-        content: const Text('Авторизация прошла успешно'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Добро пожаловать, ${authResponse.user.name}!'),
+            if (authResponse.isEmployee) ...[
+              const SizedBox(height: 8),
+              Text('Должность: ${authResponse.position?.title ?? 'Сотрудник'}'),
+            ],
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
+              context.goNamed('home');
             },
-            child: const Text('OK'),
+            child: const Text('Продолжить'),
           ),
         ],
       ),
@@ -122,25 +172,16 @@ class _AuthPageState extends State<AuthPage> {
 
       if (!success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Не удалось открыть Telegram. Убедитесь, что приложение установлено.',
-            ),
-          ),
+          const SnackBar(content: Text('Не удалось открыть Telegram')),
         );
       }
     } catch (e) {
-      print('Error in _openTelegram: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Ошибка при открытии Telegram')),
         );
       }
     }
-  }
-
-  void _goBack() {
-    context.goNamed('home');
   }
 
   void _handleFieldSubmit(int index) {
@@ -156,7 +197,6 @@ class _AuthPageState extends State<AuthPage> {
     final screenHeight = MediaQuery.of(context).size.height;
 
     return Scaffold(
-      backgroundColor: Colors.white,
       body: Stack(
         children: [
           Positioned(
@@ -175,8 +215,10 @@ class _AuthPageState extends State<AuthPage> {
             top: 50,
             right: 20,
             child: IconButton(
-              onPressed: _goBack,
-              icon: const Icon(Icons.close, color: Colors.white, size: 30),
+              onPressed: () {
+                context.goNamed('home');
+              },
+              icon: SvgPicture.asset('assets/icons/Back.svg'),
               style: IconButton.styleFrom(
                 backgroundColor: Colors.white.withOpacity(0.2),
                 padding: const EdgeInsets.all(8),
@@ -338,19 +380,25 @@ class _AuthPageState extends State<AuthPage> {
                       width: double.infinity,
                       height: 56,
                       child: ElevatedButton(
-                        onPressed: _allFieldsFilled ? _verifyCode : null,
+                        onPressed: _allFieldsFilled && !_isLoading
+                            ? _verifyCode
+                            : null,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.brown,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        child: Text(
-                          'Подтвердить',
-                          style: AppText.medium_20.copyWith(
-                            color: AppColors.white,
-                          ),
-                        ),
+                        child: _isLoading
+                            ? const CircularProgressIndicator(
+                                color: Colors.white,
+                              )
+                            : Text(
+                                'Подтвердить',
+                                style: AppText.medium_20.copyWith(
+                                  color: AppColors.white,
+                                ),
+                              ),
                       ),
                     ),
                   ],

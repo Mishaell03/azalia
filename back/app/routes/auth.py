@@ -41,6 +41,7 @@ def sanitize_input(input_str, max_length=100):
     sanitized = re.sub(r'[<>"\'\{\}\[\]\(\)\\\/]', '', str(input_str))
     return sanitized[:max_length]
 
+# backend/auth.py (обновленный для поддержки session_token)
 @bp.route('/verify', methods=['POST'])
 def verify_code():
     """Приложение проверяет код"""
@@ -48,85 +49,85 @@ def verify_code():
         if not request.is_json:
             return jsonify({
                 'success': False,
-                'error': 'Content-Type must be application/json'
+                'error': 'Что-то пошло не так'
             }), 400
         
         data = request.get_json()
         if not data:
             return jsonify({
                 'success': False,
-                'error': 'No data provided'
+                'error': 'Что-то пошло не так'
             }), 400
         
         code = data.get('code')
+        device_id = data.get('device_id')
+        
         if not code:
             return jsonify({
                 'success': False,
-                'error': 'Code is required'
+                'error': 'Что-то пошло не так'
             }), 400
         
         if not validate_code_format(code):
             return jsonify({
                 'success': False,
-                'error': 'Valid 4-digit code is required'
+                'error': 'Что-то пошло не так'
             }), 400
         
         auth_code = OAuthCode.query.filter_by(code=code).first()
         
         if not auth_code:
-            # лог попытки использования несуществующего кода
-            current_app.logger.warning(f"Attempt to verify non-existent code: {code}")
             return jsonify({
                 'success': False,
-                'error': 'Invalid code'
+                'error': 'Что-то пошло не так'
             }), 404
         
-        # срок действия
         if auth_code.expires_at < datetime.utcnow():
-            current_app.logger.info(f"Expired code attempted: {code}")
             return jsonify({
                 'success': False,
-                'error': 'Code has expired'
+                'error': 'Что-то пошло не так'
             }), 410
         
         if auth_code.used:
-            current_app.logger.warning(f"Attempt to reuse code: {code}")
             return jsonify({
                 'success': False,
-                'error': 'Code already used'
+                'error': 'Что-то пошло не так'
             }), 409
         
-        user = User.query.get(auth_code.user_id)
+        user = User.query.filter_by(telegram_id=auth_code.telegram_id).first()
         if not user:
-            current_app.logger.error(f"User not found for code: {code}, user_id: {auth_code.user_id}")
             return jsonify({
                 'success': False,
-                'error': 'User not found'
+                'error': 'Что-то пошло не так'
             }), 404
         
-        # проверка сотрудника
         employee = Employee.query.filter_by(telegram_id=user.telegram_id).first()
         
         try:
+            # Генерируем session token
+            import secrets
+            session_token = secrets.token_hex(32)
+            user.session_token = session_token
+            user.token_expires_at = datetime.utcnow() + timedelta(days=30)
+            
             auth_code.used = True
             auth_code.used_at = datetime.utcnow()
             db.session.commit()
-        except Exception as commit_error:
+        except Exception:
             db.session.rollback()
-            current_app.logger.error(f"Commit error for code {code}: {str(commit_error)}")
             return jsonify({
                 'success': False,
-                'error': 'Database error'
+                'error': 'Что-то пошло не так'
             }), 500
         
-        # безопасный ответ
         response_data = {
             'success': True,
             'user': {
                 'id': user.id,
                 'telegram_id': user.telegram_id,
                 'name': sanitize_input(user.name),
-                'phone': sanitize_input(user.phone) if user.phone else ""
+                'phone': sanitize_input(user.phone) if user.phone else "",
+                'session_token': session_token,  # Добавляем session_token
             },
             'message': 'Authentication successful'
         }
@@ -146,16 +147,13 @@ def verify_code():
         else:
             response_data['is_employee'] = False
         
-        current_app.logger.info(f"Successful verification for code: {code}, user: {user.id}")
         return jsonify(response_data), 200
         
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        # не раскрываем детали ошибки
-        current_app.logger.error(f"Error verifying code: {str(e)}")
         return jsonify({
             'success': False,
-            'error': 'Verification failed'
+            'error': 'Что-то пошло не так'
         }), 500
 
 @bp.route('/check_status/<code>', methods=['GET'])
@@ -165,36 +163,33 @@ def check_code_status(code):
     """
     try:
         if not validate_code_format(code):
-            current_app.logger.warning(f"Invalid code format in check_status: {code}")
             return jsonify({
                 'success': False,
-                'error': 'Invalid code format'
+                'error': 'Что-то пошло не так'
             }), 400
 
-        # безопасный запрос
         auth_code = OAuthCode.query.filter_by(code=code).first()
         
         if not auth_code:
             return jsonify({
                 'success': False,
-                'error': 'Code not found'
+                'error': 'Что-то пошло не так'
             }), 404
         
-        # безопасный ответ
         status = {
             'code': auth_code.code,
             'expires_at': auth_code.expires_at.isoformat() if auth_code.expires_at else None,
             'used': auth_code.used,
-            'user_linked': auth_code.user_id is not None,
-            'is_valid': auth_code.is_valid() if hasattr(auth_code, 'is_valid') else (
+            'user_linked': auth_code.telegram_id is not None,
+            'is_valid': (
                 not auth_code.used and 
                 auth_code.expires_at and 
                 auth_code.expires_at > datetime.utcnow()
             )
         }
         
-        if auth_code.user_id:
-            user = User.query.get(auth_code.user_id)
+        if auth_code.telegram_id:
+            user = User.query.filter_by(telegram_id=auth_code.telegram_id).first()
             if user:
                 status['user'] = {
                     'id': user.id,
@@ -202,7 +197,6 @@ def check_code_status(code):
                     'name': sanitize_input(user.name)
                 }
                 
-                # проверка сотрудника
                 employee = Employee.query.filter_by(telegram_id=user.telegram_id).first()
                 if employee:
                     status['employee'] = {
@@ -218,10 +212,8 @@ def check_code_status(code):
             'status': status
         }), 200
         
-    except Exception as e:
-        # не раскрываем детали ошибки
-        current_app.logger.error(f"Error checking code status: {str(e)}")
+    except Exception:
         return jsonify({
             'success': False,
-            'error': 'Failed to check code status'
+            'error': 'Что-то пошло не так'
         }), 500

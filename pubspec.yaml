@@ -17,6 +17,9 @@ dependencies:
   cached_network_image: ^3.4.1
   device_info_plus: ^12.2.0
   url_launcher: ^6.3.2 
+  shared_preferences: ^2.5.3
+  image_picker: ^1.0.4
+
 
 dev_dependencies:
   flutter_test:

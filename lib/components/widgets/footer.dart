@@ -12,8 +12,6 @@ class AppFooter extends StatefulWidget {
 }
 
 class _AppFooter extends State<AppFooter> {
-  int _currentIndex = 0;
-
   final List<String> _footerItems = [
     'assets/icons/Home.svg',
     'assets/icons/Love.svg',
@@ -21,26 +19,38 @@ class _AppFooter extends State<AppFooter> {
     'assets/icons/User.svg',
   ];
 
-  void _onItemTepped(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
-    switch (index) {
-      case 0:
-      context.go('/');
+  final List<String> _routes = [
+    '/',
+    '/',
+    '/',
+    '/profile',
+  ];
+
+  int _getCurrentIndex(BuildContext context) {
+    final String currentLocation = GoRouterState.of(context).uri.toString();
+    
+    for (int i = 0; i < _routes.length; i++) {
+      if (currentLocation == _routes[i] || 
+          currentLocation.startsWith(_routes[i] + '/')) {
+        return i;
+      }
     }
-    switch (index) {
-      case 3:
-      context.go('/auth');
+    return 0;
+  }
+
+  void _onItemTapped(int index, BuildContext context) {
+    if (index < _routes.length) {
+      context.go(_routes[index]);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final int currentIndex = _getCurrentIndex(context);
+    
     return Container(
       height: 75,
       decoration: BoxDecoration(
-        color: AppColors.white,
         boxShadow: [
           BoxShadow(
             color: AppColors.grey_light.withOpacity(0.05),
@@ -56,16 +66,22 @@ class _AppFooter extends State<AppFooter> {
           (index) => _buildFooterIco(
             _footerItems[index],
             index,
-            isActive: index == _currentIndex,
+            context,
+            isActive: index == currentIndex,
           ),
         ),
       ),
     );
   }
 
-  Widget _buildFooterIco(String icoPath, int index, {bool isActive = false}) {
+  Widget _buildFooterIco(
+    String icoPath, 
+    int index, 
+    BuildContext context, {
+    bool isActive = false
+  }) {
     return GestureDetector(
-      onTap: () => _onItemTepped(index),
+      onTap: () => _onItemTapped(index, context),
       behavior: HitTestBehavior.opaque,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,

@@ -33,7 +33,6 @@ class _HomeCardState extends State<HomeCard> {
 
   void _addToCart() {
     // временная заглушка
-    print('Добавлено в корзину: ${widget.plant.name}');
   }
 
   @override

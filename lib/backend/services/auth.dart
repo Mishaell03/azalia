@@ -1,38 +1,54 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:azalia/backend/api_config.dart';
-import 'package:azalia/backend/models/auth.dart';
+import 'package:azalia/backend/models/auth.dart'; 
+import 'package:azalia/backend/services/device_id.dart';
+import 'package:azalia/backend/services/session.dart';
 
 class AuthService {
   static Future<AuthResponse> verifyCode(String code) async {
     try {
+      final deviceId = await DeviceService.getDeviceId();
+      final cleanDeviceId = deviceId.replaceAll('.', '_');
+
       final response = await http.post(
         Uri.parse(ApiConfig.authVerify),
         headers: ApiConfig.headers,
-        body: json.encode({'code': code}),
+        body: json.encode({
+          'code': code,
+          'device_id': cleanDeviceId,
+        }),
       ).timeout(ApiConfig.timeout);
-
-      if (ApiConfig.enableLogging) {
-        print('Auth Verify - Status: ${response.statusCode}');
-        print('Auth Verify - Response: ${response.body}');
-      }
 
       final Map<String, dynamic> responseData = json.decode(response.body);
 
       if (response.statusCode == 200) {
-        return AuthResponse.fromJson(responseData);
+        final authResponse = AuthResponse.fromJson(responseData);
+        
+        final token = authResponse.user.sessionToken ?? _generateTempToken();
+        
+        await SessionService().saveSession(
+          user: authResponse.user,
+          token: token,
+          expiresAt: DateTime.now().add(Duration(days: 30)),
+          isEmployee: authResponse.isEmployee,
+          position: authResponse.position,
+        );
+
+        return authResponse;
       } else {
         throw AuthException(
-          message: responseData['error'] ?? 'Verification failed',
+          message: 'Что-то пошло не так',
           statusCode: response.statusCode,
         );
       }
     } catch (e) {
-      if (ApiConfig.enableLogging) {
-        print('Auth Verify - Error: $e');
-      }
-      throw AuthException(message: 'Network error: $e');
+      throw AuthException(message: 'Что-то пошло не так');
     }
+  }
+
+  static String _generateTempToken() {
+    return 'temp_token_${DateTime.now().millisecondsSinceEpoch}';
   }
 
   static Future<CodeStatusResponse> checkCodeStatus(String code) async {
@@ -42,26 +58,18 @@ class AuthService {
         headers: ApiConfig.headers,
       ).timeout(ApiConfig.timeout);
 
-      if (ApiConfig.enableLogging) {
-        print('Check Status - Status: ${response.statusCode}');
-        print('Check Status - Response: ${response.body}');
-      }
-
       final Map<String, dynamic> responseData = json.decode(response.body);
 
       if (response.statusCode == 200) {
         return CodeStatusResponse.fromJson(responseData);
       } else {
         throw AuthException(
-          message: responseData['error'] ?? 'Status check failed',
+          message: 'Что-то пошло не так',
           statusCode: response.statusCode,
         );
       }
     } catch (e) {
-      if (ApiConfig.enableLogging) {
-        print('Check Status - Error: $e');
-      }
-      throw AuthException(message: 'Network error: $e');
+      throw AuthException(message: 'Что-то пошло не так');
     }
   }
 
@@ -88,9 +96,5 @@ class AuthException implements Exception {
   AuthException({required this.message, this.statusCode});
 
   @override
-  String toString() {
-    return statusCode != null 
-        ? 'AuthException: $message (Status: $statusCode)'
-        : 'AuthException: $message';
-  }
+  String toString() => 'AuthException: $message';
 }

@@ -3,12 +3,14 @@ class User {
   final int telegramId;
   final String name;
   final String phone;
+  final String? sessionToken;
 
   User({
     required this.id,
     required this.telegramId,
     required this.name,
     required this.phone,
+    this.sessionToken,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -17,7 +19,18 @@ class User {
       telegramId: json['telegram_id'],
       name: json['name'] ?? '',
       phone: json['phone'] ?? '',
+      sessionToken: json['session_token'],
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'telegram_id': telegramId,
+      'name': name,
+      'phone': phone,
+      'session_token': sessionToken,
+    };
   }
 }
 
@@ -55,6 +68,13 @@ class Position {
       id: json['id'],
       title: json['title'] ?? '',
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+    };
   }
 }
 

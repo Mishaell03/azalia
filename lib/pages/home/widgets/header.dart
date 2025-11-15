@@ -23,9 +23,8 @@ class _HomeHeader extends State<HomeHeader> {
       title: const Text("Azalia"),
       titleSpacing: 24,
       titleTextStyle: AppText.semibold_25.copyWith(color: AppColors.black),
-      backgroundColor: AppColors.white,
       elevation: 0,
-      surfaceTintColor: AppColors.white,
+      centerTitle: true,
       actions: [
         if (_searchActive)
           Container(
@@ -42,25 +41,27 @@ class _HomeHeader extends State<HomeHeader> {
                 ),
               ],
             ),
-            width: MediaQuery.of(context).size.width * 0.60,
+            width: MediaQuery.of(context).size.width * 0.63,
             child: Row(
               children: [
                 const SizedBox(width: 12),
                 SvgPicture.asset(
                   'assets/icons/Searh.svg',
                   color: AppColors.grey_light,
-                  height: 18, width: 18,
+                  height: 18,
+                  width: 18,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
                     controller: _searchController,
                     autofocus: true,
+                    textAlignVertical: TextAlignVertical.center, 
                     decoration: const InputDecoration(
                       hintText: "Поиск растений...",
                       border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(vertical: 11),
                       hintStyle: TextStyle(color: Colors.grey),
+                      isDense: true,
                     ),
                     style: const TextStyle(fontSize: 16),
                   ),
