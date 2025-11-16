@@ -3,7 +3,9 @@ class ApiConfig {
   static const Duration timeout = Duration(seconds: 10);
 
   static const String authVerify = '$baseURL/auth/verify';
-  static String authCheckStatus(String code) => '$baseURL/auth/check_status/$code';
+  static String authCheckStatus(String code) =>
+      '$baseURL/auth/check_status/$code';
+  static const String updateProfile = '$baseURL/auth/update_profile';
 
   static const String plants = '$baseURL/plants/';
   static String plantsId(int id) => '$baseURL/plants/$id';
@@ -14,7 +16,8 @@ class ApiConfig {
   static String imageUrl(String? imagePath) {
     if (imagePath == null || imagePath.isEmpty) return '';
     if (imagePath.startsWith('http')) return imagePath;
-    if (imagePath.startsWith('api/')) return '$baseURL/${imagePath.substring(4)}';
+    if (imagePath.startsWith('api/'))
+      return '$baseURL/${imagePath.substring(4)}';
     return '$baseURL/$imagePath';
   }
 

@@ -217,3 +217,91 @@ def check_code_status(code):
             'success': False,
             'error': 'Что-то пошло не так'
         }), 500
+    
+@bp.route('/update_profile', methods=['POST'])
+def update_profile():
+    try:
+        if not request.is_json:
+            return jsonify({
+                'success': False,
+                'error': 'Неверный формат запроса'
+            }), 400
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'Отсутствуют данные'
+            }), 400
+        
+        session_token = data.get('session_token')
+        name = data.get('name')
+        phone = data.get('phone')
+        
+        if not session_token or not isinstance(session_token, str):
+            return jsonify({
+                'success': False,
+                'error': 'Недействительная сессия'
+            }), 401
+        
+        if not name or not isinstance(name, str) or len(name.strip()) < 2:
+            return jsonify({
+                'success': False,
+                'error': 'Имя должно содержать минимум 2 символа'
+            }), 400
+        
+        if not phone or not isinstance(phone, str):
+            return jsonify({
+                'success': False,
+                'error': 'Некорректный номер телефона'
+            }), 400
+        
+        sanitized_name = re.sub(r'[^\w\sа-яА-ЯёЁ\-\.]', '', name.strip())[:100]
+        phone_digits = re.sub(r'\D', '', phone)
+        
+        if len(phone_digits) < 10:
+            return jsonify({
+                'success': False,
+                'error': 'Некорректный номер телефона'
+            }), 400
+        
+        formatted_phone = f"+7{phone_digits[-10:]}"
+        
+        user = User.query.filter_by(session_token=session_token).first()
+        if not user:
+            return jsonify({
+                'success': False,
+                'error': 'Пользователь не найден'
+            }), 404
+        
+        if user.token_expires_at and user.token_expires_at < datetime.utcnow():
+            return jsonify({
+                'success': False,
+                'error': 'Сессия истекла'
+            }), 401
+        
+        user.name = sanitized_name
+        user.phone = formatted_phone
+        user.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Профиль успешно обновлен',
+            'user': {
+                'id': user.id,
+                'telegram_id': user.telegram_id,
+                'name': user.name,
+                'phone': user.phone,
+                'session_token': user.session_token,
+            }
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error in update_profile: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Внутренняя ошибка сервера'
+        }), 500
