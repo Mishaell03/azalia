@@ -216,7 +216,7 @@ class _AuthPageState extends State<AuthPage> {
             right: 20,
             child: IconButton(
               onPressed: () {
-                context.goNamed('home');
+                context.goNamed('auth');
               },
               icon: SvgPicture.asset('assets/icons/Back.svg'),
               style: IconButton.styleFrom(

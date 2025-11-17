@@ -31,7 +31,7 @@ class ProfileService {
 
       final response = await http.post(
         Uri.parse('${ApiConfig.baseURL}/auth/update_profile'),
-        headers: ApiConfig.headers,
+        headers: ApiConfig.headers(),
         body: json.encode({
           'session_token': token,
           'name': name.trim(),

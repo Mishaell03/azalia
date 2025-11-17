@@ -67,22 +67,90 @@ class Supplier(db.Model):
             'staff_info': self.staff_info,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
-
-class PotPrice(db.Model):
-    """модель для таблицы цен на горшки"""
-    __tablename__ = 'pot_prices'
+class PotMaterial(db.Model):
+    """Модель для таблицы материалов горшков"""
+    __tablename__ = 'pot_materials'
     
     id = db.Column(db.Integer, primary_key=True)
-    size = db.Column(db.String(2), nullable=False)
-    material = db.Column(db.String(20), nullable=False)
-    price = db.Column(db.DECIMAL(10,2), nullable=False)
+    name = db.Column(db.String(50), unique=True, nullable=False)
+    description = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    pot_prices = db.relationship('PotPrice', backref='material', lazy=True)
+    cart_items = db.relationship('CartItem', backref='pot_material', lazy=True)
     
     def to_dict(self):
         return {
             'id': self.id,
-            'size': self.size,
-            'material': self.material,
-            'price': float(self.price) if self.price else 0
+            'name': self.name,
+            'description': self.description,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+class PotSize(db.Model):
+    """Модель для таблицы размеров горшков"""
+    __tablename__ = 'pot_sizes'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(5), unique=True, nullable=False)
+    name = db.Column(db.String(50), nullable=False)
+    diameter_cm = db.Column(db.Integer)
+    height_cm = db.Column(db.Integer)
+    volume_liters = db.Column(db.Float)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    pot_prices = db.relationship('PotPrice', backref='size', lazy=True)
+    cart_items = db.relationship('CartItem', backref='pot_size', lazy=True)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'code': self.code,
+            'name': self.name,
+            'diameter_cm': self.diameter_cm,
+            'height_cm': self.height_cm,
+            'volume_liters': self.volume_liters,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+class PotColor(db.Model):
+    """Модель для таблицы цветов горшков"""
+    __tablename__ = 'pot_colors'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)
+    hex_code = db.Column(db.String(7))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    cart_items = db.relationship('CartItem', backref='pot_color', lazy=True)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'hex_code': self.hex_code,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+    
+class PotPrice(db.Model):
+    """Модель для таблицы цен на горшки"""
+    __tablename__ = 'pot_prices'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    material_id = db.Column(db.Integer, db.ForeignKey('pot_materials.id'), nullable=False)
+    size_id = db.Column(db.Integer, db.ForeignKey('pot_sizes.id'), nullable=False)
+    price = db.Column(db.Float, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'material_id': self.material_id,
+            'size_id': self.size_id,
+            'price': self.price,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'material': self.material.to_dict() if self.material else None,
+            'size': self.size.to_dict() if self.size else None
         }
 
 class PotPlant(db.Model):
@@ -374,3 +442,64 @@ class OAuthCode(db.Model):
     
     def is_valid(self):
         return not self.used and self.expires_at > datetime.utcnow()
+    
+class CartItem(db.Model):
+    """Модель для таблицы корзины пользователя"""
+    __tablename__ = 'cart_items'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    plant_id = db.Column(db.Integer, db.ForeignKey('pot_plants.id'), nullable=False)
+    quantity = db.Column(db.Integer, default=1, nullable=False)
+    pot_color_id = db.Column(db.Integer, db.ForeignKey('pot_colors.id'))
+    pot_size_id = db.Column(db.Integer, db.ForeignKey('pot_sizes.id'))
+    pot_material_id = db.Column(db.Integer, db.ForeignKey('pot_materials.id'))
+    plant_unit_price = db.Column(db.Float, nullable=False)
+    pot_unit_price = db.Column(db.Float, default=0, nullable=False)
+    total_price = db.Column(db.Float, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    user = db.relationship('User', backref='cart_items')
+    plant = db.relationship('PotPlant', backref='cart_items')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'plant_id': self.plant_id,
+            'quantity': self.quantity,
+            'pot_color_id': self.pot_color_id,
+            'pot_size_id': self.pot_size_id,
+            'pot_material_id': self.pot_material_id,
+            'plant_unit_price': self.plant_unit_price,
+            'pot_unit_price': self.pot_unit_price,
+            'total_price': self.total_price,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'plant': self.plant.to_dict() if self.plant else None,
+            'pot_color': self.pot_color.to_dict() if self.pot_color else None,
+            'pot_size': self.pot_size.to_dict() if self.pot_size else None,
+            'pot_material': self.pot_material.to_dict() if self.pot_material else None
+        }
+
+class WishlistItem(db.Model):
+    """Модель для таблицы избранного пользователя"""
+    __tablename__ = 'wishlist_items'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    plant_id = db.Column(db.Integer, db.ForeignKey('pot_plants.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    user = db.relationship('User', backref='wishlist_items')
+    plant = db.relationship('PotPlant', backref='wishlist_items')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'plant_id': self.plant_id,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'plant': self.plant.to_dict() if self.plant else None
+        }

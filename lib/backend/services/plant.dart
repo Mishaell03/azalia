@@ -31,7 +31,7 @@ class PlantService {
       final uri = Uri.parse(ApiConfig.plants).replace(queryParameters: params);
       
       final response = await http
-          .get(uri, headers: ApiConfig.headers)
+          .get(uri, headers: ApiConfig.headers())
           .timeout(ApiConfig.timeout);
           
       if (response.statusCode == 200) {
@@ -49,7 +49,7 @@ class PlantService {
   Future<Plant> getPlantById(int id) async {
     try {
       final response = await http
-          .get(Uri.parse(ApiConfig.plantsId(id)), headers: ApiConfig.headers)
+          .get(Uri.parse(ApiConfig.plantsId(id)), headers: ApiConfig.headers())
           .timeout(ApiConfig.timeout);
           
       if (response.statusCode == 200) {
@@ -71,7 +71,7 @@ class PlantService {
   Future<List<Category>> getCategories() async {
     try {
       final response = await http
-          .get(Uri.parse(ApiConfig.categories), headers: ApiConfig.headers)
+          .get(Uri.parse(ApiConfig.categories), headers: ApiConfig.headers())
           .timeout(ApiConfig.timeout);
           
       if (response.statusCode == 200) {
@@ -105,7 +105,7 @@ class PlantService {
       final uri = Uri.parse(ApiConfig.topRated).replace(queryParameters: params);
       
       final response = await http
-          .get(uri, headers: ApiConfig.headers)
+          .get(uri, headers: ApiConfig.headers())
           .timeout(ApiConfig.timeout);
           
       if (response.statusCode == 200) {
@@ -123,7 +123,7 @@ class PlantService {
   Future<Map<String, dynamic>> getFilters() async {
     try {
       final response = await http
-          .get(Uri.parse(ApiConfig.filters), headers: ApiConfig.headers)
+          .get(Uri.parse(ApiConfig.filters), headers: ApiConfig.headers())
           .timeout(ApiConfig.timeout);
           
       if (response.statusCode == 200) {

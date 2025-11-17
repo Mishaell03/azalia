@@ -13,7 +13,7 @@ class AuthService {
 
       final response = await http.post(
         Uri.parse(ApiConfig.authVerify),
-        headers: ApiConfig.headers,
+        headers: ApiConfig.headers(),
         body: json.encode({
           'code': code,
           'device_id': cleanDeviceId,
@@ -55,7 +55,7 @@ class AuthService {
     try {
       final response = await http.get(
         Uri.parse(ApiConfig.authCheckStatus(code)),
-        headers: ApiConfig.headers,
+        headers: ApiConfig.headers(),
       ).timeout(ApiConfig.timeout);
 
       final Map<String, dynamic> responseData = json.decode(response.body);

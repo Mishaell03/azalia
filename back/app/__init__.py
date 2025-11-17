@@ -25,15 +25,15 @@ def create_app():
         return send_from_directory(img_dir, filename)
     
     from app.routes.plants import bp as plants_bp
-    from app.routes.orders import bp as orders_bp
     from app.routes.categories import bp as categories_bp
     from app.routes.employees import bp as employees_bp
     from app.routes.auth import bp as auth_bp
+    from app.routes.cart import bp as cart_bp
     
     app.register_blueprint(plants_bp)
-    app.register_blueprint(orders_bp)
     app.register_blueprint(categories_bp)
     app.register_blueprint(employees_bp)
     app.register_blueprint(auth_bp)
+    app.register_blueprint(cart_bp)
     
     return app

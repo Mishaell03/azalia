@@ -1,18 +1,39 @@
 class ApiConfig {
-  static const String baseURL = 'http://10.0.0.40:5000/api';
+  static const String baseURL = 'http://10.121.114.113:5000/api';
   static const Duration timeout = Duration(seconds: 10);
 
+  // auth
   static const String authVerify = '$baseURL/auth/verify';
   static String authCheckStatus(String code) =>
       '$baseURL/auth/check_status/$code';
   static const String updateProfile = '$baseURL/auth/update_profile';
 
+  // plants
   static const String plants = '$baseURL/plants/';
   static String plantsId(int id) => '$baseURL/plants/$id';
   static const String categories = '$baseURL/plants/categories';
   static const String filters = '$baseURL/plants/filters';
   static const String topRated = '$baseURL/plants/top-rated';
 
+  // cart & wishlist
+  static const String cartItems = '$baseURL/cart/items';
+  static String cartItemId(int id) => '$baseURL/cart/items/$id';
+  static const String cartClear = '$baseURL/cart/clear';
+  static const String wishlist = '$baseURL/cart/wishlist';
+  static String wishlistCheck(int plantId) =>
+      '$baseURL/cart/wishlist/check/$plantId';
+  static String wishlistRemove(int plantId) =>
+      '$baseURL/cart/wishlist/$plantId';
+
+  // configuration
+  static const String potMaterials = '$baseURL/pot/materials';
+  static const String potSizes = '$baseURL/pot/sizes';
+  static const String potColors = '$baseURL/pot/colors';
+  static const String potPrices = '$baseURL/pot/prices';
+  static String potPriceByParams(String material, String size) => // ДОБАВЛЕНО
+      '$baseURL/pot/price?material=$material&size=$size';
+
+  // img
   static String imageUrl(String? imagePath) {
     if (imagePath == null || imagePath.isEmpty) return '';
     if (imagePath.startsWith('http')) return imagePath;
@@ -21,10 +42,15 @@ class ApiConfig {
     return '$baseURL/$imagePath';
   }
 
-  static const Map<String, String> headers = {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-  };
+  // headers
+  static Map<String, String> headers({String? authToken}) {
+    final headers = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+    if (authToken != null) headers['Authorization'] = authToken;
+    return headers;
+  }
 
   static const bool enableLogging = false;
 }

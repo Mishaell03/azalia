@@ -45,14 +45,50 @@ def create_database():
         )
     ''')
 
-    # стоимость горшков по размеру и материалу
+    # материалы горшков
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS pot_materials (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            description TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # размеры горшков
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS pot_sizes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            diameter_cm INTEGER,
+            height_cm INTEGER,
+            volume_liters DECIMAL(5,2),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # цвета горшков
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS pot_colors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            hex_code TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # стоимость горшков
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS pot_prices (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            size TEXT NOT NULL CHECK(size IN ('S', 'M', 'L', 'XL')),
-            material TEXT NOT NULL CHECK(material IN ('ceramic', 'plastic', 'clay', 'glass', 'metal', 'wood')),
+            material_id INTEGER NOT NULL,
+            size_id INTEGER NOT NULL,
             price DECIMAL(10,2) NOT NULL,
-            UNIQUE(size, material)
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (material_id) REFERENCES pot_materials (id) ON DELETE CASCADE,
+            FOREIGN KEY (size_id) REFERENCES pot_sizes (id) ON DELETE CASCADE,
+            UNIQUE(material_id, size_id)
         )
     ''')
 
@@ -211,6 +247,42 @@ def create_database():
         )
     ''')
 
+    # корзина пользователя
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS cart_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            plant_id INTEGER NOT NULL,
+            quantity INTEGER NOT NULL DEFAULT 1,
+            pot_color_id INTEGER,
+            pot_size_id INTEGER,
+            pot_material_id INTEGER,
+            plant_unit_price DECIMAL(10,2) NOT NULL,
+            pot_unit_price DECIMAL(10,2) DEFAULT 0,
+            total_price DECIMAL(10,2) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+            FOREIGN KEY (plant_id) REFERENCES pot_plants (id) ON DELETE CASCADE,
+            FOREIGN KEY (pot_color_id) REFERENCES pot_colors (id) ON DELETE SET NULL,
+            FOREIGN KEY (pot_size_id) REFERENCES pot_sizes (id) ON DELETE SET NULL,
+            FOREIGN KEY (pot_material_id) REFERENCES pot_materials (id) ON DELETE SET NULL
+        )
+    ''')
+
+    # избранное пользователя
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS wishlist_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            plant_id INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+            FOREIGN KEY (plant_id) REFERENCES pot_plants (id) ON DELETE CASCADE,
+            UNIQUE(user_id, plant_id)
+        )
+    ''')
+
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_employees_telegram_id ON employees(telegram_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_employees_is_active ON employees(is_active)')
@@ -219,7 +291,6 @@ def create_database():
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_pot_plants_category_stock ON pot_plants(category_id, in_stock)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_payment_links_user_status ON payment_links(user_id, status)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_pot_prices_size_material ON pot_prices(size, material)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_categories_parent_id ON categories(parent_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_pot_plants_category_id ON pot_plants(category_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_pot_plants_in_stock ON pot_plants(in_stock)')
@@ -227,6 +298,12 @@ def create_database():
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_oauth_codes_code ON oauth_codes(code)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_oauth_codes_telegram_id ON oauth_codes(telegram_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_oauth_codes_telegram_device ON oauth_codes(telegram_id, device_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_cart_items_user_id ON cart_items(user_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_cart_items_plant_id ON cart_items(plant_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_wishlist_items_user_id ON wishlist_items(user_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_wishlist_items_plant_id ON wishlist_items(plant_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_pot_prices_material_size ON pot_prices(material_id, size_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_cart_items_composite ON cart_items(user_id, plant_id, pot_color_id, pot_size_id, pot_material_id)')
 
     conn.commit()
     conn.close()
@@ -268,38 +345,59 @@ def add_sample_data():
         ('Фикусы', 'Разновидности фикусов', None)
     ])
     
-    # цены на горшки по размерам и материалам
     cursor.executemany('''
-        INSERT OR IGNORE INTO pot_prices (size, material, price)
+        INSERT OR IGNORE INTO pot_materials (name, description)
+        VALUES (?, ?)
+    ''', [
+        ('Пластик', 'Легкий и прочный пластик, подходит для большинства растений'),
+        ('Керамика', 'Эстетичная глазурованная керамика с дренажными отверстиями'),
+        ('Глина', 'Натуральная терракотовая глина, обеспечивает хороший воздухообмен'),
+        ('Стекло', 'Прозрачное стекло для декоративных композиций'),
+        ('Металл', 'Стильные металлические кашпо для современного интерьера'),
+        ('Дерево', 'Экологичные деревянные кашпо ручной работы')
+    ])
+    
+    # Размеры горшков
+    cursor.executemany('''
+        INSERT OR IGNORE INTO pot_sizes (code, name, diameter_cm, height_cm, volume_liters)
+        VALUES (?, ?, ?, ?, ?)
+    ''', [
+        ('S', 'Маленький', 12, 10, 0.8),
+        ('M', 'Средний', 16, 13, 1.5),
+        ('L', 'Большой', 20, 16, 2.5),
+        ('XL', 'Очень большой', 25, 20, 4.0)
+    ])
+    
+    # Цвета горшков
+    cursor.executemany('''
+        INSERT OR IGNORE INTO pot_colors (name, hex_code)
+        VALUES (?, ?)
+    ''', [
+        ('Белый', '#FFFFFF'),
+        ('Черный', '#000000'),
+        ('Терракотовый', '#E2725B'),
+        ('Зеленый', '#228B22'),
+        ('Синий', '#1E90FF'),
+        ('Разноцветный', '#FFD700')
+    ])
+    
+    # Цены на горшки (материал + размер)
+    cursor.executemany('''
+        INSERT OR IGNORE INTO pot_prices (material_id, size_id, price)
         VALUES (?, ?, ?)
     ''', [
-        ('S', 'plastic', 150.00),
-        ('S', 'ceramic', 300.00),
-        ('S', 'clay', 250.00),
-        ('S', 'glass', 400.00),
-        ('S', 'metal', 350.00),
-        ('S', 'wood', 280.00),
-        
-        ('M', 'plastic', 200.00),
-        ('M', 'ceramic', 400.00),
-        ('M', 'clay', 350.00),
-        ('M', 'glass', 550.00),
-        ('M', 'metal', 450.00),
-        ('M', 'wood', 380.00),
-        
-        ('L', 'plastic', 250.00),
-        ('L', 'ceramic', 500.00),
-        ('L', 'clay', 450.00),
-        ('L', 'glass', 700.00),
-        ('L', 'metal', 550.00),
-        ('L', 'wood', 480.00),
-        
-        ('XL', 'plastic', 300.00),
-        ('XL', 'ceramic', 600.00),
-        ('XL', 'clay', 550.00),
-        ('XL', 'glass', 850.00),
-        ('XL', 'metal', 650.00),
-        ('XL', 'wood', 580.00)
+        # Пластик (id=1)
+        (1, 1, 150.00), (1, 2, 200.00), (1, 3, 250.00), (1, 4, 300.00),
+        # Керамика (id=2)
+        (2, 1, 300.00), (2, 2, 400.00), (2, 3, 500.00), (2, 4, 600.00),
+        # Глина (id=3)
+        (3, 1, 250.00), (3, 2, 350.00), (3, 3, 450.00), (3, 4, 550.00),
+        # Стекло (id=4)
+        (4, 1, 400.00), (4, 2, 550.00), (4, 3, 700.00), (4, 4, 850.00),
+        # Металл (id=5)
+        (5, 1, 350.00), (5, 2, 450.00), (5, 3, 550.00), (5, 4, 650.00),
+        # Дерево (id=6)
+        (6, 1, 280.00), (6, 2, 380.00), (6, 3, 480.00), (6, 4, 580.00)
     ])
     
     # тестовые горшечные растения
@@ -409,6 +507,28 @@ def create_triggers():
             UPDATE order_items 
             SET total_price = (NEW.plant_unit_price + NEW.pot_unit_price) * NEW.quantity 
             WHERE id = NEW.id;
+        END
+    ''')
+
+    # триггер для обновления updated_at в cart_items
+    cursor.execute('''
+        CREATE TRIGGER IF NOT EXISTS calculate_cart_item_total 
+        BEFORE INSERT ON cart_items
+        FOR EACH ROW
+        BEGIN
+            UPDATE cart_items 
+            SET total_price = (NEW.plant_unit_price + NEW.pot_unit_price) * NEW.quantity 
+            WHERE id = NEW.id;
+        END
+    ''')
+
+    # триггер для расчета total_price в cart_items
+    cursor.execute('''
+        CREATE TRIGGER IF NOT EXISTS update_cart_items_timestamp 
+        AFTER UPDATE ON cart_items
+        FOR EACH ROW
+        BEGIN
+            UPDATE cart_items SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
         END
     ''')
     
