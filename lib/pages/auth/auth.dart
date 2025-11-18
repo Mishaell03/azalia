@@ -157,7 +157,7 @@ class _AuthPageState extends State<AuthPage> {
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
-              context.goNamed('home');
+              context.goNamed('profile');
             },
             child: const Text('Продолжить'),
           ),
@@ -204,7 +204,7 @@ class _AuthPageState extends State<AuthPage> {
             left: 0,
             right: 0,
             child: Image.asset(
-              'assets/images/auth4.jpg',
+              'assets/images/auth.jpg',
               height: screenHeight,
               width: double.infinity,
               fit: BoxFit.cover,
@@ -213,10 +213,10 @@ class _AuthPageState extends State<AuthPage> {
 
           Positioned(
             top: 50,
-            right: 20,
+            left: 20,
             child: IconButton(
               onPressed: () {
-                context.goNamed('auth');
+                context.goNamed('home');
               },
               icon: SvgPicture.asset('assets/icons/Back.svg'),
               style: IconButton.styleFrom(

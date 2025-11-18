@@ -7,7 +7,7 @@ import re
 bp = Blueprint('categories', __name__, url_prefix='/api/categories')
 
 def safe_int(value, default=None, min_val=None, max_val=None):
-    """Безопасное преобразование в int с валидацией"""
+    """преобразование в int с валидацией"""
     if value is None:
         return default
     try:
@@ -21,7 +21,7 @@ def safe_int(value, default=None, min_val=None, max_val=None):
         return default
 
 def validate_string_input(text, max_length=255):
-    """Валидация строкового ввода"""
+    """валидация строкового ввода"""
     if not text or not isinstance(text, str):
         return None
     cleaned = re.sub(r'[<>"\']', '', text.strip())

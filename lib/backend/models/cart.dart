@@ -96,7 +96,6 @@ class CartResponse {
   }
 }
 
-// Wishlist Models
 class WishlistItem {
   final int id;
   final int userId;
@@ -151,7 +150,6 @@ class WishlistCheckResponse {
   }
 }
 
-// Pot Configuration Models
 class PotMaterial {
   final int id;
   final String name;
@@ -221,7 +219,6 @@ class PotColor {
   }
 }
 
-// Модель для цены горшка (исправленная)
 class PotPrice {
   final int id;
   final int materialId;
@@ -251,7 +248,6 @@ class PotPrice {
   }
 }
 
-// Модель для ответа с ценой по параметрам
 class PotPriceResponse {
   final double price;
   final String material;
@@ -272,7 +268,6 @@ class PotPriceResponse {
   }
 }
 
-// Request Models
 class AddToCartRequest {
   final int plantId;
   final int quantity;

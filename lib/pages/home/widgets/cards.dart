@@ -5,11 +5,21 @@ import 'package:azalia/backend/models/plant.dart';
 import 'package:azalia/components/colors.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:azalia/pages/error/loading_error.dart';
+import 'package:azalia/components/widgets/love.dart';
+import 'package:azalia/components/widgets/cart.dart';
+
 
 class HomeCard extends StatefulWidget {
   final Plant plant;
+  final Function(bool)? onWishlistUpdated;
+  final Function(bool)? onCartUpdated;
 
-  const HomeCard({super.key, required this.plant});
+  const HomeCard({
+    super.key,
+    required this.plant,
+    this.onWishlistUpdated,
+    this.onCartUpdated,
+  });
 
   @override
   State<HomeCard> createState() => _HomeCardState();
@@ -17,22 +27,11 @@ class HomeCard extends StatefulWidget {
 
 class _HomeCardState extends State<HomeCard> {
   bool _hasImageError = false;
-  bool _isFavorite = false;
 
   void _retryLoadImage() {
     setState(() {
       _hasImageError = false;
     });
-  }
-
-  void _toggleFavorite() {
-    setState(() {
-      _isFavorite = !_isFavorite;
-    });
-  }
-
-  void _addToCart() {
-    // временная заглушка
   }
 
   @override
@@ -64,35 +63,10 @@ class _HomeCardState extends State<HomeCard> {
           Positioned(
             bottom: 4,
             right: 4,
-            child: GestureDetector(
-              onTap: _toggleFavorite,
-              child: Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: _isFavorite
-                      ? AppColors.brown
-                      : AppColors.white.withOpacity(0.9),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: AppColors.white),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.black.withOpacity(0.1),
-                      blurRadius: 4,
-                      offset: const Offset(0, 1),
-                    ),
-                  ],
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: SvgPicture.asset(
-                    'assets/icons/Love.svg',
-                    width: 16,
-                    height: 16,
-                    color: _isFavorite ? AppColors.white : AppColors.brown,
-                  ),
-                ),
-              ),
+            child: FavoriteButton(
+              plant: widget.plant,
+              size: 24,
+              onStateChanged: widget.onWishlistUpdated,
             ),
           ),
         ],
@@ -209,25 +183,11 @@ class _HomeCardState extends State<HomeCard> {
                 style: AppText.medium_16.copyWith(color: AppColors.black),
               ),
               const Spacer(),
-              GestureDetector(
-                onTap: _addToCart,
-                child: Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: AppColors.white_dark.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(6),
-                    child: SvgPicture.asset(
-                      'assets/icons/Bag.svg',
-                      width: 20,
-                      height: 20,
-                      color: AppColors.brown,
-                    ),
-                  ),
-                ),
+              CartButton(
+                plant: widget.plant,
+                onStateChanged: widget.onCartUpdated,
+                size: 32,
+                showBackground: true,
               ),
             ],
           ),

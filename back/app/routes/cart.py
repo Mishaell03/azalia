@@ -7,7 +7,7 @@ import re
 bp = Blueprint('cart', __name__, url_prefix='/api/cart')
 
 def safe_int(value, default=None, min_val=None, max_val=None):
-    """Безопасное преобразование в int с валидацией"""
+    """преобразование в int с валидацией"""
     if value is None:
         return default
     try:
@@ -21,7 +21,7 @@ def safe_int(value, default=None, min_val=None, max_val=None):
         return default
 
 def get_user_by_session(session_token):
-    """Получить пользователя по session_token"""
+    """получить пользователя по session_token"""
     if not session_token:
         return None
     clean_token = session_token.strip('"\' ')
@@ -31,7 +31,7 @@ def get_user_by_session(session_token):
 
 @bp.route('/items', methods=['GET'])
 def get_cart_items():
-    """Получить все товары в корзине пользователя"""
+    """получить все товары в корзине пользователя"""
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header:
@@ -63,7 +63,7 @@ def get_cart_items():
 
 @bp.route('/items', methods=['POST'])
 def add_to_cart():
-    """Добавить товар в корзину"""
+    """добавить товар в корзину"""
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header:
@@ -150,7 +150,7 @@ def add_to_cart():
 
 @bp.route('/items/<int:item_id>', methods=['PUT'])
 def update_cart_item(item_id):
-    """Обновить количество товара в корзине"""
+    """обновить количество товара в корзине"""
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header:
@@ -192,7 +192,7 @@ def update_cart_item(item_id):
 
 @bp.route('/items/<int:item_id>', methods=['DELETE'])
 def remove_from_cart(item_id):
-    """Удалить товар из корзины"""
+    """удалить товар из корзины"""
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header:
@@ -221,7 +221,7 @@ def remove_from_cart(item_id):
 
 @bp.route('/clear', methods=['DELETE'])
 def clear_cart():
-    """Очистить всю корзину"""
+    """очистить всю корзину"""
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header:
@@ -240,7 +240,7 @@ def clear_cart():
         db.session.rollback()
         return jsonify({'success': False, 'error': 'Internal server error'}), 500
 
-# ИЗБРАННОЕ 
+# ИЗБРАННОЕ
 
 @bp.route('/wishlist', methods=['GET'])
 def get_wishlist():
@@ -269,7 +269,7 @@ def get_wishlist():
 
 @bp.route('/wishlist', methods=['POST'])
 def add_to_wishlist():
-    """Добавить товар в избранное"""
+    """добавить товар в избранное"""
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header:
@@ -313,7 +313,7 @@ def add_to_wishlist():
 
 @bp.route('/wishlist/<int:plant_id>', methods=['DELETE'])
 def remove_from_wishlist(plant_id):
-    """Удалить товар из избранного"""
+    """удалить товар из избранного"""
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header:
@@ -342,7 +342,7 @@ def remove_from_wishlist(plant_id):
 
 @bp.route('/wishlist/check/<int:plant_id>', methods=['GET'])
 def check_wishlist(plant_id):
-    """Проверить, есть ли товар в избранном"""
+    """проверить, есть ли товар в избранном"""
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header:
@@ -368,7 +368,7 @@ def check_wishlist(plant_id):
 
 @bp.route('/pot/price', methods=['GET'])
 def get_pot_price():
-    """Получить цену горшка по материалу и размеру"""
+    """получить цену горшка по материалу и размеру"""
     try:
         material = request.args.get('material')
         size = request.args.get('size')

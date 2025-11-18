@@ -11,7 +11,7 @@ import 'package:azalia/backend/services/profile.dart';
 import 'package:azalia/pages/profile/widgets/edit_profile.dart';
 import 'package:azalia/pages/profile/widgets/content.dart';
 import 'package:azalia/pages/profile/widgets/header.dart';
-import 'package:azalia/pages/profile/widgets/logged.dart';
+import 'package:azalia/components/widgets/logged.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});

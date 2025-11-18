@@ -3,7 +3,7 @@ from datetime import datetime
 import re
 
 class Position(db.Model):
-    """модель для таблицы должностей"""
+    """таблицы должностей"""
     __tablename__ = 'positions'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -24,7 +24,7 @@ class Position(db.Model):
         }
 
 class Category(db.Model):
-    """модель для таблицы категорий растений"""
+    """таблицы категорий растений"""
     __tablename__ = 'categories'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -46,7 +46,7 @@ class Category(db.Model):
         }
 
 class Supplier(db.Model):
-    """модель для таблицы поставщиков"""
+    """таблицы поставщиков"""
     __tablename__ = 'suppliers'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -68,7 +68,7 @@ class Supplier(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 class PotMaterial(db.Model):
-    """Модель для таблицы материалов горшков"""
+    """таблицы материалов горшков"""
     __tablename__ = 'pot_materials'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -88,7 +88,7 @@ class PotMaterial(db.Model):
         }
 
 class PotSize(db.Model):
-    """Модель для таблицы размеров горшков"""
+    """таблицы размеров горшков"""
     __tablename__ = 'pot_sizes'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -114,7 +114,7 @@ class PotSize(db.Model):
         }
 
 class PotColor(db.Model):
-    """Модель для таблицы цветов горшков"""
+    """таблицы цветов горшков"""
     __tablename__ = 'pot_colors'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -133,7 +133,7 @@ class PotColor(db.Model):
         }
     
 class PotPrice(db.Model):
-    """Модель для таблицы цен на горшки"""
+    """таблицы цен на горшки"""
     __tablename__ = 'pot_prices'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -154,7 +154,7 @@ class PotPrice(db.Model):
         }
 
 class PotPlant(db.Model):
-    """модель для таблицы горшечных растений"""
+    """таблицы горшечных растений"""
     __tablename__ = 'pot_plants'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -197,7 +197,7 @@ class PotPlant(db.Model):
         }
 
 class User(db.Model):
-    """модель для таблицы пользователей"""
+    """таблицы пользователей"""
     __tablename__ = 'users'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -228,11 +228,11 @@ class User(db.Model):
         }
     
     def is_employee(self):
-        """Проверяет, является ли пользователь сотрудником"""
+        """проверка, является ли пользователь сотрудником"""
         return self.employee_info is not None and self.employee_info.is_active
 
 class Employee(db.Model):
-    """модель для таблицы сотрудников"""
+    """таблицы сотрудников"""
     __tablename__ = 'employees'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -260,7 +260,7 @@ class Employee(db.Model):
         }
     
     def to_dict_with_details(self):
-        """Возвращает расширенную информацию о сотруднике"""
+        """расширенная инфа о сотруднике"""
         data = self.to_dict()
         if self.position:
             data['position'] = self.position.to_dict()
@@ -272,7 +272,7 @@ class Employee(db.Model):
         return data
 
 class Order(db.Model):
-    """модель для таблицы заказов"""
+    """таблицы заказов"""
     __tablename__ = 'orders'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -310,7 +310,7 @@ class Order(db.Model):
         }
 
 class OrderItem(db.Model):
-    """модель для таблицы позиций заказа"""
+    """таблицы позиций заказа"""
     __tablename__ = 'order_items'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -341,7 +341,7 @@ class OrderItem(db.Model):
         }
 
 class PaymentLink(db.Model):
-    """модель для таблицы ссылок на оплату"""
+    """таблицы ссылок на оплату"""
     __tablename__ = 'payment_links'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -370,7 +370,7 @@ class PaymentLink(db.Model):
         }
 
 class OrderStatusHistory(db.Model):
-    """модель для таблицы истории статусов заказа"""
+    """таблицы истории статусов заказа"""
     __tablename__ = 'order_status_history'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -393,7 +393,7 @@ class OrderStatusHistory(db.Model):
         }
 
 class Review(db.Model):
-    """модель для таблицы отзывов"""
+    """таблицы отзывов"""
     __tablename__ = 'reviews'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -414,7 +414,7 @@ class Review(db.Model):
         }
     
 class OAuthCode(db.Model):
-    """Модель для хранения одноразовых кодов авторизации"""
+    """хранение одноразовых кодов"""
     __tablename__ = 'oauth_codes'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -444,7 +444,7 @@ class OAuthCode(db.Model):
         return not self.used and self.expires_at > datetime.utcnow()
     
 class CartItem(db.Model):
-    """Модель для таблицы корзины пользователя"""
+    """таблицы корзины пользователя"""
     __tablename__ = 'cart_items'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -484,7 +484,7 @@ class CartItem(db.Model):
         }
 
 class WishlistItem(db.Model):
-    """Модель для таблицы избранного пользователя"""
+    """таблицы избранного пользователя"""
     __tablename__ = 'wishlist_items'
     
     id = db.Column(db.Integer, primary_key=True)

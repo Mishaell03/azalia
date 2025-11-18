@@ -1,5 +1,5 @@
 class ApiConfig {
-  static const String baseURL = 'http://10.121.114.113:5000/api';
+  static const String baseURL = 'http://10.0.0.40:5000/api';
   static const Duration timeout = Duration(seconds: 10);
 
   // auth
@@ -30,7 +30,7 @@ class ApiConfig {
   static const String potSizes = '$baseURL/pot/sizes';
   static const String potColors = '$baseURL/pot/colors';
   static const String potPrices = '$baseURL/pot/prices';
-  static String potPriceByParams(String material, String size) => // ДОБАВЛЕНО
+  static String potPriceByParams(String material, String size) =>
       '$baseURL/pot/price?material=$material&size=$size';
 
   // img

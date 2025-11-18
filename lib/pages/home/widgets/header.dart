@@ -41,7 +41,7 @@ class _HomeHeader extends State<HomeHeader> {
                 ),
               ],
             ),
-            width: MediaQuery.of(context).size.width * 0.63,
+            width: MediaQuery.of(context).size.width * 0.6,
             child: Row(
               children: [
                 const SizedBox(width: 12),

@@ -218,7 +218,6 @@ class PotService {
     }
   }
 
-  // Метод для получения цены горшка по материалу и размеру через API
   static Future<double> getPotPrice(String material, String size) async {
     try {
       final response = await http.get(
@@ -237,13 +236,11 @@ class PotService {
         throw Exception('Failed to get pot price: ${response.statusCode}');
       }
     } catch (e) {
-      // В случае ошибки возвращаем 0
       print('Error getting pot price: $e');
       return 0.0;
     }
   }
 
-  // Исправленный метод для получения всех цен
   static Future<List<PotPrice>> getPrices() async {
     final response = await http.get(
       Uri.parse(ApiConfig.potPrices),

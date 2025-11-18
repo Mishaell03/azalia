@@ -1,3 +1,4 @@
+import 'package:azalia/pages/wishlist/wishlistpage.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:azalia/pages/home/homepage.dart';
@@ -23,6 +24,11 @@ class AppRouter {
         path: '/profile',
         name: 'profile',
         builder: (context, state) => const ProfilePage(),
+      ),
+      GoRoute(
+        path: '/love',
+        name: 'love',
+        builder: (context, state) => const WishlistPage(),
       ),
     ],
     errorBuilder:(context, state) => ErrorPage(),

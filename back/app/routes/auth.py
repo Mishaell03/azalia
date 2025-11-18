@@ -9,7 +9,7 @@ from sqlalchemy import text
 bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
 def validate_telegram_id(telegram_id):
-    """Валидация telegram_id с защитой от инъекций"""
+    """валидация telegram_id с защитой"""
     if not telegram_id:
         return False
     try:
@@ -19,13 +19,13 @@ def validate_telegram_id(telegram_id):
         return False
 
 def validate_code_format(code):
-    """Валидация формата кода с защитой от инъекций"""
+    """валидация формата кода с защитой"""
     if not isinstance(code, str):
         return False
     return bool(re.match(r'^\d{4}$', code))
 
 def safe_int(value, default=None):
-    """Безопасное преобразование в int с защитой от переполнения"""
+    """преобразование в int с защитой от переполнения"""
     try:
         num = int(value)
         if -2**31 <= num <= 2**31 - 1:
@@ -35,16 +35,15 @@ def safe_int(value, default=None):
         return default
 
 def sanitize_input(input_str, max_length=100):
-    """Очистка входных данных"""
+    """очистка входных данных"""
     if not input_str:
         return ""
     sanitized = re.sub(r'[<>"\'\{\}\[\]\(\)\\\/]', '', str(input_str))
     return sanitized[:max_length]
 
-# backend/auth.py (обновленный для поддержки session_token)
 @bp.route('/verify', methods=['POST'])
 def verify_code():
-    """Приложение проверяет код"""
+    """приложение проверяет код"""
     try:
         if not request.is_json:
             return jsonify({
@@ -104,7 +103,6 @@ def verify_code():
         employee = Employee.query.filter_by(telegram_id=user.telegram_id).first()
         
         try:
-            # Генерируем session token
             import secrets
             session_token = secrets.token_hex(32)
             user.session_token = session_token
@@ -127,7 +125,7 @@ def verify_code():
                 'telegram_id': user.telegram_id,
                 'name': sanitize_input(user.name),
                 'phone': sanitize_input(user.phone) if user.phone else "",
-                'session_token': session_token,  # Добавляем session_token
+                'session_token': session_token,
             },
             'message': 'Authentication successful'
         }
@@ -158,9 +156,7 @@ def verify_code():
 
 @bp.route('/check_status/<code>', methods=['GET'])
 def check_code_status(code):
-    """
-    Проверка статуса кода авторизации - ЗАЩИЩЕННАЯ ВЕРСИЯ
-    """
+    """проверка статуса кода авторизации"""
     try:
         if not validate_code_format(code):
             return jsonify({

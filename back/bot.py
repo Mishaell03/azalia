@@ -58,16 +58,16 @@ class FlowerShopBot:
                 return code
 
     def validate_device_id(self, device_id: str) -> bool:
-        """Валидация device_id для предотвращения инъекций"""
+        """валидация device_id"""
         if not device_id or len(device_id) > 255:
             return False
-        # Разрешаем только буквы, цифры и некоторые безопасные символы
+        # только буквы, цифры + безопасные символы
         if not re.match(r'^[a-zA-Z0-9_\-.:]+$', device_id):
             return False
         return True
 
     def escape_markdown(self, text: str) -> str:
-        """Экранирует спецсимволы MarkdownV2"""
+        """экранируе спецсимволы MarkdownV2"""
         escape_chars = r'_*[]()~`>#+-=|{}.!'
         return ''.join(f'\\{char}' if char in escape_chars else char for char in text)
 
@@ -78,7 +78,7 @@ class FlowerShopBot:
         if args:
             device_id = args[0]
             
-            # Валидация device_id
+            # валидация device_id
             if not self.validate_device_id(device_id):
                 await update.message.reply_text(
                     "❌ Неверный формат идентификатора устройства.\n"
@@ -106,7 +106,7 @@ class FlowerShopBot:
             conn = self.get_db_connection()
             cursor = conn.cursor()
             
-            # Проверяем/создаем пользователя
+            # проверяем/создаем пользователя
             cursor.execute("SELECT * FROM users WHERE telegram_id = ?", (user.id,))
             existing_user = cursor.fetchone()
             
@@ -120,7 +120,7 @@ class FlowerShopBot:
             else:
                 user_id = existing_user['id']
             
-            # Проверяем, есть ли уже активный код для этого устройства и пользователя
+            # проверяем активный код/сессию устройства и пользователя
             cursor.execute(
                 """SELECT * FROM oauth_codes 
                 WHERE telegram_id = ? AND device_id = ? AND used = 0 AND expires_at > datetime('now')""",
@@ -134,13 +134,13 @@ class FlowerShopBot:
             else:
                 auth_code = self.generate_auth_code()
                 
-                # Удаляем старые записи для этого устройства и пользователя
+                # удаляем старые записи устройства и пользователя
                 cursor.execute(
                     "DELETE FROM oauth_codes WHERE telegram_id = ? AND device_id = ? AND used = 0",
                     (user.id, device_id)
                 )
                 
-                # Сохраняем код в базу
+                # сохраняем код в бд
                 cursor.execute(
                     """INSERT INTO oauth_codes 
                     (telegram_id, device_id, code, expires_at, used) 
@@ -154,7 +154,6 @@ class FlowerShopBot:
             
             role_text = await self.get_user_role_text(user.id)
             
-            # Безопасное создание callback_data - используем только device_id (валидированный)
             keyboard = [
                 [InlineKeyboardButton("🔄 Обновить код", callback_data=f"refresh_{device_id}")],
                 [InlineKeyboardButton("❓ Помощь", callback_data="help")]
@@ -184,7 +183,7 @@ class FlowerShopBot:
             query = update.callback_query
             await query.answer()
             
-            # Дополнительная валидация device_id из callback
+            # валидация device_id из callback
             if not self.validate_device_id(device_id):
                 await query.answer("❌ Неверный идентификатор устройства", show_alert=True)
                 return
@@ -194,7 +193,7 @@ class FlowerShopBot:
             
             new_auth_code = self.generate_auth_code()
             
-            # Обновляем существующую запись
+            # обновляем запись
             cursor.execute(
                 """UPDATE oauth_codes 
                 SET code = ?, expires_at = datetime('now', '+10 minutes'), used = 0
@@ -203,7 +202,7 @@ class FlowerShopBot:
             )
             
             if cursor.rowcount == 0:
-                # Если записи не было (маловероятно), создаем новую
+                # записи не было - создаем новую
                 cursor.execute(
                     """INSERT INTO oauth_codes 
                     (telegram_id, device_id, code, expires_at, used) 
@@ -243,7 +242,7 @@ class FlowerShopBot:
             )
 
     async def get_user_role_text(self, telegram_id):
-        """Получает текстовое представление роли пользователя"""
+        """текстовое представление роли пользователя"""
         conn = self.get_db_connection()
         cursor = conn.cursor()
         
@@ -317,7 +316,7 @@ class FlowerShopBot:
                 )
                 user_id = cursor.lastrowid
             
-            # Проверяем код с использованием параметризованных запросов
+            # проверяем код
             cursor.execute(
                 "SELECT * FROM oauth_codes WHERE code = ? AND device_id = ?",
                 (code, device_id)
@@ -413,9 +412,9 @@ class FlowerShopBot:
         elif query.data == "help":
             await self.help_handler(update, context)
         elif query.data.startswith("refresh_"):
-            device_id = query.data[8:]  # Извлекаем device_id после "refresh_"
+            device_id = query.data[8:]
             
-            # Валидация device_id из callback_data
+            # валидация device_id из callback_data
             if not self.validate_device_id(device_id):
                 await query.answer("❌ Неверный идентификатор устройства", show_alert=True)
                 return

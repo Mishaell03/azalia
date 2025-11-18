@@ -17,7 +17,7 @@ def allowed_file(filename):
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def safe_filename(filename):
-    """Извлекает безопасное имя файла из URL"""
+    """извлекает безопасное имя файла из URL"""
     if not filename:
         return None
     base_name = os.path.basename(filename)
@@ -40,7 +40,7 @@ def save_uploaded_file(file):
     return None
 
 def safe_float(value, default=None, min_val=None, max_val=None):
-    """Безопасное преобразование в float с валидацией"""
+    """преобразование в float с валидацией"""
     if value is None:
         return default
     try:
@@ -54,7 +54,7 @@ def safe_float(value, default=None, min_val=None, max_val=None):
         return default
 
 def safe_int(value, default=None, min_val=None, max_val=None):
-    """Безопасное преобразование в int с валидацией"""
+    """преобразование в int с валидацией"""
     if value is None:
         return default
     try:
@@ -68,7 +68,7 @@ def safe_int(value, default=None, min_val=None, max_val=None):
         return default
 
 def validate_string_input(text, max_length=255):
-    """Валидация строкового ввода"""
+    """строкового ввода"""
     if not text or not isinstance(text, str):
         return None
     cleaned = re.sub(r'[<>"\']', '', text.strip())

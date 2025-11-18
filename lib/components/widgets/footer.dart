@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:azalia/components/colors.dart';
 import 'package:flutter_svg/svg.dart';
-import 'package:azalia/router.dart';
 import 'package:go_router/go_router.dart';
 
 class AppFooter extends StatefulWidget {
@@ -21,7 +20,7 @@ class _AppFooter extends State<AppFooter> {
 
   final List<String> _routes = [
     '/',
-    '/',
+    '/love',
     '/',
     '/profile',
   ];
