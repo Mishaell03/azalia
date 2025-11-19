@@ -1,5 +1,4 @@
 class AppErrors {
-  
   static const String unauthorized = 'Не авторизован';
   static const String networkError = 'Ошибка сети';
   static const String unknownError = 'Неизвестная ошибка';
@@ -10,7 +9,6 @@ class AppErrors {
   static const String removeFromWishlistError = 'Не удалось удалить из избранного';
   static const String unauthorizedMessage = 'Войдите в аккаунт, чтобы выполнить действие';
   
-  // Проверка типа ошибки
   static bool isUnauthorizedError(String error) {
     return error.contains(unauthorized) || 
            error.contains('authorized') || 

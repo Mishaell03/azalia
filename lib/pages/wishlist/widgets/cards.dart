@@ -4,7 +4,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:azalia/backend/models/plant.dart';
 import 'package:azalia/components/colors.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:azalia/pages/error/loading_error.dart';
 import 'package:azalia/components/widgets/love.dart';
 import 'package:azalia/components/widgets/cart.dart';
 
@@ -45,78 +44,128 @@ class _WishlistCardState extends State<WishlistCard> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_showCard || !widget.plant.inStock) {
+    if (!_showCard) {
       return const SizedBox.shrink();
     }
 
+    final bool isOutOfStock =
+        !widget.plant.inStock || widget.plant.stockQuantity <= 0;
+
     return Padding(
       padding: const EdgeInsets.only(right: 24, left: 24, top: 16),
-      child: Row(
-        children: [
-          _buildPlantImage(),
-          const SizedBox(width: 20),
-          _buildPlantInfo(),
-        ],
-      ),
+      child: isOutOfStock ? _buildOutOfStockCard() : _buildNormalCard(),
     );
   }
 
-  Widget _buildPlantImage() {
+  Widget _buildNormalCard() {
+    return Row(
+      children: [
+        _buildPlantImage(),
+        const SizedBox(width: 20),
+        _buildPlantInfo(),
+      ],
+    );
+  }
+
+  Widget _buildOutOfStockCard() {
     return Container(
-      width: 113,
-      height: 88,
-      decoration: BoxDecoration(),
-      child: Stack(
-        children: [
-          _hasImageError ? _buildErrorPlaceholder() : _buildCachedImage(),
-          Positioned(
-            bottom: 4,
-            right: 4,
-            child: FavoriteButton(
-              plant: widget.plant,
-              size: 24,
-              activeColor: AppColors.brown,
-              onStateChanged: _handleWishlistUpdate,
-              showSnackbar: true,
-            ),
-          ),
-        ],
+      decoration: BoxDecoration(
+        color: AppColors.grey_light.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.grey_light),
       ),
-    );
-  }
-
-  Widget _buildErrorPlaceholder() {
-    return GestureDetector(
-      onTap: _retryLoadImage,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          color: AppColors.grey_light,
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
           children: [
-            const Icon(Icons.error_outline, size: 30, color: AppColors.grey),
-            const SizedBox(height: 4),
-            Text(
-              'Повторить',
-              style: AppText.medium_14.copyWith(color: AppColors.grey),
-            ),
+            _buildPlantImage(outOfStock: true),
+            const SizedBox(width: 16),
+            _buildOutOfStockInfo(),
+            _buildRemoveButton(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildCachedImage() {
+  Widget _buildPlantImage({bool outOfStock = false}) {
+    return Container(
+      width: outOfStock ? 80 : 113,
+      height: outOfStock ? 60 : 88,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        color: AppColors.white,
+      ),
+      child: Stack(
+        children: [
+          Container(
+            width: outOfStock ? 80 : 113,
+            height: outOfStock ? 60 : 88,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              color: outOfStock
+                  ? AppColors.grey_light.withOpacity(0.1)
+                  : AppColors.white,
+            ),
+          ),
+          _hasImageError
+              ? _buildErrorPlaceholder(outOfStock: outOfStock)
+              : _buildCachedImage(outOfStock: outOfStock),
+          if (outOfStock)
+            Container(
+              width: outOfStock ? 80 : 113,
+              height: outOfStock ? 60 : 88,
+              decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
+            ),
+          if (outOfStock != true)
+            Positioned(
+              bottom: 4,
+              right: 4,
+              child: FavoriteButton(
+                plant: widget.plant,
+                size: 24,
+                activeColor: AppColors.brown,
+                onStateChanged: _handleWishlistUpdate,
+                showSnackbar: true,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorPlaceholder({bool outOfStock = false}) {
+    return Container(
+      width: outOfStock ? 80 : 113,
+      height: outOfStock ? 60 : 88,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        color: AppColors.grey_light,
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.error_outline, size: 24, color: AppColors.grey),
+          const SizedBox(height: 4),
+          Text(
+            'Повторить',
+            style: AppText.medium_12.copyWith(color: AppColors.grey),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCachedImage({bool outOfStock = false}) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: CachedNetworkImage(
         imageUrl: widget.plant.fullImageUrl,
-        width: 113,
-        height: 88,
+        width: outOfStock ? 80 : 113,
+        height: outOfStock ? 60 : 88,
         fit: BoxFit.contain,
-        placeholder: (context, url) => _buildLoadingIndicator(),
+        placeholder: (context, url) =>
+            _buildLoadingIndicator(outOfStock: outOfStock),
         errorWidget: (context, url, error) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
@@ -125,7 +174,7 @@ class _WishlistCardState extends State<WishlistCard> {
               });
             }
           });
-          return _buildErrorPlaceholder();
+          return _buildErrorPlaceholder(outOfStock: outOfStock);
         },
         cacheKey: widget.plant.fullImageUrl,
         maxWidthDiskCache: 300,
@@ -134,13 +183,24 @@ class _WishlistCardState extends State<WishlistCard> {
     );
   }
 
-  Widget _buildLoadingIndicator() {
+  Widget _buildLoadingIndicator({bool outOfStock = false}) {
     return Container(
+      width: outOfStock ? 80 : 113,
+      height: outOfStock ? 60 : 88,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
         color: AppColors.grey_light,
       ),
-      child: const LoadingWidget(size: 20, strokeWidth: 2),
+      child: Center(
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: AppColors.grey,
+          ),
+        ),
+      ),
     );
   }
 
@@ -149,7 +209,7 @@ class _WishlistCardState extends State<WishlistCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 15),
+          const SizedBox(height: 8),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -180,13 +240,16 @@ class _WishlistCardState extends State<WishlistCard> {
             ],
           ),
           if (widget.plant.heightCm != null)
-            Text(
-              'Высота до ${widget.plant.heightCm} см',
-              style: AppText.medium_14.copyWith(
-                color: AppColors.black_transparent,
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Высота до ${widget.plant.heightCm} см',
+                style: AppText.medium_14.copyWith(
+                  color: AppColors.black_transparent,
+                ),
               ),
             ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 5),
           Row(
             children: [
               Text(
@@ -205,6 +268,66 @@ class _WishlistCardState extends State<WishlistCard> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildOutOfStockInfo() {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            widget.plant.name,
+            style: AppText.bold_20.copyWith(
+              color: AppColors.grey,
+              decoration: TextDecoration.lineThrough,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          if (widget.plant.heightCm != null)
+            Text(
+              'Высота до ${widget.plant.heightCm} см',
+              style: AppText.medium_14.copyWith(
+                color: AppColors.grey,
+                decoration: TextDecoration.lineThrough,
+              ),
+            ),
+          const SizedBox(height: 4),
+          Text(
+            '${widget.plant.basePrice} ₽',
+            style: AppText.medium_16.copyWith(
+              color: AppColors.grey,
+              decoration: TextDecoration.lineThrough,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.error.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              'Нет в наличии',
+              style: AppText.medium_12.copyWith(color: AppColors.error),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRemoveButton() {
+    return IconButton(
+      onPressed: () {
+        setState(() {
+          _showCard = false;
+        });
+        widget.onWishlistUpdated?.call(widget.plant);
+      },
+      icon: Icon(Icons.close, color: AppColors.grey, size: 20),
     );
   }
 }

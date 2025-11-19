@@ -172,6 +172,7 @@ class PotPlant(db.Model):
     in_stock = db.Column(db.Boolean, default=True)
     rating = db.Column(db.Float)
     image_url = db.Column(db.String(255))
+    stock_quantity = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     order_items = db.relationship('OrderItem', backref='plant', lazy=True)
@@ -193,6 +194,7 @@ class PotPlant(db.Model):
             'in_stock': self.in_stock,
             'rating': self.rating,
             'image_url': self.image_url,
+            'stock_quantity': self.stock_quantity,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 

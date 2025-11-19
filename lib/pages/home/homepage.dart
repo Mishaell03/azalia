@@ -18,18 +18,19 @@ class HomePage extends StatefulWidget {
 
 class _HomePage extends State<HomePage> {
   Category? _selectedCategory;
-  List<Plant> _plants = [];
-  List<Plant> _displayedPlants = [];
+  List<Plant> _allPlants = [];
+  List<Plant> _displayedPlants = []; 
   List<Category> _categories = [];
   bool _isLoading = true;
-  bool _isLoadingMore = false;
   String _error = '';
-  final int _batchSize = 10;
-  int _currentIndex = 0;
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<RefreshIndicatorState> _refreshIndicatorKey =
       GlobalKey<RefreshIndicatorState>();
   final PlantService _plantService = PlantService();
+
+  // бескоечная карусель
+  final int _visibleItemsCount = 10; //сколько прогружать карточек
+  int _currentCycle = 0; // цикл прокрутки
 
   Future<void> _handleRefresh() async {
     await _loadInitialData();
@@ -50,11 +51,10 @@ class _HomePage extends State<HomePage> {
 
   void _setupScrollListener() {
     _scrollController.addListener(() {
+      // когда доходим до конца видимого списка, переходим к следующему циклу
       if (_scrollController.position.pixels >=
-              _scrollController.position.maxScrollExtent - 200 &&
-          !_isLoadingMore &&
-          _currentIndex < _plants.length) {
-        _loadMorePlants();
+          _scrollController.position.maxScrollExtent - 100) {
+        _loadNextCycle();
       }
     });
   }
@@ -69,12 +69,17 @@ class _HomePage extends State<HomePage> {
       final categories = await _plantService.getCategories();
       final plants = await _plantService.getPlants();
 
+      // фильтр по количеству stockQuantity > 0
+      final availablePlants = plants.data.where((plant) => plant.stockQuantity > 0).toList();
+
+      print('Всего растений получено: ${plants.data.length}');
+      print('Доступных растений: ${availablePlants.length}');
+
       setState(() {
         _categories = categories;
-        _plants = plants.data;
-        _currentIndex = 0;
-        _displayedPlants.clear();
-        _loadNextBatch();
+        _allPlants = availablePlants;
+        _currentCycle = 0;
+        _updateDisplayedPlants();
         _isLoading = false;
       });
     } catch (e) {
@@ -85,32 +90,39 @@ class _HomePage extends State<HomePage> {
     }
   }
 
-  void _loadNextBatch() {
-    final nextIndex = _currentIndex + _batchSize;
-    final newPlants = _plants.sublist(
-      _currentIndex,
-      nextIndex < _plants.length ? nextIndex : _plants.length,
-    );
+  void _updateDisplayedPlants() {
+    if (_allPlants.isEmpty) {
+      _displayedPlants = [];
+      return;
+    }
+
+    final List<Plant> newDisplayedPlants = [];
+    
+    // растения для текущего цикла
+    for (int i = 0; i <= _currentCycle; i++) {
+      final startIndex = (i * _visibleItemsCount) % _allPlants.length;
+      final endIndex = startIndex + _visibleItemsCount;
+      
+      if (endIndex <= _allPlants.length) {
+        newDisplayedPlants.addAll(_allPlants.sublist(startIndex, endIndex));
+      } else {
+        // выходим за границы - берем с начала
+        newDisplayedPlants.addAll(_allPlants.sublist(startIndex));
+        newDisplayedPlants.addAll(_allPlants.sublist(0, endIndex - _allPlants.length));
+      }
+    }
 
     setState(() {
-      _displayedPlants.addAll(newPlants);
-      _currentIndex = nextIndex;
+      _displayedPlants = newDisplayedPlants;
     });
   }
 
-  Future<void> _loadMorePlants() async {
-    if (_isLoadingMore || _currentIndex >= _plants.length) return;
+  void _loadNextCycle() {
+    if (_allPlants.isEmpty) return;
 
     setState(() {
-      _isLoadingMore = true;
-    });
-
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    _loadNextBatch();
-
-    setState(() {
-      _isLoadingMore = false;
+      _currentCycle++;
+      _updateDisplayedPlants();
     });
   }
 
@@ -118,17 +130,23 @@ class _HomePage extends State<HomePage> {
     setState(() {
       _selectedCategory = category;
       _isLoading = true;
-      _displayedPlants.clear();
-      _currentIndex = 0;
+      _allPlants = [];
+      _displayedPlants = [];
+      _currentCycle = 0;
       _error = '';
     });
 
     try {
-      final plants = await _plantService.getPlants(categoryId: category?.id);
+      final plants = await _plantService.getPlants(
+        categoryId: category?.id,
+      );
+
+      // фильтр по количеству stockQuantity > 0
+      final availablePlants = plants.data.where((plant) => plant.stockQuantity > 0).toList();
 
       setState(() {
-        _plants = plants.data;
-        _loadNextBatch();
+        _allPlants = availablePlants;
+        _updateDisplayedPlants();
         _isLoading = false;
       });
     } catch (e) {
@@ -199,20 +217,47 @@ class _HomePage extends State<HomePage> {
                       ],
                     ),
                   ),
-                  SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        if (index == _displayedPlants.length) {
-                          return _isLoadingMore
-                              ? const LoadingMoreIndicator()
-                              : const SizedBox.shrink();
-                        }
-                        final plant = _displayedPlants[index];
-                        return HomeCard(plant: plant);
-                      },
-                      childCount:
-                          _displayedPlants.length + (_isLoadingMore ? 1 : 0),
+                  if (_displayedPlants.isEmpty && !_isLoading)
+                    SliverToBoxAdapter(
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(32.0),
+                          child: Text(
+                            'Нет доступных растений',
+                            style: AppText.medium_16.copyWith(color: AppColors.grey),
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final plant = _displayedPlants[index];
+                          
+                          // 2я проверка
+                          if (plant.stockQuantity <= 0) {
+                            return const SizedBox.shrink();
+                          }
+                          
+                          return HomeCard(plant: plant);
+                        },
+                        childCount: _displayedPlants.length,
+                      ),
                     ),
+                  // индикатор следующего цикла
+                  SliverToBoxAdapter(
+                    child: _allPlants.isNotEmpty 
+                        ? Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Center(
+                              child: Text(
+                                'Продолжение списка...',
+                                style: AppText.medium_14.copyWith(color: AppColors.grey),
+                              ),
+                            ),
+                          )
+                        : const SizedBox.shrink(),
                   ),
                 ],
               ),

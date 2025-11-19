@@ -63,7 +63,6 @@ def get_cart_items():
 
 @bp.route('/items', methods=['POST'])
 def add_to_cart():
-    """добавить товар в корзину"""
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header:
@@ -82,38 +81,44 @@ def add_to_cart():
             return jsonify({'success': False, 'error': 'Invalid plant ID'}), 400
         
         quantity = safe_int(data.get('quantity', 1), min_val=1, max_val=100)
-        
-        # проверяем существование растения
+
         plant = PotPlant.query.get(plant_id)
         if not plant:
             return jsonify({'success': False, 'error': 'Plant not found'}), 404
         
         if not plant.in_stock:
             return jsonify({'success': False, 'error': 'Plant is out of stock'}), 400
+
+        existing_item = CartItem.query.filter_by(
+            user_id=user.id,
+            plant_id=plant_id,
+            pot_color=data.get('pot_color'),
+            pot_size=data.get('pot_size'),
+            pot_material=data.get('pot_material')
+        ).first()
         
-        # параметры горшка
+        # Проверяем доступное количество
+        requested_quantity = quantity
+        if existing_item:
+            requested_quantity += existing_item.quantity
+        
+        if requested_quantity > plant.stock_quantity:
+            return jsonify({
+                'success': False, 
+                'error': f'Недостаточно товара в наличии. Доступно: {plant.stock_quantity}'
+            }), 400
+        
         pot_color = data.get('pot_color')
         pot_size = data.get('pot_size')
         pot_material = data.get('pot_material')
         
-        # цена горшка
         pot_unit_price = 0
         if pot_size and pot_material:
             pot_price = PotPrice.query.filter_by(size=pot_size, material=pot_material).first()
             if pot_price:
                 pot_unit_price = float(pot_price.price)
         
-        # проверяем, есть ли уже такой товар в корзине
-        existing_item = CartItem.query.filter_by(
-            user_id=user.id,
-            plant_id=plant_id,
-            pot_color=pot_color,
-            pot_size=pot_size,
-            pot_material=pot_material
-        ).first()
-        
         if existing_item:
-            # обонов количество существующего товара
             existing_item.quantity += quantity
             existing_item.total_price = (existing_item.plant_unit_price + existing_item.pot_unit_price) * existing_item.quantity
             db.session.commit()
@@ -123,7 +128,6 @@ def add_to_cart():
                 'data': existing_item.to_dict()
             }), 200
         else:
-            # новый товар в корзине
             cart_item = CartItem(
                 user_id=user.id,
                 plant_id=plant_id,
@@ -150,7 +154,6 @@ def add_to_cart():
 
 @bp.route('/items/<int:item_id>', methods=['PUT'])
 def update_cart_item(item_id):
-    """обновить количество товара в корзине"""
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header:
@@ -172,9 +175,27 @@ def update_cart_item(item_id):
         if not data:
             return jsonify({'success': False, 'error': 'No data provided'}), 400
         
-        quantity = safe_int(data.get('quantity'), min_val=1, max_val=100)
-        if not quantity:
+        quantity = safe_int(data.get('quantity'), min_val=0, max_val=100)
+        if quantity is None:
             return jsonify({'success': False, 'error': 'Invalid quantity'}), 400
+        
+        # проверяем доступное количество при обновлении
+        if quantity > 0:
+            plant = PotPlant.query.get(cart_item.plant_id)
+            if quantity > plant.stock_quantity:
+                return jsonify({
+                    'success': False, 
+                    'error': f'Недостаточно товара в наличии. Доступно: {plant.stock_quantity}'
+                }), 400
+        
+        if quantity == 0:
+            db.session.delete(cart_item)
+            db.session.commit()
+            return jsonify({
+                'success': True,
+                'message': 'Товар удален из корзины',
+                'data': None
+            })
         
         cart_item.quantity = quantity
         cart_item.total_price = (cart_item.plant_unit_price + cart_item.pot_unit_price) * quantity

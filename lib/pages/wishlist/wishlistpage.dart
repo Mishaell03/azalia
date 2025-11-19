@@ -18,7 +18,8 @@ class WishlistPage extends StatefulWidget {
 }
 
 class _WishlistPageState extends State<WishlistPage> {
-  List<Plant> _wishlistPlants = [];
+  List<Plant> _availablePlants = [];
+  List<Plant> _outOfStockPlants = [];
   bool _isLoading = true;
   String _error = '';
   final SessionService _sessionService = SessionService();
@@ -46,8 +47,20 @@ class _WishlistPageState extends State<WishlistPage> {
 
       final plants = wishlistResponse.items.map((item) => item.plant).toList();
 
+      final List<Plant> availablePlants = [];
+      final List<Plant> outOfStockPlants = [];
+
+      for (final plant in plants) {
+        if (plant.inStock && plant.stockQuantity > 0) {
+          availablePlants.add(plant);
+        } else {
+          outOfStockPlants.add(plant);
+        }
+      }
+
       setState(() {
-        _wishlistPlants = plants;
+        _availablePlants = availablePlants;
+        _outOfStockPlants = outOfStockPlants;
         _isLoading = false;
       });
     } catch (e) {
@@ -71,7 +84,8 @@ class _WishlistPageState extends State<WishlistPage> {
 
   void _onWishlistUpdated(Plant removedPlant) {
     setState(() {
-      _wishlistPlants.removeWhere((plant) => plant.id == removedPlant.id);
+      _availablePlants.removeWhere((plant) => plant.id == removedPlant.id);
+      _outOfStockPlants.removeWhere((plant) => plant.id == removedPlant.id);
     });
   }
 
@@ -84,23 +98,30 @@ class _WishlistPageState extends State<WishlistPage> {
           ? const LoadingWidget()
           : _error.isNotEmpty
           ? GenericErrorWidget(onRetry: _loadWishlist)
-          : _wishlistPlants.isEmpty
+          : _availablePlants.isEmpty && _outOfStockPlants.isEmpty
           ? _buildEmptyState()
           : RefreshIndicator(
               onRefresh: _loadWishlist,
-              child: ListView.builder(
+              child: ListView(
                 padding: const EdgeInsets.only(top: 16, bottom: 16),
-                itemCount: _wishlistPlants.length,
-                itemBuilder: (context, index) {
-                  final plant = _wishlistPlants[index];
-                  return WishlistCard(
+                children: [
+                  // доступные товары
+                  ..._availablePlants.map((plant) => WishlistCard(
                     key: Key('wishlist_${plant.id}'),
                     plant: plant,
-                    onWishlistUpdated: (removedPlant) {
-                      _onWishlistUpdated(removedPlant);
-                    },
-                  );
-                },
+                    onWishlistUpdated: _onWishlistUpdated,
+                  )).toList(),
+                  
+                  // недоступные товары с разделителем
+                  if (_outOfStockPlants.isNotEmpty) ...[
+                    _buildOutOfStockSection(),
+                    ..._outOfStockPlants.map((plant) => WishlistCard(
+                      key: Key('wishlist_out_${plant.id}'),
+                      plant: plant,
+                      onWishlistUpdated: _onWishlistUpdated,
+                    )).toList(),
+                  ],
+                ],
               ),
             ),
     );
@@ -114,8 +135,9 @@ class _WishlistPageState extends State<WishlistPage> {
           Image.asset(
             'assets/images/love.png',
             fit: BoxFit.contain,
-            width: 350,
+            height: 250,
           ),
+          SizedBox(height: 30),
           Text(
             'В избранном пока пусто',
             style: AppText.bold_20.copyWith(color: AppColors.black),
@@ -143,6 +165,29 @@ class _WishlistPageState extends State<WishlistPage> {
               style: AppText.medium_16.copyWith(color: AppColors.white),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOutOfStockSection() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Divider(color: AppColors.grey_light),
+          const SizedBox(height: 16),
+          Text(
+            'Нет в наличии',
+            style: AppText.bold_18.copyWith(color: AppColors.grey),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Эти товары временно недоступны',
+            style: AppText.medium_14.copyWith(color: AppColors.grey),
+          ),
+          const SizedBox(height: 16),
         ],
       ),
     );

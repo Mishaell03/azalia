@@ -14,6 +14,7 @@ class Plant {
   final String? recommendedPotSize;
   final double? rating;
   final String? imageUrl;
+  final int stockQuantity;
   final int? categoryId;
 
   Plant({
@@ -30,6 +31,7 @@ class Plant {
     required this.recommendedPotSize,
     this.rating,
     this.imageUrl,
+    required this.stockQuantity,
     this.categoryId,
   });
 
@@ -48,6 +50,7 @@ class Plant {
       recommendedPotSize: json['recommended_pot_size'],
       rating: (json['rating'] as num?)?.toDouble(),
       imageUrl: json['image_url'],
+      stockQuantity: json['stock_quantity'] ?? 0,
       categoryId: json['category_id'],
     );
   }

@@ -83,14 +83,13 @@ class CartResponse {
   final List<CartItem> items;
   final CartSummary summary;
 
-  CartResponse({
-    required this.items,
-    required this.summary,
-  });
+  CartResponse({required this.items, required this.summary});
 
   factory CartResponse.fromJson(Map<String, dynamic> json) {
     return CartResponse(
-      items: (json['items'] as List? ?? []).map((item) => CartItem.fromJson(item)).toList(),
+      items: (json['items'] as List? ?? [])
+          .map((item) => CartItem.fromJson(item))
+          .toList(),
       summary: CartSummary.fromJson(json['summary'] ?? {}),
     );
   }
@@ -123,14 +122,13 @@ class WishlistResponse {
   final List<WishlistItem> items;
   final int count;
 
-  WishlistResponse({
-    required this.items,
-    required this.count,
-  });
+  WishlistResponse({required this.items, required this.count});
 
   factory WishlistResponse.fromJson(Map<String, dynamic> json) {
     return WishlistResponse(
-      items: (json['items'] as List? ?? []).map((item) => WishlistItem.fromJson(item)).toList(),
+      items: (json['items'] as List? ?? [])
+          .map((item) => WishlistItem.fromJson(item))
+          .toList(),
       count: json['count'] ?? 0,
     );
   }
@@ -139,14 +137,10 @@ class WishlistResponse {
 class WishlistCheckResponse {
   final bool inWishlist;
 
-  WishlistCheckResponse({
-    required this.inWishlist,
-  });
+  WishlistCheckResponse({required this.inWishlist});
 
   factory WishlistCheckResponse.fromJson(Map<String, dynamic> json) {
-    return WishlistCheckResponse(
-      inWishlist: json['in_wishlist'] ?? false,
-    );
+    return WishlistCheckResponse(inWishlist: json['in_wishlist'] ?? false);
   }
 }
 
@@ -155,11 +149,7 @@ class PotMaterial {
   final String name;
   final String? description;
 
-  PotMaterial({
-    required this.id,
-    required this.name,
-    this.description,
-  });
+  PotMaterial({required this.id, required this.name, this.description});
 
   factory PotMaterial.fromJson(Map<String, dynamic> json) {
     return PotMaterial(
@@ -204,11 +194,7 @@ class PotColor {
   final String name;
   final String? hexCode;
 
-  PotColor({
-    required this.id,
-    required this.name,
-    this.hexCode,
-  });
+  PotColor({required this.id, required this.name, this.hexCode});
 
   factory PotColor.fromJson(Map<String, dynamic> json) {
     return PotColor(
@@ -242,7 +228,9 @@ class PotPrice {
       materialId: json['material_id'] ?? 0,
       sizeId: json['size_id'] ?? 0,
       price: (json['price'] ?? 0).toDouble(),
-      material: json['material'] != null ? PotMaterial.fromJson(json['material']) : null,
+      material: json['material'] != null
+          ? PotMaterial.fromJson(json['material'])
+          : null,
       size: json['size'] != null ? PotSize.fromJson(json['size']) : null,
     );
   }
@@ -297,27 +285,107 @@ class AddToCartRequest {
 class UpdateCartRequest {
   final int quantity;
 
-  UpdateCartRequest({
-    required this.quantity,
-  });
+  UpdateCartRequest({required this.quantity});
 
   Map<String, dynamic> toJson() {
-    return {
-      'quantity': quantity,
-    };
+    return {'quantity': quantity};
   }
 }
 
 class AddToWishlistRequest {
   final int plantId;
 
-  AddToWishlistRequest({
-    required this.plantId,
-  });
+  AddToWishlistRequest({required this.plantId});
 
   Map<String, dynamic> toJson() {
-    return {
-      'plant_id': plantId,
-    };
+    return {'plant_id': plantId};
+  }
+}
+
+class CartItemWithPot {
+  final int id;
+  final int userId;
+  final int plantId;
+  final int quantity;
+  final String? potColor;
+  final String? potSize;
+  final String? potMaterial;
+  final double plantUnitPrice;
+  final double potUnitPrice;
+  final double totalPrice;
+  final Plant plant;
+  final PotDetails? potDetails;
+
+  CartItemWithPot({
+    required this.id,
+    required this.userId,
+    required this.plantId,
+    required this.quantity,
+    this.potColor,
+    this.potSize,
+    this.potMaterial,
+    required this.plantUnitPrice,
+    required this.potUnitPrice,
+    required this.totalPrice,
+    required this.plant,
+    this.potDetails,
+  });
+
+  factory CartItemWithPot.fromCartItem(
+    CartItem item, {
+    PotDetails? potDetails,
+  }) {
+    return CartItemWithPot(
+      id: item.id,
+      userId: item.userId,
+      plantId: item.plantId,
+      quantity: item.quantity,
+      potColor: item.potColor,
+      potSize: item.potSize,
+      potMaterial: item.potMaterial,
+      plantUnitPrice: item.plantUnitPrice,
+      potUnitPrice: item.potUnitPrice,
+      totalPrice: item.totalPrice,
+      plant: item.plant,
+      potDetails: potDetails,
+    );
+  }
+
+  String get potDescription {
+    if (potMaterial == null && potSize == null && potColor == null) {
+      return 'Без горшка';
+    }
+
+    final parts = <String>[];
+    if (potMaterial != null) parts.add(potMaterial!);
+    if (potSize != null) parts.add(potSize!);
+    if (potColor != null) parts.add(potColor!);
+
+    return parts.join(', ');
+  }
+
+  double get itemTotal => plantUnitPrice + potUnitPrice;
+}
+
+class PotDetails {
+  final String material;
+  final String size;
+  final String color;
+  final double price;
+
+  PotDetails({
+    required this.material,
+    required this.size,
+    required this.color,
+    required this.price,
+  });
+
+  factory PotDetails.fromJson(Map<String, dynamic> json) {
+    return PotDetails(
+      material: json['material'] ?? '',
+      size: json['size'] ?? '',
+      color: json['color'] ?? '',
+      price: (json['price'] ?? 0).toDouble(),
+    );
   }
 }

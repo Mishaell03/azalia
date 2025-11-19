@@ -8,7 +8,6 @@ import 'package:azalia/pages/error/loading_error.dart';
 import 'package:azalia/components/widgets/love.dart';
 import 'package:azalia/components/widgets/cart.dart';
 
-
 class HomeCard extends StatefulWidget {
   final Plant plant;
   final Function(bool)? onWishlistUpdated;
@@ -36,10 +35,7 @@ class _HomeCardState extends State<HomeCard> {
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.plant.inStock) {
-      return const SizedBox.shrink();
-    }
-
+    // Убираем проверку inStock - теперь она делается на уровне данных
     return Padding(
       padding: const EdgeInsets.only(right: 24, left: 24, top: 16),
       child: Row(

@@ -8,7 +8,7 @@ class PlantService {
   // получение растений с фильтрами
   Future<PlantResponse> getPlants({
     int? categoryId,
-    bool? inStock,
+    bool? inStock, // Явно добавляем параметр для фильтрации по наличию
     String? plantType,
     String? search,
     double? minPrice,
@@ -20,7 +20,7 @@ class PlantService {
       final params = <String, String>{};
       
       if (categoryId != null) params['category_id'] = categoryId.toString();
-      if (inStock != null) params['in_stock'] = inStock.toString();
+      if (inStock != null) params['in_stock'] = inStock.toString(); // Передаем параметр наличия
       if (plantType != null) params['plant_type'] = plantType;
       if (search != null) params['search'] = search;
       if (minPrice != null) params['min_price'] = minPrice.toString();
@@ -51,7 +51,7 @@ class PlantService {
       final response = await http
           .get(Uri.parse(ApiConfig.plantsId(id)), headers: ApiConfig.headers())
           .timeout(ApiConfig.timeout);
-          
+
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         if (data['success'] == true) {
@@ -73,7 +73,7 @@ class PlantService {
       final response = await http
           .get(Uri.parse(ApiConfig.categories), headers: ApiConfig.headers())
           .timeout(ApiConfig.timeout);
-          
+
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         if (data['success']) {
@@ -102,12 +102,14 @@ class PlantService {
         'limit': limit.toString(),
       };
 
-      final uri = Uri.parse(ApiConfig.topRated).replace(queryParameters: params);
-      
+      final uri = Uri.parse(
+        ApiConfig.topRated,
+      ).replace(queryParameters: params);
+
       final response = await http
           .get(uri, headers: ApiConfig.headers())
           .timeout(ApiConfig.timeout);
-          
+
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         return PlantResponse.fromJson(data);
@@ -125,7 +127,7 @@ class PlantService {
       final response = await http
           .get(Uri.parse(ApiConfig.filters), headers: ApiConfig.headers())
           .timeout(ApiConfig.timeout);
-          
+
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         if (data['success']) {

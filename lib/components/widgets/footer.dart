@@ -21,7 +21,7 @@ class _AppFooter extends State<AppFooter> {
   final List<String> _routes = [
     '/',
     '/love',
-    '/',
+    '/cart',
     '/profile',
   ];
 

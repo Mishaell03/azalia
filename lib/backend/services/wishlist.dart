@@ -107,11 +107,12 @@ class CartWishlistService {
 
   CartWishlistService({required this.plant});
 
-  Future<String?> _getToken() async {
+  // Сделаем метод получения токена публичным
+  Future<String?> getToken() async {
     return await _sessionService.getToken();
   }
 
-  Future<bool> _isUserLoggedIn() async {
+  Future<bool> isUserLoggedIn() async {
     return _sessionService.isLoggedIn && _sessionService.isTokenValid;
   }
 
@@ -119,45 +120,57 @@ class CartWishlistService {
 
   Future<void> toggleWishlist(bool currentlyInWishlist) async {
     try {
-      final isLoggedIn = await _isUserLoggedIn();
+      final isLoggedIn = await isUserLoggedIn();
       if (!isLoggedIn) {
+        print('Ошибка авторизации: пользователь не авторизован');
         throw Exception('не авторизован');
       }
 
-      final token = await _getToken();
+      final token = await getToken();
       if (token == null) {
+        print('Ошибка авторизации: токен не получен');
         throw Exception('не авторизован');
       }
 
       if (currentlyInWishlist) {
+        print('Удаление из избранного: plantId=${plant.id}');
         await WishlistService.removeFromWishlist(token, plant.id);
       } else {
+        print('Добавление в избранное: plantId=${plant.id}');
         await WishlistService.addToWishlist(token, plant.id);
       }
     } catch (e) {
+      print('Ошибка toggleWishlist: $e');
       if (e.toString().contains('не авторизован')) {
         throw Exception('не авторизован');
       } else if (e.toString().contains('Wishlist item not found')) {
-        // Игнорируем ошибку "не найден", так как элемент уже удален
-        print('Элемент уже удален из избранного: $e');
+        print('Элемент уже удален из избранного, продолжаем');
         return;
       } else {
-        throw Exception('ошибка обновления: $e');
+        throw Exception('ошибка обновления избранного');
       }
     }
   }
 
   Future<bool> checkWishlistStatus() async {
     try {
-      final isLoggedIn = await _isUserLoggedIn();
-      if (!isLoggedIn) return false;
+      final isLoggedIn = await isUserLoggedIn();
+      if (!isLoggedIn) {
+        print('Пользователь не авторизован, избранное недоступно');
+        return false;
+      }
 
-      final token = await _getToken();
-      if (token == null) return false;
+      final token = await getToken();
+      if (token == null) {
+        print('Токен не получен, избранное недоступно');
+        return false;
+      }
 
-      return await WishlistService.checkWishlist(token, plant.id);
+      final result = await WishlistService.checkWishlist(token, plant.id);
+      print('Статус избранного для plantId=${plant.id}: $result');
+      return result;
     } catch (e) {
-      print('Ошибка при проверке избранного: $e');
+      print('Ошибка checkWishlistStatus: $e');
       return false;
     }
   }
@@ -171,16 +184,20 @@ class CartWishlistService {
     int quantity = 1,
   }) async {
     try {
-      final isLoggedIn = await _isUserLoggedIn();
+      final isLoggedIn = await isUserLoggedIn();
       if (!isLoggedIn) {
+        print('Ошибка авторизации при добавлении в корзину');
         throw Exception('не авторизован');
       }
 
-      final token = await _getToken();
+      final token = await getToken();
       if (token == null) {
+        print('Токен не получен при добавлении в корзину');
         throw Exception('не авторизован');
       }
 
+      print('Добавление в корзину: plantId=${plant.id}, quantity=$quantity');
+      
       final request = AddToCartRequest(
         plantId: plant.id,
         potMaterial: potMaterial,
@@ -190,11 +207,13 @@ class CartWishlistService {
       );
 
       await CartService.addToCart(token, request);
+      print('Успешно добавлено в корзину: plantId=${plant.id}');
     } catch (e) {
+      print('Ошибка addToCart: $e');
       if (e.toString().contains('не авторизован')) {
         throw Exception('не авторизован');
       } else {
-        throw Exception('ошибка добавления: $e');
+        throw Exception('ошибка добавления в корзину');
       }
     }
   }
@@ -205,17 +224,55 @@ class CartWishlistService {
 
   Future<bool> checkCartStatus() async {
     try {
-      final isLoggedIn = await _isUserLoggedIn();
-      if (!isLoggedIn) return false;
+      final isLoggedIn = await isUserLoggedIn();
+      if (!isLoggedIn) {
+        print('Пользователь не авторизован, корзина недоступна');
+        return false;
+      }
 
-      final token = await _getToken();
-      if (token == null) return false;
+      final token = await getToken();
+      if (token == null) {
+        print('Токен не получен, корзина недоступна');
+        return false;
+      }
 
       final cart = await CartService.getCart(token);
-      return cart.items.any((item) => item.plantId == plant.id);
+      final isInCart = cart.items.any((item) => item.plantId == plant.id);
+      print('Статус корзины для plantId=${plant.id}: $isInCart');
+      return isInCart;
     } catch (e) {
-      print('Ошибка при проверке статуса корзины: $e');
+      print('Ошибка checkCartStatus: $e');
       return false;
+    }
+  }
+
+  Future<void> removeFromCart(int cartItemId) async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        throw Exception('не авторизован');
+      }
+
+      await CartService.removeFromCart(token, cartItemId);
+      print('Удалено из корзины: cartItemId=$cartItemId');
+    } catch (e) {
+      print('Ошибка removeFromCart: $e');
+      throw Exception('ошибка удаления из корзины');
+    }
+  }
+
+  Future<void> updateCartQuantity(int cartItemId, int quantity) async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        throw Exception('не авторизован');
+      }
+
+      await CartService.updateCartItem(token, cartItemId, quantity);
+      print('Обновлено количество: cartItemId=$cartItemId, quantity=$quantity');
+    } catch (e) {
+      print('Ошибка updateCartQuantity: $e');
+      throw Exception('ошибка обновления количества');
     }
   }
 }

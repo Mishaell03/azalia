@@ -79,7 +79,7 @@ def validate_string_input(text, max_length=255):
 def get_plants():
     try:
         category_id = safe_int(request.args.get('category_id'), min_val=1)
-        in_stock = request.args.get('in_stock', type=lambda v: v.lower() == 'true')
+        in_stock = request.args.get('in_stock', type=lambda v: v.lower() == 'true')  # Это должно работать
         plant_type = validate_string_input(request.args.get('plant_type'), 20)
         search = validate_string_input(request.args.get('search'), 100)
         
@@ -213,6 +213,9 @@ def create_plant():
                 'error': 'Invalid category ID'
             }), 400
         
+        # Валидация stock_quantity
+        stock_quantity = safe_int(data.get('stock_quantity', 0), min_val=0, max_val=1000000)
+        
         # проверка категории
         category = Category.query.get(category_id)
         if not category:
@@ -245,6 +248,7 @@ def create_plant():
             light_requirements=validate_string_input(data.get('light_requirements'), 20),
             watering_frequency=validate_string_input(data.get('watering_frequency'), 50),
             rating=rating,
+            stock_quantity=stock_quantity,
             in_stock=bool(data.get('in_stock', True)),
             image_url=validate_string_input(data.get('image_url'), 255)
         )
@@ -320,7 +324,8 @@ def update_plant(plant_id):
             'light_requirements': (validate_string_input, {'max_length': 20}),
             'watering_frequency': (validate_string_input, {'max_length': 50}),
             'rating': (safe_float, {'min_val': 0, 'max_val': 5}),
-            'image_url': (validate_string_input, {'max_length': 255})
+            'image_url': (validate_string_input, {'max_length': 255}),
+            'stock_quantity': (safe_int, {'min_val': 0, 'max_val': 1000000})  # Добавляем stock_quantity
         }
         
         for field, (validator, kwargs) in updatable_fields.items():
@@ -329,7 +334,7 @@ def update_plant(plant_id):
                     value = validator(data[field], **kwargs)
                 else:
                     value = validator(data[field])
-                if value is not None or field in ['description', 'care_instructions']:  # Разрешаем пустые описания
+                if value is not None or field in ['description', 'care_instructions']:
                     setattr(plant, field, value)
         
         if 'in_stock' in data:

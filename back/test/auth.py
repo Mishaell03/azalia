@@ -36,5 +36,4 @@ except sqlite3.Error as e:
 
 
 finally:
-    # Закрываем соединение с БД
     conn.close()

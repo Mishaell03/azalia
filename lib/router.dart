@@ -3,8 +3,9 @@ import 'package:go_router/go_router.dart';
 
 import 'package:azalia/pages/home/homepage.dart';
 import 'package:azalia/pages/error/error_page.dart';
-import 'package:azalia/pages/auth/auth.dart';
-import 'package:azalia/pages/profile/profile.dart';
+import 'package:azalia/pages/auth/authpage.dart';
+import 'package:azalia/pages/profile/profilepage.dart';
+import 'package:azalia/pages/cart/cartpage.dart';
 
 class AppRouter {
   late final GoRouter router = GoRouter(
@@ -29,6 +30,11 @@ class AppRouter {
         path: '/love',
         name: 'love',
         builder: (context, state) => const WishlistPage(),
+      ),
+      GoRoute(
+        path: '/cart',
+        name: 'cart',
+        builder: (context, state) => const CartPage(),
       ),
     ],
     errorBuilder:(context, state) => ErrorPage(),

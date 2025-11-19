@@ -25,8 +25,8 @@ class SessionService {
   bool get isLoggedIn => _currentUser != null && _sessionToken != null;
   bool get isEmployee => _isEmployee;
   Position? get currentPosition => _currentPosition;
-  bool get isTokenValid => _tokenExpiresAt != null && 
-      _tokenExpiresAt!.isAfter(DateTime.now());
+  bool get isTokenValid =>
+      _tokenExpiresAt != null && _tokenExpiresAt!.isAfter(DateTime.now());
 
   Future<void> initialize() async {
     await _loadSessionFromStorage();
@@ -87,7 +87,7 @@ class SessionService {
   Future<void> _loadSessionFromStorage() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      
+
       final userJson = prefs.getString(_keyUser);
       if (userJson != null) {
         final userMap = Map<String, dynamic>.from(json.decode(userJson));
@@ -95,7 +95,7 @@ class SessionService {
       }
 
       _sessionToken = prefs.getString(_keyToken);
-      
+
       final expiresAtString = prefs.getString(_keyExpiresAt);
       if (expiresAtString != null) {
         _tokenExpiresAt = DateTime.parse(expiresAtString);
@@ -105,7 +105,9 @@ class SessionService {
 
       final positionJson = prefs.getString(_keyPosition);
       if (positionJson != null) {
-        final positionMap = Map<String, dynamic>.from(json.decode(positionJson));
+        final positionMap = Map<String, dynamic>.from(
+          json.decode(positionJson),
+        );
         _currentPosition = Position.fromJson(positionMap);
       }
     } catch (e) {
@@ -116,7 +118,7 @@ class SessionService {
   Future<void> _saveSessionToStorage() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      
+
       if (_currentUser != null) {
         final userJson = json.encode(_currentUser!.toJson());
         await prefs.setString(_keyUser, userJson);
@@ -127,7 +129,10 @@ class SessionService {
       }
 
       if (_tokenExpiresAt != null) {
-        await prefs.setString(_keyExpiresAt, _tokenExpiresAt!.toIso8601String());
+        await prefs.setString(
+          _keyExpiresAt,
+          _tokenExpiresAt!.toIso8601String(),
+        );
       }
 
       await prefs.setBool(_keyIsEmployee, _isEmployee);
@@ -137,7 +142,7 @@ class SessionService {
         await prefs.setString(_keyPosition, positionJson);
       }
     } catch (e) {
-      // Ошибка сохранения сессии
+      print("Ошибка сохранения сессии: $e");
     }
   }
 
@@ -150,11 +155,12 @@ class SessionService {
       await prefs.remove(_keyIsEmployee);
       await prefs.remove(_keyPosition);
     } catch (e) {
-      // Ошибка очистки хранилища
+      print("Ошибка очистки хранилища: $e");
     }
   }
+
   Future<String?> getToken() async {
-  final prefs = await SharedPreferences.getInstance();
-  return prefs.getString('session_token');
-}
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('session_token');
+  }
 }
