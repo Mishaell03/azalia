@@ -109,11 +109,13 @@ class _AuthPageState extends State<AuthPage> {
       }
     } on AuthException catch (e) {
       setState(() {
+        debugPrint('Ошибка в AuthException: $e');
         _errorText = 'Что-то пошло не так';
       });
       _clearAllFields();
     } catch (e) {
       setState(() {
+        debugPrint('Ошибка очистки полей: $e');
         _errorText = 'Что-то пошло не так';
       });
       _clearAllFields();

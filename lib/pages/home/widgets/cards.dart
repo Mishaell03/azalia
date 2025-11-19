@@ -35,7 +35,6 @@ class _HomeCardState extends State<HomeCard> {
 
   @override
   Widget build(BuildContext context) {
-    // Убираем проверку inStock - теперь она делается на уровне данных
     return Padding(
       padding: const EdgeInsets.only(right: 24, left: 24, top: 16),
       child: Row(
@@ -164,7 +163,6 @@ class _HomeCardState extends State<HomeCard> {
               ],
             ],
           ),
-          if (widget.plant.heightCm != null)
             Text(
               'Высота до ${widget.plant.heightCm} см',
               style: AppText.medium_14.copyWith(

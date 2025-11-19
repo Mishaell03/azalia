@@ -3,7 +3,6 @@ import 'package:azalia/components/text_styles.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:azalia/components/colors.dart';
 import 'package:azalia/backend/models/cart.dart';
-import 'package:azalia/pages/error/loading_error.dart';
 
 class OutOfStockCard extends StatelessWidget {
   final CartItemWithPot item;

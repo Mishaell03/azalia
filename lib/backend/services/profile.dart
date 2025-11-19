@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:azalia/backend/api_config.dart';
 import 'package:azalia/backend/models/auth.dart';
@@ -16,44 +17,53 @@ class ProfileService {
     try {
       final session = SessionService();
       final token = await session.getToken();
-      
+
       if (token == null || token.isEmpty) {
+        debugPrint('ProfileService: Недействительная сессия');
         throw ProfileException(message: 'Сессия недействительна');
       }
 
       if (name.trim().isEmpty) {
+        debugPrint('ProfileService: Пустое имя');
         throw ProfileException(message: 'Имя не может быть пустым');
       }
 
       if (phone.trim().isEmpty) {
+        debugPrint('ProfileService: Пустой телефон');
         throw ProfileException(message: 'Телефон не может быть пустым');
       }
 
-      final response = await http.post(
-        Uri.parse('${ApiConfig.baseURL}/auth/update_profile'),
-        headers: ApiConfig.headers(),
-        body: json.encode({
-          'session_token': token,
-          'name': name.trim(),
-          'phone': phone.trim(),
-        }),
-      ).timeout(ApiConfig.timeout);
+      final response = await http
+          .post(
+            Uri.parse('${ApiConfig.baseURL}/auth/update_profile'),
+            headers: ApiConfig.headers(),
+            body: json.encode({
+              'session_token': token,
+              'name': name.trim(),
+              'phone': phone.trim(),
+            }),
+          )
+          .timeout(ApiConfig.timeout);
 
       final Map<String, dynamic> responseData = json.decode(response.body);
 
       if (response.statusCode == 200) {
+        debugPrint('ProfileService: Профиль успешно обновлен');
         return UpdateProfileResponse.fromJson(responseData);
       } else {
+        debugPrint('ProfileService: Ошибка сервера ${response.statusCode}');
         throw ProfileException(
-          message: responseData['error'] ?? 'Не удалось обновить профиль',
+          message: 'Не удалось обновить профиль',
           statusCode: response.statusCode,
         );
       }
     } on http.ClientException catch (e) {
+      debugPrint('ProfileService: Ошибка соединения - $e');
       throw ProfileException(message: 'Ошибка соединения');
     } on ProfileException {
       rethrow;
     } catch (e) {
+      debugPrint('ProfileService: Исключение - $e');
       throw ProfileException(message: 'Не удалось обновить профиль');
     }
   }

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:azalia/backend/models/auth.dart';
 
@@ -142,7 +143,7 @@ class SessionService {
         await prefs.setString(_keyPosition, positionJson);
       }
     } catch (e) {
-      print("Ошибка сохранения сессии: $e");
+      debugPrint("Ошибка сохранения сессии: $e");
     }
   }
 
@@ -155,7 +156,7 @@ class SessionService {
       await prefs.remove(_keyIsEmployee);
       await prefs.remove(_keyPosition);
     } catch (e) {
-      print("Ошибка очистки хранилища: $e");
+      debugPrint("Ошибка очистки хранилища: $e");
     }
   }
 

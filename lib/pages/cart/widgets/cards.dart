@@ -71,7 +71,7 @@ class _CartCardState extends State<CartCard> {
   }
 
   void _handleRemoveError(dynamic e) {
-    print('Ошибка удаления из корзины: $e');
+    debugPrint('Ошибка удаления из корзины: $e');
     _showErrorSnackBar('Не удалось удалить товар');
   }
 
@@ -109,7 +109,7 @@ class _CartCardState extends State<CartCard> {
   }
 
   void _handleQuantityUpdateError(dynamic e) {
-    print('Ошибка обновления количества: $e');
+    debugPrint('Ошибка обновления количества: $e');
     _showErrorSnackBar('Не удалось обновить количество');
   }
 
@@ -242,7 +242,7 @@ class _CartCardState extends State<CartCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildItemHeader(),
-          if (widget.item.plant.heightCm != null) _buildHeightInfo(),
+          _buildHeightInfo(),
           const SizedBox(height: 8),
           _buildPriceAndQuantity(),
         ],

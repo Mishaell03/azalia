@@ -27,12 +27,6 @@ class _WishlistCardState extends State<WishlistCard> {
   bool _hasImageError = false;
   bool _showCard = true;
 
-  void _retryLoadImage() {
-    setState(() {
-      _hasImageError = false;
-    });
-  }
-
   void _handleWishlistUpdate(bool isFavorite) {
     if (!isFavorite) {
       setState(() {
@@ -239,16 +233,15 @@ class _WishlistCardState extends State<WishlistCard> {
               ],
             ],
           ),
-          if (widget.plant.heightCm != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                'Высота до ${widget.plant.heightCm} см',
-                style: AppText.medium_14.copyWith(
-                  color: AppColors.black_transparent,
-                ),
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'Высота до ${widget.plant.heightCm} см',
+              style: AppText.medium_14.copyWith(
+                color: AppColors.black_transparent,
               ),
             ),
+          ),
           const SizedBox(height: 5),
           Row(
             children: [
@@ -286,14 +279,13 @@ class _WishlistCardState extends State<WishlistCard> {
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 4),
-          if (widget.plant.heightCm != null)
-            Text(
-              'Высота до ${widget.plant.heightCm} см',
-              style: AppText.medium_14.copyWith(
-                color: AppColors.grey,
-                decoration: TextDecoration.lineThrough,
-              ),
+          Text(
+            'Высота до ${widget.plant.heightCm} см',
+            style: AppText.medium_14.copyWith(
+              color: AppColors.grey,
+              decoration: TextDecoration.lineThrough,
             ),
+          ),
           const SizedBox(height: 4),
           Text(
             '${widget.plant.basePrice} ₽',

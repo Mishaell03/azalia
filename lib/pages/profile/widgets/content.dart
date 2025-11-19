@@ -58,7 +58,7 @@ class AppProfileContent extends StatelessWidget {
                   const SizedBox(height: 16),
                   AppProfileInfo(
                     label: 'Telegram ID',
-                    value: user.telegramId?.toString() ?? 'Не указан',
+                    value: user.telegramId.toString(),
                   ),
                   const SizedBox(height: 16),
                   AppProfileInfo(

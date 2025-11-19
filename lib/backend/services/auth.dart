@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:azalia/backend/api_config.dart';
 import 'package:azalia/backend/models/auth.dart'; 
@@ -43,6 +44,7 @@ class AuthService {
         );
       }
     } catch (e) {
+      debugPrint("Ошибка AuthException: $e");
       throw AuthException(message: 'Что-то пошло не так');
     }
   }
@@ -69,6 +71,7 @@ class AuthService {
         );
       }
     } catch (e) {
+      debugPrint("Ошибка AuthException: $e");
       throw AuthException(message: 'Что-то пошло не так');
     }
   }

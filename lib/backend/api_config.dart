@@ -51,6 +51,5 @@ class ApiConfig {
     if (authToken != null) headers['Authorization'] = authToken;
     return headers;
   }
-
-  static const bool enableLogging = false;
+  static const bool enableLogging = true;
 }

@@ -4,7 +4,6 @@ import 'package:azalia/components/colors.dart';
 import 'package:azalia/components/text_styles.dart';
 import 'package:azalia/backend/models/plant.dart';
 import 'package:azalia/backend/services/wishlist.dart';
-import 'package:azalia/backend/services/cart.dart';
 import 'package:azalia/pages/error/app_errors.dart';
 
 class CartButton extends StatefulWidget {
@@ -52,7 +51,7 @@ class _CartButtonState extends State<CartButton> {
         });
       }
     } catch (e) {
-      print('Ошибка загрузки статуса корзины: $e');
+      debugPrint('Ошибка загрузки статуса корзины: $e');
     }
   }
 

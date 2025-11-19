@@ -76,7 +76,7 @@ class _WishlistPageState extends State<WishlistPage> {
 
       setState(() {
         _error = 'Не удалось загрузить избранное';
-        print(e);
+        debugPrint('Не удалось загрузить избранное: $e');
         _isLoading = false;
       });
     }

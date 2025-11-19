@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart' hide Category;
 import 'package:http/http.dart' as http;
 import 'package:azalia/backend/api_config.dart';
 import 'package:azalia/backend/models/plant.dart';
@@ -8,7 +9,7 @@ class PlantService {
   // получение растений с фильтрами
   Future<PlantResponse> getPlants({
     int? categoryId,
-    bool? inStock, // Явно добавляем параметр для фильтрации по наличию
+    bool? inStock,
     String? plantType,
     String? search,
     double? minPrice,
@@ -20,7 +21,7 @@ class PlantService {
       final params = <String, String>{};
       
       if (categoryId != null) params['category_id'] = categoryId.toString();
-      if (inStock != null) params['in_stock'] = inStock.toString(); // Передаем параметр наличия
+      if (inStock != null) params['in_stock'] = inStock.toString();
       if (plantType != null) params['plant_type'] = plantType;
       if (search != null) params['search'] = search;
       if (minPrice != null) params['min_price'] = minPrice.toString();
@@ -36,12 +37,15 @@ class PlantService {
           
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
+        debugPrint('PlantService: Растения загружены');
         return PlantResponse.fromJson(data);
       } else {
-        throw Exception("Ошибка сервера: ${response.statusCode}");
+        debugPrint('PlantService: Ошибка сервера ${response.statusCode}');
+        throw Exception("Не удалось загрузить растения");
       }
     } catch (e) {
-      throw Exception("Ошибка загрузки растений: $e");
+      debugPrint('PlantService: Исключение - $e');
+      throw Exception("Не удалось загрузить растения");
     }
   }
 
@@ -55,15 +59,19 @@ class PlantService {
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         if (data['success'] == true) {
+          debugPrint('PlantService: Растение загружено (id: $id)');
           return Plant.fromJson(data['data']);
         } else {
-          throw Exception('Ошибка API: ${data['error']}');
+          debugPrint('PlantService: Ошибка API');
+          throw Exception('Не удалось загрузить растение');
         }
       } else {
-        throw Exception('Ошибка сервера: ${response.statusCode}');
+        debugPrint('PlantService: Ошибка сервера ${response.statusCode}');
+        throw Exception('Не удалось загрузить растение');
       }
     } catch (e) {
-      throw Exception('Ошибка загрузки растения: $e');
+      debugPrint('PlantService: Исключение - $e');
+      throw Exception('Не удалось загрузить растение');
     }
   }
 
@@ -77,17 +85,21 @@ class PlantService {
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         if (data['success']) {
+          debugPrint('PlantService: Категории загружены');
           return (data['data'] as List)
               .map((categoryJson) => Category.fromJson(categoryJson))
               .toList();
         } else {
-          throw Exception('Ошибка API: ${data['error']}');
+          debugPrint('PlantService: Ошибка API категорий');
+          throw Exception('Не удалось загрузить категории');
         }
       } else {
-        throw Exception('Ошибка сервера: ${response.statusCode}');
+        debugPrint('PlantService: Ошибка сервера ${response.statusCode}');
+        throw Exception('Не удалось загрузить категории');
       }
     } catch (e) {
-      throw Exception('Ошибка загрузки категорий: $e');
+      debugPrint('PlantService: Исключение - $e');
+      throw Exception('Не удалось загрузить категории');
     }
   }
 
@@ -112,12 +124,15 @@ class PlantService {
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
+        debugPrint('PlantService: Популярные растения загружены');
         return PlantResponse.fromJson(data);
       } else {
-        throw Exception("Ошибка сервера: ${response.statusCode}");
+        debugPrint('PlantService: Ошибка сервера ${response.statusCode}');
+        throw Exception("Не удалось загрузить популярные растения");
       }
     } catch (e) {
-      throw Exception("Ошибка загрузки популярных растений: $e");
+      debugPrint('PlantService: Исключение - $e');
+      throw Exception("Не удалось загрузить популярные растения");
     }
   }
 
@@ -131,15 +146,19 @@ class PlantService {
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         if (data['success']) {
+          debugPrint('PlantService: Фильтры загружены');
           return data['data'];
         } else {
-          throw Exception('Ошибка API: ${data['error']}');
+          debugPrint('PlantService: Ошибка API фильтров');
+          throw Exception('Не удалось загрузить фильтры');
         }
       } else {
-        throw Exception('Ошибка сервера: ${response.statusCode}');
+        debugPrint('PlantService: Ошибка сервера ${response.statusCode}');
+        throw Exception('Не удалось загрузить фильтры');
       }
     } catch (e) {
-      throw Exception('Ошибка загрузки фильтров: $e');
+      debugPrint('PlantService: Исключение - $e');
+      throw Exception('Не удалось загрузить фильтры');
     }
   }
 }
