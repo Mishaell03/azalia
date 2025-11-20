@@ -71,10 +71,6 @@ class _HomePage extends State<HomePage> {
 
       // фильтр по количеству stockQuantity > 0
       final availablePlants = plants.data.where((plant) => plant.stockQuantity > 0).toList();
-
-      print('Всего растений получено: ${plants.data.length}');
-      print('Доступных растений: ${availablePlants.length}');
-
       setState(() {
         _categories = categories;
         _allPlants = availablePlants;

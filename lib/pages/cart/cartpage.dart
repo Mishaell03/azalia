@@ -134,7 +134,7 @@ class _CartPageState extends State<CartPage> {
     try {
       await CartService.updateCartItem(token, itemId, availableQuantity);
     } catch (e) {
-      print('Ошибка автоматического обновления количества: $e');
+      debugPrint('Ошибка автоматического обновления количества: $e');
     }
   }
 
@@ -196,7 +196,7 @@ class _CartPageState extends State<CartPage> {
         _showSnackBar('Товар удален из корзины', isError: false);
       }
     } catch (e) {
-      print('Ошибка удаления недоступного товара: $e');
+      debugPrint('Ошибка удаления недоступного товара: $e');
       _showSnackBar('Не удалось удалить товар', isError: true);
     }
   }
@@ -217,7 +217,7 @@ class _CartPageState extends State<CartPage> {
 
       _showSnackBar('Корзина очищена', isError: false);
     } catch (e) {
-      print('Ошибка очистки корзины: $e');
+      debugPrint('Ошибка очистки корзины: $e');
       _showSnackBar('Не удалось очистить корзину', isError: true);
     }
   }

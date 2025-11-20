@@ -49,7 +49,7 @@ class _FavoriteButtonState extends State<FavoriteButton> {
         });
       }
     } catch (e) {
-      print('Ошибка загрузки статуса избранного: $e');
+      debugPrint('Ошибка загрузки статуса избранного: $e');
     }
   }
 
