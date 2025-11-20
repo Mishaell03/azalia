@@ -7,6 +7,7 @@ class AppProfileImage extends StatelessWidget {
   final VoidCallback onTap;
   final double size;
   final double cameraIconSize;
+  final bool showCameraIcon;
 
   const AppProfileImage({
     super.key,
@@ -14,6 +15,7 @@ class AppProfileImage extends StatelessWidget {
     required this.onTap,
     this.size = 80,
     this.cameraIconSize = 24,
+    this.showCameraIcon = true,
   });
 
   @override
@@ -43,23 +45,24 @@ class AppProfileImage extends StatelessWidget {
                   )
                 : null,
           ),
-          Positioned(
-            bottom: 0,
-            right: 0,
-            child: Container(
-              width: cameraIconSize,
-              height: cameraIconSize,
-              decoration: BoxDecoration(
-                color: AppColors.brown,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.camera_alt,
-                size: cameraIconSize * 0.5,
-                color: AppColors.white,
+          if (showCameraIcon)
+            Positioned(
+              bottom: 0,
+              right: 0,
+              child: Container(
+                width: cameraIconSize,
+                height: cameraIconSize,
+                decoration: BoxDecoration(
+                  color: AppColors.brown,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.camera_alt,
+                  size: cameraIconSize * 0.5,
+                  color: AppColors.white,
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

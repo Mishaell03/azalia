@@ -45,9 +45,10 @@ class AppProfileHeader extends StatelessWidget {
               children: [
                 AppProfileImage(
                   selectedImageFile: selectedImageFile,
-                  onTap: onImageTap,
-                  size: 32,
+                  onTap: () {},
+                  size: 40,
                   cameraIconSize: 16,
+                  showCameraIcon: false,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -55,10 +56,10 @@ class AppProfileHeader extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        userName,
-                        style: AppText.bold_20.copyWith(
-                          color: AppColors.black,
-                        ),
+                        userName.length > 15
+                            ? '${userName.substring(0, 15)}...'
+                            : userName,
+                        style: AppText.bold_20.copyWith(color: AppColors.black),
                         overflow: TextOverflow.ellipsis,
                       ),
                       if (isEmployee && positionTitle != null)
@@ -94,16 +95,18 @@ class AppProfileHeader extends StatelessWidget {
                   children: [
                     AppProfileImage(
                       selectedImageFile: selectedImageFile,
-                      onTap: onImageTap,
+                      onTap:
+                          () {},
                       size: 80,
                       cameraIconSize: 24,
+                      showCameraIcon: false,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 10),
                     Text(
-                      userName,
-                      style: AppText.bold_23.copyWith(
-                        color: AppColors.black,
-                      ),
+                      userName.length > 15
+                          ? '${userName.substring(0, 15)}...'
+                          : userName,
+                      style: AppText.bold_23.copyWith(color: AppColors.black),
                     ),
                     const SizedBox(height: 8),
                     if (isEmployee && positionTitle != null)

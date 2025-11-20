@@ -1,3 +1,4 @@
+import 'package:azalia/pages/cart/widgets/unauthorized.dart';
 import 'package:flutter/material.dart';
 import 'package:azalia/components/colors.dart';
 import 'package:azalia/components/text_styles.dart';
@@ -22,6 +23,7 @@ class _CartPageState extends State<CartPage> {
   List<CartItemWithPot> _cartItems = [];
   List<CartItemWithPot> _outOfStockItems = [];
   bool _isLoading = true;
+  bool _isUnauthorized = false;
   String _error = '';
   double _totalPrice = 0;
   int _totalItems = 0;
@@ -38,11 +40,12 @@ class _CartPageState extends State<CartPage> {
       setState(() {
         _isLoading = true;
         _error = '';
+        _isUnauthorized = false;
       });
 
       final token = await _sessionService.getToken();
       if (token == null) {
-        _setEmptyState();
+        _handleUnauthorized();
         return;
       }
 
@@ -53,12 +56,9 @@ class _CartPageState extends State<CartPage> {
     }
   }
 
-  void _setEmptyState() {
+  void _handleUnauthorized() {
     setState(() {
-      _cartItems = [];
-      _outOfStockItems = [];
-      _totalPrice = 0;
-      _totalItems = 0;
+      _isUnauthorized = true;
       _isLoading = false;
     });
   }
@@ -92,6 +92,7 @@ class _CartPageState extends State<CartPage> {
       _totalPrice = availableSummary['totalPrice'];
       _totalItems = availableSummary['totalItems'];
       _isLoading = false;
+      _isUnauthorized = false;
     });
   }
 
@@ -116,7 +117,7 @@ class _CartPageState extends State<CartPage> {
         e.toString().contains('authorized') ||
         e.toString().contains('session') ||
         e.toString().contains('token')) {
-      _setEmptyState();
+      _handleUnauthorized();
       return;
     }
 
@@ -194,6 +195,8 @@ class _CartPageState extends State<CartPage> {
         });
 
         _showSnackBar('Товар удален из корзины', isError: false);
+      } else {
+        _handleUnauthorized();
       }
     } catch (e) {
       debugPrint('Ошибка удаления недоступного товара: $e');
@@ -204,7 +207,10 @@ class _CartPageState extends State<CartPage> {
   Future<void> _clearCart() async {
     try {
       final token = await _sessionService.getToken();
-      if (token == null) return;
+      if (token == null) {
+        _handleUnauthorized();
+        return;
+      }
 
       await CartService.clearCart(token);
 
@@ -267,6 +273,10 @@ class _CartPageState extends State<CartPage> {
   Widget _buildBody() {
     if (_isLoading) {
       return const LoadingWidget();
+    }
+
+    if (_isUnauthorized) {
+      return CartlistUnauthorized();
     }
 
     if (_error.isNotEmpty) {

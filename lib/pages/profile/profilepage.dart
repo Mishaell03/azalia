@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:azalia/components/colors.dart';
 import 'package:azalia/components/text_styles.dart';
 import 'package:azalia/backend/services/session.dart';
@@ -25,7 +24,6 @@ class _ProfilePageState extends State<ProfilePage> {
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
-  final ImagePicker _imagePicker = ImagePicker();
 
   bool _showExpandedHeader = true;
   File? _selectedImageFile;
@@ -48,7 +46,9 @@ class _ProfilePageState extends State<ProfilePage> {
   void _initializeUserData() {
     final user = _sessionService.currentUser;
     if (user != null) {
-      _nameController.text = user.name;
+      _nameController.text = user.name.length > 15
+          ? user.name.substring(0, 15)
+          : user.name;
       _phoneController.text = _formatPhoneNumber(user.phone);
     }
   }
@@ -86,76 +86,6 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  Future<void> _pickImage() async {
-    try {
-      final XFile? image = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 512,
-        maxHeight: 512,
-        imageQuality: 85,
-      );
-
-      if (image != null && mounted) {
-        setState(() {
-          _selectedImageFile = File(image.path);
-        });
-      }
-    } catch (e) {
-      _showErrorDialog('Ошибка при выборе изображения');
-    }
-  }
-
-  Future<void> _takePhoto() async {
-    try {
-      final XFile? image = await _imagePicker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 512,
-        maxHeight: 512,
-        imageQuality: 85,
-      );
-
-      if (image != null && mounted) {
-        setState(() {
-          _selectedImageFile = File(image.path);
-        });
-      }
-    } catch (e) {
-      _showErrorDialog('Ошибка при съемке фото');
-    }
-  }
-
-  void _showImageSourceDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          'Выберите источник',
-          style: AppText.bold_18.copyWith(color: AppColors.black),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: Icon(Icons.photo_library, color: AppColors.brown),
-              title: Text('Галерея'),
-              onTap: () {
-                Navigator.of(context).pop();
-                _pickImage();
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.camera_alt, color: AppColors.brown),
-              title: Text('Камера'),
-              onTap: () {
-                Navigator.of(context).pop();
-                _takePhoto();
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   void _showEditProfileDialog() {
     showDialog(
@@ -164,9 +94,12 @@ class _ProfilePageState extends State<ProfilePage> {
         nameController: _nameController,
         phoneController: _phoneController,
         selectedImageFile: _selectedImageFile,
-        onPickImage: _pickImage,
-        onTakePhoto: _takePhoto,
         onUpdateProfile: _updateUserProfile,
+        onImageUpdated: (File? newImage) {
+          setState(() {
+            _selectedImageFile = newImage;
+          });
+        },
       ),
     );
   }
@@ -366,7 +299,7 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
   }
-  
+
   void _showAbout(BuildContext context) {
     showDialog(
       context: context,
@@ -439,7 +372,7 @@ class _ProfilePageState extends State<ProfilePage> {
           isEmployee: isEmployee,
           selectedImageFile: _selectedImageFile,
           onEditPressed: _showEditProfileDialog,
-          onImageTap: _showImageSourceDialog,
+          onImageTap: () {},
         ),
         SliverToBoxAdapter(
           child: AppProfileContent(

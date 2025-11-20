@@ -52,7 +52,12 @@ class AppProfileContent extends StatelessWidget {
               padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
-                  AppProfileInfo(label: 'Имя', value: formattedName),
+                  AppProfileInfo(
+                    label: 'Имя',
+                    value: formattedName.length > 15
+                        ? '${formattedName.substring(0, 15)}...'
+                        : formattedName,
+                  ),
                   const SizedBox(height: 16),
                   AppProfileInfo(label: 'Телефон', value: formattedPhone),
                   const SizedBox(height: 16),

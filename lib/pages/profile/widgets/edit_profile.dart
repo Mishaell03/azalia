@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:azalia/components/colors.dart';
 import 'package:azalia/components/text_styles.dart';
 import 'package:azalia/pages/profile/widgets/phone.dart';
@@ -9,18 +10,16 @@ class AppEditProfile extends StatefulWidget {
   final TextEditingController nameController;
   final TextEditingController phoneController;
   final File? selectedImageFile;
-  final Function() onPickImage;
-  final Function() onTakePhoto;
   final Function() onUpdateProfile;
+  final Function(File?) onImageUpdated; // Новый колбэк для обновления фото
 
   const AppEditProfile({
     super.key,
     required this.nameController,
     required this.phoneController,
     required this.selectedImageFile,
-    required this.onPickImage,
-    required this.onTakePhoto,
     required this.onUpdateProfile,
+    required this.onImageUpdated, // Обязательный параметр
   });
 
   @override
@@ -29,10 +28,13 @@ class AppEditProfile extends StatefulWidget {
 
 class _AppEditProfile extends State<AppEditProfile> {
   final FocusNode _nameFocusNode = FocusNode();
+  final ImagePicker _imagePicker = ImagePicker();
+  late File? _currentImageFile;
 
   @override
   void initState() {
     super.initState();
+    _currentImageFile = widget.selectedImageFile;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _nameFocusNode.requestFocus();
     });
@@ -42,6 +44,44 @@ class _AppEditProfile extends State<AppEditProfile> {
   void dispose() {
     _nameFocusNode.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 85,
+      );
+
+      if (image != null && mounted) {
+        setState(() {
+          _currentImageFile = File(image.path);
+        });
+      }
+    } catch (e) {
+      _showErrorDialog('Ошибка при выборе изображения');
+    }
+  }
+
+  Future<void> _takePhoto() async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 85,
+      );
+
+      if (image != null && mounted) {
+        setState(() {
+          _currentImageFile = File(image.path);
+        });
+      }
+    } catch (e) {
+      _showErrorDialog('Ошибка при съемке фото');
+    }
   }
 
   void _showImageSourceDialog() {
@@ -60,7 +100,7 @@ class _AppEditProfile extends State<AppEditProfile> {
               title: Text('Галерея'),
               onTap: () {
                 Navigator.of(context).pop();
-                widget.onPickImage();
+                _pickImage();
               },
             ),
             ListTile(
@@ -68,7 +108,7 @@ class _AppEditProfile extends State<AppEditProfile> {
               title: Text('Камера'),
               onTap: () {
                 Navigator.of(context).pop();
-                widget.onTakePhoto();
+                _takePhoto();
               },
             ),
           ],
@@ -78,7 +118,14 @@ class _AppEditProfile extends State<AppEditProfile> {
   }
 
   void _saveProfile() {
-    if (widget.nameController.text.trim().isEmpty) {
+    final trimmedName = widget.nameController.text.trim();
+    final finalName = trimmedName.length > 15
+        ? trimmedName.substring(0, 15)
+        : trimmedName;
+
+    widget.nameController.text = finalName;
+
+    if (finalName.isEmpty) {
       _showErrorDialog('Пожалуйста, введите имя');
       return;
     }
@@ -92,6 +139,9 @@ class _AppEditProfile extends State<AppEditProfile> {
       return;
     }
 
+    // Передаем обновленное фото обратно в ProfilePage
+    widget.onImageUpdated(_currentImageFile);
+    
     Navigator.of(context).pop();
     widget.onUpdateProfile();
   }
@@ -133,10 +183,11 @@ class _AppEditProfile extends State<AppEditProfile> {
           mainAxisSize: MainAxisSize.min,
           children: [
             AppProfileImage(
-              selectedImageFile: widget.selectedImageFile,
+              selectedImageFile: _currentImageFile,
               onTap: _showImageSourceDialog,
               size: 100,
               cameraIconSize: 32,
+              showCameraIcon: true,
             ),
             const SizedBox(height: 20),
             TextField(
@@ -145,12 +196,22 @@ class _AppEditProfile extends State<AppEditProfile> {
               autofocus: true,
               keyboardType: TextInputType.text,
               textCapitalization: TextCapitalization.words,
+              maxLength: 15,
               decoration: InputDecoration(
                 labelText: 'Имя',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
+                counterText: '',
               ),
+              onChanged: (value) {
+                if (value.length > 15) {
+                  widget.nameController.text = value.substring(0, 15);
+                  widget.nameController.selection = TextSelection.collapsed(
+                    offset: 15,
+                  );
+                }
+              },
             ),
             const SizedBox(height: 16),
             TextField(

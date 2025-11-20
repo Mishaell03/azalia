@@ -1,5 +1,5 @@
 class ApiConfig {
-  static const String baseURL = 'http://10.0.0.40:5000/api';
+  static const String baseURL = 'http://10.121.114.113:5000/api';
   static const Duration timeout = Duration(seconds: 10);
 
   // auth

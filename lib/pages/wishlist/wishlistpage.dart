@@ -1,13 +1,15 @@
+import 'package:azalia/backend/services/cart.dart';
 import 'package:flutter/material.dart';
 import 'package:azalia/components/colors.dart';
 import 'package:azalia/components/text_styles.dart';
 import 'package:azalia/components/widgets/footer.dart';
 import 'package:azalia/pages/error/loading_error.dart';
 import 'package:azalia/backend/models/plant.dart';
-import 'package:azalia/backend/services/cart.dart';
 import 'package:azalia/backend/services/session.dart';
 import 'package:azalia/pages/wishlist/widgets/cards.dart';
 import 'package:azalia/pages/wishlist/widgets/header.dart';
+import 'package:azalia/pages/wishlist/widgets/unauthorized.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 
 class WishlistPage extends StatefulWidget {
@@ -21,6 +23,7 @@ class _WishlistPageState extends State<WishlistPage> {
   List<Plant> _availablePlants = [];
   List<Plant> _outOfStockPlants = [];
   bool _isLoading = true;
+  bool _isUnauthorized = false;
   String _error = '';
   final SessionService _sessionService = SessionService();
 
@@ -35,11 +38,12 @@ class _WishlistPageState extends State<WishlistPage> {
       setState(() {
         _isLoading = true;
         _error = '';
+        _isUnauthorized = false;
       });
 
       final token = await _sessionService.getToken();
       if (token == null) {
-        context.go('/profile');
+        _handleUnauthorized();
         return;
       }
 
@@ -68,9 +72,7 @@ class _WishlistPageState extends State<WishlistPage> {
           e.toString().contains('authorized') ||
           e.toString().contains('session') ||
           e.toString().contains('token')) {
-        if (mounted) {
-          context.go('/auth');
-        }
+        _handleUnauthorized();
         return;
       }
 
@@ -82,6 +84,13 @@ class _WishlistPageState extends State<WishlistPage> {
     }
   }
 
+  void _handleUnauthorized() {
+    setState(() {
+      _isUnauthorized = true;
+      _isLoading = false;
+    });
+  }
+
   void _onWishlistUpdated(Plant removedPlant) {
     setState(() {
       _availablePlants.removeWhere((plant) => plant.id == removedPlant.id);
@@ -91,39 +100,96 @@ class _WishlistPageState extends State<WishlistPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isUnauthorized) {
+      return Scaffold(
+        body: SafeArea(
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                color: AppColors.white,
+                child: AppBar(
+                  elevation: 0,
+                  backgroundColor: AppColors.white,
+                  leading: IconButton(
+                    onPressed: () {
+                      context.goNamed('home');
+                    },
+                    icon: SvgPicture.asset(
+                      "assets/icons/Back.svg",
+                      colorFilter: ColorFilter.mode(
+                        AppColors.black,
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                  ),
+                  title: Text(
+                    "Избранное",
+                    style: AppText.semibold_25.copyWith(color: AppColors.black),
+                  ),
+                  centerTitle: true,
+                ),
+              ),
+              Expanded(child: WishlistUnauthorized()),
+            ],
+          ),
+        ),
+        bottomNavigationBar: const AppFooter(),
+      );
+    }
     return Scaffold(
-      appBar: WishlistHeader(),
+      appBar: WishlistHeader(
+        itemCount: _availablePlants.length + _outOfStockPlants.length,
+      ),
       bottomNavigationBar: const AppFooter(),
-      body: _isLoading
-          ? const LoadingWidget()
-          : _error.isNotEmpty
-          ? GenericErrorWidget(onRetry: _loadWishlist)
-          : _availablePlants.isEmpty && _outOfStockPlants.isEmpty
-          ? _buildEmptyState()
-          : RefreshIndicator(
-              onRefresh: _loadWishlist,
-              child: ListView(
-                padding: const EdgeInsets.only(top: 16, bottom: 16),
-                children: [
-                  // доступные товары
-                  ..._availablePlants.map((plant) => WishlistCard(
-                    key: Key('wishlist_${plant.id}'),
+      body: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const LoadingWidget();
+    }
+
+    if (_error.isNotEmpty) {
+      return GenericErrorWidget(onRetry: _loadWishlist);
+    }
+
+    if (_availablePlants.isEmpty && _outOfStockPlants.isEmpty) {
+      return _buildEmptyState();
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadWishlist,
+      child: ListView(
+        padding: const EdgeInsets.only(top: 16, bottom: 16),
+        children: [
+          // доступные товары
+          ..._availablePlants
+              .map(
+                (plant) => WishlistCard(
+                  key: Key('wishlist_${plant.id}'),
+                  plant: plant,
+                  onWishlistUpdated: _onWishlistUpdated,
+                ),
+              )
+              .toList(),
+
+          // недоступные товары с разделителем
+          if (_outOfStockPlants.isNotEmpty) ...[
+            _buildOutOfStockSection(),
+            ..._outOfStockPlants
+                .map(
+                  (plant) => WishlistCard(
+                    key: Key('wishlist_out_${plant.id}'),
                     plant: plant,
                     onWishlistUpdated: _onWishlistUpdated,
-                  )).toList(),
-                  
-                  // недоступные товары с разделителем
-                  if (_outOfStockPlants.isNotEmpty) ...[
-                    _buildOutOfStockSection(),
-                    ..._outOfStockPlants.map((plant) => WishlistCard(
-                      key: Key('wishlist_out_${plant.id}'),
-                      plant: plant,
-                      onWishlistUpdated: _onWishlistUpdated,
-                    )).toList(),
-                  ],
-                ],
-              ),
-            ),
+                  ),
+                )
+                .toList(),
+          ],
+        ],
+      ),
     );
   }
 
@@ -137,7 +203,7 @@ class _WishlistPageState extends State<WishlistPage> {
             fit: BoxFit.contain,
             height: 250,
           ),
-          SizedBox(height: 30),
+          const SizedBox(height: 30),
           Text(
             'В избранном пока пусто',
             style: AppText.bold_20.copyWith(color: AppColors.black),

@@ -28,9 +28,10 @@ class _HomePage extends State<HomePage> {
       GlobalKey<RefreshIndicatorState>();
   final PlantService _plantService = PlantService();
 
-  // бескоечная карусель
+  // бесконечная карусель
   final int _visibleItemsCount = 10; //сколько прогружать карточек
   int _currentCycle = 0; // цикл прокрутки
+  bool _isAllCategory = true; // флаг для категории "Все"
 
   Future<void> _handleRefresh() async {
     await _loadInitialData();
@@ -51,8 +52,9 @@ class _HomePage extends State<HomePage> {
 
   void _setupScrollListener() {
     _scrollController.addListener(() {
-      // когда доходим до конца видимого списка, переходим к следующему циклу
-      if (_scrollController.position.pixels >=
+      // Бесконечный скролл только для категории "Все"
+      if (_isAllCategory && 
+          _scrollController.position.pixels >=
           _scrollController.position.maxScrollExtent - 100) {
         _loadNextCycle();
       }
@@ -64,6 +66,7 @@ class _HomePage extends State<HomePage> {
       setState(() {
         _error = '';
         _isLoading = true;
+        _isAllCategory = true; // По умолчанию категория "Все"
       });
 
       final categories = await _plantService.getCategories();
@@ -92,29 +95,37 @@ class _HomePage extends State<HomePage> {
       return;
     }
 
-    final List<Plant> newDisplayedPlants = [];
-    
-    // растения для текущего цикла
-    for (int i = 0; i <= _currentCycle; i++) {
-      final startIndex = (i * _visibleItemsCount) % _allPlants.length;
-      final endIndex = startIndex + _visibleItemsCount;
+    // Для категории "Все" используем бесконечный скролл
+    if (_isAllCategory) {
+      final List<Plant> newDisplayedPlants = [];
       
-      if (endIndex <= _allPlants.length) {
-        newDisplayedPlants.addAll(_allPlants.sublist(startIndex, endIndex));
-      } else {
-        // выходим за границы - берем с начала
-        newDisplayedPlants.addAll(_allPlants.sublist(startIndex));
-        newDisplayedPlants.addAll(_allPlants.sublist(0, endIndex - _allPlants.length));
+      // растения для текущего цикла
+      for (int i = 0; i <= _currentCycle; i++) {
+        final startIndex = (i * _visibleItemsCount) % _allPlants.length;
+        final endIndex = startIndex + _visibleItemsCount;
+        
+        if (endIndex <= _allPlants.length) {
+          newDisplayedPlants.addAll(_allPlants.sublist(startIndex, endIndex));
+        } else {
+          // выходим за границы - берем с начала
+          newDisplayedPlants.addAll(_allPlants.sublist(startIndex));
+          newDisplayedPlants.addAll(_allPlants.sublist(0, endIndex - _allPlants.length));
+        }
       }
-    }
 
-    setState(() {
-      _displayedPlants = newDisplayedPlants;
-    });
+      setState(() {
+        _displayedPlants = newDisplayedPlants;
+      });
+    } else {
+      // Для конкретной категории показываем все растения сразу
+      setState(() {
+        _displayedPlants = _allPlants;
+      });
+    }
   }
 
   void _loadNextCycle() {
-    if (_allPlants.isEmpty) return;
+    if (_allPlants.isEmpty || !_isAllCategory) return;
 
     setState(() {
       _currentCycle++;
@@ -130,6 +141,7 @@ class _HomePage extends State<HomePage> {
       _displayedPlants = [];
       _currentCycle = 0;
       _error = '';
+      _isAllCategory = category == null; // Устанавливаем флаг категории
     });
 
     try {
@@ -241,9 +253,9 @@ class _HomePage extends State<HomePage> {
                         childCount: _displayedPlants.length,
                       ),
                     ),
-                  // индикатор следующего цикла
+                  // индикатор следующего цикла только для категории "Все"
                   SliverToBoxAdapter(
-                    child: _allPlants.isNotEmpty 
+                    child: _isAllCategory && _allPlants.isNotEmpty 
                         ? Padding(
                             padding: const EdgeInsets.all(16.0),
                             child: Center(
