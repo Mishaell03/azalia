@@ -55,7 +55,7 @@ class _CartButtonState extends State<CartButton> {
     }
   }
 
-  void _addToCart() async {
+  void _toggleCart() async {
     if (_isLoading) return;
 
     setState(() {
@@ -63,36 +63,67 @@ class _CartButtonState extends State<CartButton> {
     });
 
     try {
-      await _service.quickAddToCart();
+      if (_isInCart) {
+        // Если товар уже в корзине - удаляем все записи
+        await _service.removeAllFromCart();
 
-      if (mounted) {
-        setState(() {
-          _isInCart = true;
-        });
-      }
+        if (mounted) {
+          setState(() {
+            _isInCart = false;
+          });
+        }
 
-      widget.onStateChanged?.call(true);
+        widget.onStateChanged?.call(false);
 
-      if (mounted && widget.showSnackbar) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: AppColors.white,
-            content: Text(
-              '${widget.plant.name} добавлен в корзину',
-              style: AppText.medium_16.copyWith(
-                color: AppColors.black_transparent,
+        if (mounted && widget.showSnackbar) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: AppColors.white,
+              content: Text(
+                '${widget.plant.name} удален из корзины',
+                style: AppText.medium_16.copyWith(
+                  color: AppColors.black_transparent,
+                ),
               ),
+              duration: const Duration(seconds: 1),
             ),
-            duration: const Duration(seconds: 1),
-          ),
-        );
+          );
+        }
+      } else {
+        // Если товара нет в корзине - добавляем
+        await _service.quickAddToCart();
+
+        if (mounted) {
+          setState(() {
+            _isInCart = true;
+          });
+        }
+
+        widget.onStateChanged?.call(true);
+
+        if (mounted && widget.showSnackbar) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: AppColors.white,
+              content: Text(
+                '${widget.plant.name} добавлен в корзину',
+                style: AppText.medium_16.copyWith(
+                  color: AppColors.black_transparent,
+                ),
+              ),
+              duration: const Duration(seconds: 1),
+            ),
+          );
+        }
       }
     } catch (e) {
-      widget.onStateChanged?.call(false);
+      widget.onStateChanged?.call(_isInCart);
 
       final errorMessage = AppErrors.isUnauthorizedError(e.toString())
-          ? AppErrors.unauthorizedMessage
-          : 'Не удалось добавить в корзину';
+          ? AppErrors.unauthorizedCartMessage
+          : (_isInCart 
+              ? 'Не удалось удалить из корзины'
+              : 'Не удалось добавить в корзину');
 
       if (mounted && widget.showSnackbar) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -121,7 +152,7 @@ class _CartButtonState extends State<CartButton> {
     final inactiveColor = widget.inactiveColor ?? AppColors.white_dark.withOpacity(0.6);
 
     return GestureDetector(
-      onTap: _addToCart,
+      onTap: _toggleCart,
       child: Container(
         width: widget.size,
         height: widget.size,

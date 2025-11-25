@@ -87,7 +87,7 @@ class _FavoriteButtonState extends State<FavoriteButton> {
       }
     } catch (e) {
       final errorMessage = AppErrors.isUnauthorizedError(e.toString())
-          ? AppErrors.unauthorizedMessage
+          ? AppErrors.unauthorizedWishlistMessage
           : 'Не удалось обновить избранное';
 
       if (mounted && widget.showSnackbar) {

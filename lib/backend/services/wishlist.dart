@@ -275,4 +275,52 @@ class CartWishlistService {
       throw Exception('ошибка обновления количества');
     }
   }
+
+  /// Удаляет все записи товара из корзины (все количество)
+  Future<void> removeAllFromCart() async {
+    try {
+      final isLoggedIn = await isUserLoggedIn();
+      if (!isLoggedIn) {
+        debugPrint('CartWishlistService: Пользователь не авторизован');
+        throw Exception('не авторизован');
+      }
+
+      final token = await getToken();
+      if (token == null) {
+        debugPrint('CartWishlistService: Токен не получен');
+        throw Exception('не авторизован');
+      }
+
+      debugPrint('CartWishlistService: Удаление всех записей товара из корзины');
+      
+      // Получаем корзину и находим все записи с таким plant_id
+      final cart = await CartService.getCart(token);
+      final itemsToRemove = cart.items.where((item) => item.plantId == plant.id).toList();
+      
+      if (itemsToRemove.isEmpty) {
+        debugPrint('CartWishlistService: Товар не найден в корзине');
+        return;
+      }
+
+      // Удаляем все найденные записи
+      for (final item in itemsToRemove) {
+        try {
+          await CartService.removeFromCart(token, item.id);
+          debugPrint('CartWishlistService: Удалена запись ${item.id}');
+        } catch (e) {
+          debugPrint('CartWishlistService: Ошибка удаления записи ${item.id} - $e');
+          // Продолжаем удаление остальных записей даже если одна не удалилась
+        }
+      }
+      
+      debugPrint('CartWishlistService: Все записи товара удалены из корзины');
+    } catch (e) {
+      debugPrint('CartWishlistService: Ошибка удаления всех записей из корзины - $e');
+      if (e.toString().contains('не авторизован')) {
+        throw Exception('не авторизован');
+      } else {
+        throw Exception('ошибка удаления из корзины');
+      }
+    }
+  }
 }

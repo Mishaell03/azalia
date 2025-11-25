@@ -403,7 +403,7 @@ class _CartCardState extends State<CartCard> {
         Icons.add,
         size: 18,
         color: widget.item.quantity >= maxQuantity
-            ? AppColors.grey
+            ? AppColors.grey_light
             : AppColors.brown,
       ),
       padding: EdgeInsets.zero,
