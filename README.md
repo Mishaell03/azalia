@@ -1,16 +1,176 @@
-# azalia
+# 🌿 Azalia - Магазин комнатных растений
 
-A new Flutter project.
+Полнофункциональное мобильное приложение для продажи цветов и растений в горшках. Приложение разработано с использованием **Flutter** (фронтенд) и **Python** (бэкенд) и позволяет покупателям легко выбирать и заказывать растения.
 
-## Getting Started
+## 📱 Функциональность
 
-This project is a starting point for a Flutter application.
+### Для покупателей
+- ✅ **Каталог растений** - просмотр всех доступных товаров с описанием, фото и ценами
+- ✅ **Категоризация** - фильтрация растений по категориям
+- ✅ **Корзина покупок** - добавление товаров и управление заказом
+- ✅ **Система аутентификации** - регистрация и вход в аккаунт через Telegram
+- ✅ **Профиль пользователя** - управление данными профиля
+- ✅ **Список избранного** - сохранение понравившихся товаров
+- ✅ **История покупок** - просмотр совершённых заказов
 
-A few resources to get you started if this is your first Flutter project:
+### В разработке
+- 🔧 **Админ-панель** - управление товарами, заказами и сотрудниками
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+## 🛠️ Технологический стек
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+### Frontend
+- **Flutter** - кроссплатформенный фреймворк
+- **Dart** - язык программирования
+
+### Backend
+- **Python** - язык программирования
+- **Flask** - веб-фреймворк для API
+- **SQLite** - база данных
+
+## 📦 Структура проекта
+
+```
+azalia/
+├── lib/                          # Frontend (Dart/Flutter)
+│   ├── main.dart                # Главный файл приложения
+│   ├── router.dart              # Навигация и маршруты
+│   ├── backend/                 # Интеграция с бэкендом
+│   │   ├── api_config.dart      # Конфигурация API
+│   │   ├── models/              # Модели данных
+│   │   └── services/            # Сервисы для API запросов
+│   ├── components/              # Переиспользуемые компоненты
+│   │   ├── colors.dart          # Палитра цветов
+│   │   ├── text_styles.dart     # Стили текста
+│   │   └── widgets/             # Кастомные виджеты
+│   └── pages/                   # Страницы приложения
+│       ├── auth/
+│       ├── home/
+│       ├── cart/
+│       ├── wishlist/
+│       ├── profile/
+│       └── error/
+│
+├── back/                        # Backend (Python)
+│   ├── app.py                   # Главное приложение Flask
+│   ├── bot.py                   # Бот
+│   ├── db.py                    # Конфигурация БД 
+│   ├── requirements.txt          # Зависимости Python
+│   └── app/                     # Приложение Flask
+│       ├── __init__.py          # Инициализация приложения
+│       ├── models.py            # Модели БД
+│       └── routes/              # API эндпоинты
+│           ├── auth.py          # Аутентификация
+│           ├── plants.py        # Список растений
+│           ├── categories.py    # Категории
+│           ├── cart.py          # Корзина пользователя
+│           └── employees.py     # Сотрудники
+│
+├── android/                     # Рессурсы Android
+├── ios/                         # Рессурсы iOS
+└── assets/                      # Ресурсы приложения
+    ├── fonts/                   # Шрифты
+    ├── icons/                   # Иконки
+    └── images/                  # Изображения
+```
+
+## Установка и запуск
+
+### Требования
+
+#### Frontend
+- [Flutter SDK](https://flutter.dev/docs/get-started/install)
+- [Dart SDK](https://dart.dev/get-dart)
+- Xcode (для iOS) или Android Studio (для Android)
+
+#### Backend
+- Python 3.8+
+
+### Запуск Backend
+
+1. Перейти в папку проекта:
+```bash
+cd azalia/back
+```
+
+2. Создать виртуальное окружение (по возможности, но можно пропустить шаг):
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+3. Установить зависимости:
+```bash
+pip install -r requirements.txt
+```
+
+4. Запустить Flask приложение:
+```bash
+python app.py
+```
+
+Backend будет доступен по адресу `http://localhost:5000/api/***`
+
+### Запуск Frontend
+
+1. Перейти в папку проекта:
+```bash
+cd azalia
+```
+
+2. Получить зависимости:
+```bash
+flutter pub get
+```
+
+3. Запустить приложение:
+
+**На iOS симуляторе:**
+```bash
+flutter run -d device_name
+```
+
+**На Android эмуляторе:**
+```bash
+flutter run -d device_name
+```
+
+**На реальном устройстве:**
+```bash
+flutter run
+```
+
+### Frontend API конфигурация
+Измените базовый URL API в файле [lib/backend/api_config.dart](lib/backend/api_config.dart):
+
+```dart
+const String API_BASE_URL = 'http://localhost:5000/api';
+```
+
+### Backend конфигурация
+Настройка БД и других параметров в файле [back/db.py](back/db.py).
+
+## 🎨 Дизайн
+
+Приложение использует современный Material Design с кастомной палитрой цветов и стилями, определёнными в [lib/components/colors.dart](lib/components/colors.dart) и [lib/components/text_styles.dart](lib/components/text_styles.dart).
+
+## 🔐 Безопасность
+
+- JWT токены для аутентификации
+- Хеширование паролей (bcrypt)
+- Валидация входных данных
+- CORS конфигурация для защиты API
+
+## 📊 Статус проекта
+
+| Компонент | Статус |
+|-----------|--------|
+| Фронтенд (Flutter UI) | ✅ Завершено |
+| Аутентификация | ✅ Завершено |
+| Каталог товаров | ✅ Завершено |
+| Корзина покупок | ✅ Завершено |
+| Профиль пользователя | ✅ Завершено |
+| История заказов | ✅ Завершено |
+| API Backend | ✅ Завершено |
+| Админ-панель | 🔧 В разработке |
+| Система уведомлений | 📋 Планируется |
+| Интеграция платежей | 📋 Планируется |
