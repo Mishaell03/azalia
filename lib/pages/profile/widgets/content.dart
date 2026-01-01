@@ -4,6 +4,7 @@ import 'package:azalia/components/text_styles.dart';
 import 'package:azalia/backend/models/auth.dart';
 import 'package:azalia/pages/profile/widgets/info.dart';
 import 'package:azalia/pages/profile/widgets/setting.dart';
+import 'package:go_router/go_router.dart';
 
 class AppProfileContent extends StatelessWidget {
   final User user;
@@ -117,6 +118,16 @@ class AppProfileContent extends StatelessWidget {
             ),
             child: Column(
               children: [
+                if (isEmployee) ...[
+                  AppProfileSetting(
+                    icon: Icons.admin_panel_settings,
+                    title: 'Админ-панель',
+                    onTap: (){
+                      context.go('/admin');
+                    },
+                  ),
+                ],
+                _buildDivider(),
                 AppProfileSetting(
                   icon: Icons.settings,
                   title: 'Настройки',

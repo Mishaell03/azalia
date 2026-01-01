@@ -1,3 +1,4 @@
+import 'package:azalia/pages/admin/adminpage.dart';
 import 'package:azalia/pages/wishlist/wishlistpage.dart';
 import 'package:go_router/go_router.dart';
 
@@ -35,6 +36,11 @@ class AppRouter {
         path: '/cart',
         name: 'cart',
         builder: (context, state) => const CartPage(),
+      ),
+      GoRoute(
+        path: '/admin',
+        name: 'admin',
+        builder: (context, state) => const AdminPage(),
       ),
     ],
     errorBuilder:(context, state) => ErrorPage(),
