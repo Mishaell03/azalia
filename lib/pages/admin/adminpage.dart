@@ -1,9 +1,11 @@
 import 'package:azalia/components/colors.dart';
+import 'package:azalia/pages/admin/widgets/footer.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class AdminPage extends StatelessWidget {
   const AdminPage({super.key});
-  
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -18,6 +20,7 @@ class AdminPage extends StatelessWidget {
           ],
         ),
       ),
+      bottomNavigationBar: AdminFooter(),
     );
   }
 }
