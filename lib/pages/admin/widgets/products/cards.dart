@@ -1,9 +1,10 @@
 import 'package:azalia/components/colors.dart';
 import 'package:azalia/components/text_styles.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
-class AdminFlowersCards extends StatelessWidget {
-  const AdminFlowersCards({super.key});
+class AdminProductsCards extends StatelessWidget {
+  const AdminProductsCards({super.key});
 
   static const List<Map<String, dynamic>> _carts = [
     {
@@ -11,27 +12,28 @@ class AdminFlowersCards extends StatelessWidget {
       "pic": Icons.add_shopping_cart,
       "heading": "Ожидают заказа",
       "description": "Планируемые позиции для заказа у поставщиков. Формирование новых поставок.",
+      "route": "procurement"
     },
     {
       "name": "Товары на складах",
       "pic": Icons.warehouse_outlined,
       "heading": "Доступные растения",
-      "description":
-          "Горшечные цветы в наличии на складе. Готовы к сборке для заказов или продаже в зале.",
+      "description": "Горшечные цветы в наличии на складе. Готовы к сборке для заказов или продаже в зале.",
+      "route": "warehouse"
     },
     {
       "name": "Товары в доставке",
       "pic": Icons.local_shipping_outlined,
       "heading": "Поступление на склад",
-      "description":
-          "Новая партия растений в пути от поставщика. Ожидается пополнение ассортимента.",
+      "description": "Новая партия растений в пути от поставщика. Ожидается пополнение ассортимента.",
+      "route": "delivery"
     },
     {
-      "name": "Товары в заказах",
+      "name": "Клиентские заказы",
       "pic": Icons.inventory_2_outlined,
-      "heading": "Зарезервировано",
-      "description":
-          "Цветы собраны и ожидают отгрузки клиентам или доставки. Готовы к выдаче.",
+      "heading": "Текущие заказы",
+      "description": "Активные заявки от клиентов, которые требуют сборки, упаковки или подготовки к выдаче.",
+      "route": "orders"
     },
   ];
 
@@ -74,7 +76,9 @@ class AdminFlowersCards extends StatelessWidget {
                         children: [
                           Text(cart['heading']!, style: AppText.medium_18),
                           IconButton(
-                            onPressed: () {},
+                            onPressed: () {
+                              context.go('/admin/products/${cart['route']}');
+                            },
                             icon: Icon(Icons.arrow_circle_right_outlined),
                             iconSize: 30,
                             color: AppColors.grey,

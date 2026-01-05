@@ -6,8 +6,13 @@ import 'package:go_router/go_router.dart';
 class HeaderItems {
   final String route;
   final String title;
+  final bool isButton;
 
-  const HeaderItems({required this.route, required this.title});
+  const HeaderItems({
+    required this.route,
+    required this.title,
+    this.isButton = false,
+  });
 }
 
 class AppHeader extends StatelessWidget implements PreferredSizeWidget {
@@ -23,13 +28,13 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
 
     final header = items.firstWhere(
       (item) => item.route == currentRoute,
-      orElse: () => const HeaderItems(route: '', title: ''),
+      orElse: () => const HeaderItems(route: '', title: '', isButton: false),
     );
 
     return AppBar(
       title: Text(header.title),
       titleTextStyle: AppText.semibold_25.copyWith(color: AppColors.black),
-      automaticallyImplyLeading: false,
+      automaticallyImplyLeading: header.isButton,
     );
   }
 

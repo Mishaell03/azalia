@@ -1,16 +1,15 @@
 import 'package:azalia/components/colors.dart';
-import 'package:azalia/components/widgets/data_pages.dart';
-import 'package:azalia/components/widgets/footer.dart';
 import 'package:azalia/components/widgets/adminHeader.dart';
+import 'package:azalia/components/widgets/data_pages.dart';
 import 'package:flutter/material.dart';
 
-class AdminPageAnalytics extends StatelessWidget {
-  const AdminPageAnalytics({super.key});
+class AdminProductsCartWarehouse extends StatelessWidget {
+  const AdminProductsCartWarehouse({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppHeader(items: adminHeaderItems),
+      appBar: AppHeader(items: adminProductsHeaderItems),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -21,7 +20,6 @@ class AdminPageAnalytics extends StatelessWidget {
           ],
         ),
       ),
-      bottomNavigationBar: AppFooter(items: adminFooterItems),
     );
   }
 }

@@ -2,6 +2,10 @@ import 'package:azalia/pages/admin/pages/analytics.dart';
 import 'package:azalia/pages/admin/pages/flowers.dart';
 import 'package:azalia/pages/admin/pages/settings.dart';
 import 'package:azalia/pages/admin/pages/user.dart';
+import 'package:azalia/pages/admin/widgets/products/cards/delivery.dart';
+import 'package:azalia/pages/admin/widgets/products/cards/orders.dart';
+import 'package:azalia/pages/admin/widgets/products/cards/procurement.dart';
+import 'package:azalia/pages/admin/widgets/products/cards/warehouse.dart';
 import 'package:azalia/pages/wishlist/wishlistpage.dart';
 import 'package:go_router/go_router.dart';
 
@@ -46,9 +50,30 @@ class AppRouter {
         builder: (context, state) => const AdminPageAnalytics(),
         routes: [
           GoRoute(
-            path: 'settings',
-            name: 'adminSettings',
-            builder: (context, state) => const AdminPageSettings(),
+            path: 'products',
+            name: 'adminProducts',
+            builder: (context, state) => const AdminPageProducts(),
+            routes: [
+              GoRoute(
+                path: 'procurement',
+                name: 'adminProductsProcurement',
+                builder: (context, state) => const AdminProductsCartProcurement(),
+              ),
+              GoRoute(
+                path: 'warehouse',
+                name: 'adminProductsWarehouse',
+                builder: (context, state) => const AdminProductsCartWarehouse(),
+              ),
+              GoRoute(
+                path: 'delivery',
+                name: 'adminProductsDelivery',
+                builder: (context, state) => const AdminProductsCartDelivery(),
+              ),GoRoute(
+                path: 'orders',
+                name: 'adminProductsOrders',
+                builder: (context, state) => const AdminProductsCartOrders(),
+              ),
+            ],
           ),
           GoRoute(
             path: 'users',
@@ -56,13 +81,13 @@ class AppRouter {
             builder: (context, state) => const AdminPageUser(),
           ),
           GoRoute(
-            path: 'flowers',
-            name: 'adminFlowers',
-            builder: (context, state) => const AdminPageFlowers(),
+            path: 'settings',
+            name: 'adminSettings',
+            builder: (context, state) => const AdminPageSettings(),
           ),
         ],
       ),
     ],
-    errorBuilder:(context, state) => ErrorPage(),
+    errorBuilder: (context, state) => ErrorPage(),
   );
 }

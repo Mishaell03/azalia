@@ -11,19 +11,21 @@ const List<FooterItems> userFooterItems = [
 const List<FooterItems> adminFooterItems = [
   // если менять иконки то надо изменить и в footer.dart _iconFromString
   FooterItems(icon: 'analytics_outlined', route: '/admin', isSvg: false),
-  FooterItems(icon: 'local_florist', route: '/admin/flowers', isSvg: false),
+  FooterItems(icon: 'local_florist', route: '/admin/products', isSvg: false),
   FooterItems(icon: 'assets/icons/Home.svg', route: '/'),
-  FooterItems(
-    icon: 'supervised_user_circle_outlined',
-    route: '/admin/users',
-    isSvg: false,
-  ),
+  FooterItems(icon: 'supervised_user_circle_outlined', route: '/admin/users', isSvg: false),
   FooterItems(icon: 'settings', route: '/admin/settings', isSvg: false),
 ];
 
 const List<HeaderItems> adminHeaderItems = [
   HeaderItems(route: '/admin', title: "Админ-аналитика"),
-  HeaderItems(route: '/admin/flowers', title: "Админ-товары"),
+  HeaderItems(route: '/admin/products', title: "Админ-товары"),
   HeaderItems(route: '/admin/users', title: "Админ-пользователи"),
   HeaderItems(route: '/admin/settings', title: "Админ-настройки"),
+];
+const List<HeaderItems> adminProductsHeaderItems = [
+  HeaderItems(route: '/admin/products/procurement', title: "Админ-закупки", isButton: true),
+  HeaderItems(route: '/admin/products/warehouse', title: "Админ-склад", isButton: true),
+  HeaderItems(route: '/admin/products/delivery', title: "Админ-доставки", isButton: true),
+  HeaderItems(route: '/admin/products/orders', title: "Админ-заказы", isButton: true),
 ];
