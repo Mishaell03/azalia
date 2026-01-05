@@ -19,8 +19,8 @@ IconData _iconFromString(String name) {
   switch (name) {
     case 'analytics_outlined':
       return Icons.analytics_outlined;
-    case 'local_shipping_outlined':
-      return Icons.local_shipping_outlined;
+    case 'local_florist':
+      return Icons.local_florist;
     case 'home_filled':
       return Icons.home_filled;
     case 'supervised_user_circle_outlined':
@@ -117,7 +117,7 @@ class _AppFooter extends State<AppFooter> {
               colorFilter: ColorFilter.mode(_color, BlendMode.srcIn),
             )
           else
-            Icon(_iconFromString(item.icon), size: 24, color: _color),
+            Icon(_iconFromString(item.icon), size: 25, color: _color),
           const SizedBox(height: 8),
           Container(
             width: 10,

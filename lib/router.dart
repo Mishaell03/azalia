@@ -1,5 +1,7 @@
-import 'package:azalia/pages/admin/pages/adminpage.dart';
+import 'package:azalia/pages/admin/pages/analytics.dart';
+import 'package:azalia/pages/admin/pages/flowers.dart';
 import 'package:azalia/pages/admin/pages/settings.dart';
+import 'package:azalia/pages/admin/pages/user.dart';
 import 'package:azalia/pages/wishlist/wishlistpage.dart';
 import 'package:go_router/go_router.dart';
 
@@ -41,12 +43,24 @@ class AppRouter {
       GoRoute(
         path: '/admin',
         name: 'admin',
-        builder: (context, state) => const AdminPage(),
-      ),
-      GoRoute(
-        path: '/admin/settings',
-        name: 'adminSettings',
-        builder: (context, state) => const AdminPageSettings(),
+        builder: (context, state) => const AdminPageAnalytics(),
+        routes: [
+          GoRoute(
+            path: 'settings',
+            name: 'adminSettings',
+            builder: (context, state) => const AdminPageSettings(),
+          ),
+          GoRoute(
+            path: 'users',
+            name: 'adminUsers',
+            builder: (context, state) => const AdminPageUser(),
+          ),
+          GoRoute(
+            path: 'flowers',
+            name: 'adminFlowers',
+            builder: (context, state) => const AdminPageFlowers(),
+          ),
+        ],
       ),
     ],
     errorBuilder:(context, state) => ErrorPage(),

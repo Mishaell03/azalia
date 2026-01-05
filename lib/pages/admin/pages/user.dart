@@ -4,8 +4,8 @@ import 'package:azalia/components/widgets/footer.dart';
 import 'package:azalia/components/widgets/adminHeader.dart';
 import 'package:flutter/material.dart';
 
-class AdminPageSettings extends StatelessWidget {
-  const AdminPageSettings({super.key});
+class AdminPageUser extends StatelessWidget {
+  const AdminPageUser({super.key});
 
   @override
   Widget build(BuildContext context) {

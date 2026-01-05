@@ -1,15 +1,17 @@
 import 'package:azalia/components/colors.dart';
-import 'package:azalia/components/widgets/data_footer.dart';
+import 'package:azalia/components/text_styles.dart';
+import 'package:azalia/components/widgets/data_pages.dart';
 import 'package:azalia/components/widgets/footer.dart';
+import 'package:azalia/components/widgets/adminHeader.dart';
 import 'package:flutter/material.dart';
 
-class AdminPage extends StatelessWidget {
-  const AdminPage({super.key});
+class AdminPageAnalytics extends StatelessWidget {
+  const AdminPageAnalytics({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Админ-аналитика"), centerTitle: true),
+      appBar: AppHeader(items: adminHeaderItems),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
