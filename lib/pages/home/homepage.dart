@@ -1,3 +1,4 @@
+import 'package:azalia/components/widgets/data_footer.dart';
 import 'package:flutter/material.dart';
 import 'package:azalia/components/colors.dart';
 import 'package:azalia/components/text_styles.dart';
@@ -169,7 +170,7 @@ class _HomePage extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: HomeHeader(),
-      bottomNavigationBar: const AppFooter(),
+      bottomNavigationBar: const AppFooter(items: userFooterItems),
       body: _isLoading
           ? const LoadingWidget()
           : _error.isNotEmpty

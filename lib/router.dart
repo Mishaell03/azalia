@@ -1,4 +1,5 @@
-import 'package:azalia/pages/admin/adminpage.dart';
+import 'package:azalia/pages/admin/pages/adminpage.dart';
+import 'package:azalia/pages/admin/pages/settings.dart';
 import 'package:azalia/pages/wishlist/wishlistpage.dart';
 import 'package:go_router/go_router.dart';
 
@@ -41,6 +42,11 @@ class AppRouter {
         path: '/admin',
         name: 'admin',
         builder: (context, state) => const AdminPage(),
+      ),
+      GoRoute(
+        path: '/admin/settings',
+        name: 'adminSettings',
+        builder: (context, state) => const AdminPageSettings(),
       ),
     ],
     errorBuilder:(context, state) => ErrorPage(),

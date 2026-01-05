@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:azalia/components/widgets/data_footer.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:azalia/components/colors.dart';
@@ -353,7 +354,7 @@ class _ProfilePageState extends State<ProfilePage> {
       body: user == null
           ? const AppProfileLoggeg()
           : _buildProfileWithCollapsingHeader(user, isEmployee, position),
-      bottomNavigationBar: const AppFooter(),
+      bottomNavigationBar: const AppFooter(items: userFooterItems),
     );
   }
 

@@ -1,3 +1,4 @@
+import 'package:azalia/components/widgets/data_footer.dart';
 import 'package:azalia/pages/cart/widgets/unauthorized.dart';
 import 'package:flutter/material.dart';
 import 'package:azalia/components/colors.dart';
@@ -265,7 +266,7 @@ class _CartPageState extends State<CartPage> {
         itemCount: _totalItems,
         onClearCart: _cartItems.isNotEmpty ? _clearCart : null,
       ),
-      bottomNavigationBar: const AppFooter(),
+      bottomNavigationBar: const AppFooter(items: userFooterItems),
       body: _buildBody(),
     );
   }

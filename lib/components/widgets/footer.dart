@@ -3,50 +3,73 @@ import 'package:azalia/components/colors.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:go_router/go_router.dart';
 
+class FooterItems {
+  final String icon;
+  final String route;
+  final bool isSvg;
+
+  const FooterItems({
+    required this.icon,
+    required this.route,
+    this.isSvg = true,
+  });
+}
+
+IconData _iconFromString(String name) {
+  switch (name) {
+    case 'analytics_outlined':
+      return Icons.analytics_outlined;
+    case 'local_shipping_outlined':
+      return Icons.local_shipping_outlined;
+    case 'home_filled':
+      return Icons.home_filled;
+    case 'supervised_user_circle_outlined':
+      return Icons.supervised_user_circle_outlined;
+    case 'settings':
+      return Icons.settings;
+    default:
+      return Icons.help_outline;
+  }
+}
+
+
 class AppFooter extends StatefulWidget {
-  const AppFooter({super.key});
+  final List<FooterItems> items;
+
+  const AppFooter({super.key, required this.items});
 
   @override
   State<AppFooter> createState() => _AppFooter();
 }
 
 class _AppFooter extends State<AppFooter> {
-  final List<String> _footerItems = [
-    'assets/icons/Home.svg',
-    'assets/icons/Love.svg',
-    'assets/icons/Bag.svg',
-    'assets/icons/User.svg',
-  ];
-
-  final List<String> _routes = [
-    '/',
-    '/love',
-    '/cart',
-    '/profile',
-  ];
-
   int _getCurrentIndex(BuildContext context) {
     final String currentLocation = GoRouterState.of(context).uri.toString();
-    
-    for (int i = 0; i < _routes.length; i++) {
-      if (currentLocation == _routes[i] || 
-          currentLocation.startsWith(_routes[i] + '/')) {
-        return i;
+    int matchedIndex = 0;
+    int longestMatch = -1;
+
+    for (int i = 0; i < widget.items.length; i++) {
+      final route = widget.items[i].route;
+      if (currentLocation == route || currentLocation.startsWith('$route/')) {
+        if (route.length > longestMatch) {
+          longestMatch = route.length;
+          matchedIndex = i;
+        }
       }
     }
-    return 0;
+    return matchedIndex;
   }
 
   void _onItemTapped(int index, BuildContext context) {
-    if (index < _routes.length) {
-      context.go(_routes[index]);
+    if (index < widget.items.length) {
+      context.go(widget.items[index].route);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final int currentIndex = _getCurrentIndex(context);
-    
+
     return Container(
       height: 75,
       decoration: BoxDecoration(
@@ -61,9 +84,9 @@ class _AppFooter extends State<AppFooter> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: List.generate(
-          _footerItems.length,
+          widget.items.length,
           (index) => _buildFooterIco(
-            _footerItems[index],
+            widget.items[index],
             index,
             context,
             isActive: index == currentIndex,
@@ -74,26 +97,27 @@ class _AppFooter extends State<AppFooter> {
   }
 
   Widget _buildFooterIco(
-    String icoPath, 
-    int index, 
+    FooterItems item,
+    int index,
     BuildContext context, {
-    bool isActive = false
+    bool isActive = false,
   }) {
+    final _color = isActive ? AppColors.brown : AppColors.grey_light;
     return GestureDetector(
       onTap: () => _onItemTapped(index, context),
       behavior: HitTestBehavior.opaque,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          SvgPicture.asset(
-            icoPath,
-            width: 24,
-            height: 24,
-            colorFilter: ColorFilter.mode(
-              isActive ? AppColors.brown : AppColors.grey_light,
-              BlendMode.srcIn,
-            ),
-          ),
+          if (item.isSvg)
+            SvgPicture.asset(
+              item.icon,
+              width: 24,
+              height: 24,
+              colorFilter: ColorFilter.mode(_color, BlendMode.srcIn),
+            )
+          else
+            Icon(_iconFromString(item.icon), size: 24, color: _color),
           const SizedBox(height: 8),
           Container(
             width: 10,
