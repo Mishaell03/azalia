@@ -4,6 +4,7 @@ import 'package:azalia/components/colors.dart';
 import 'package:azalia/components/text_styles.dart';
 import 'package:azalia/components/widgets/adminHeader.dart';
 import 'package:azalia/components/widgets/data_pages.dart';
+import 'package:azalia/pages/admin/widgets/products/cards/widget/textField.dart';
 import 'package:flutter/material.dart';
 
 class AdminProductsCartWarehouse extends StatelessWidget {
@@ -33,7 +34,7 @@ class AdminProductsCartWarehouse extends StatelessWidget {
             // добавить UI
             return const Center(child: Text("Список товаров пуст :("));
           }
-          // UI
+          // UI`
           return ListView.builder(
             itemCount: plants.length,
             itemBuilder: (context, index) {
@@ -47,6 +48,7 @@ class AdminProductsCartWarehouse extends StatelessWidget {
   }
 }
 
+// сама карточка
 class _Crad extends StatelessWidget {
   final Plant plant;
 
@@ -73,7 +75,7 @@ class _Crad extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: AppText.bold_18.copyWith(color: AppColors.black),
                 ),
-                SizedBox(height: 5,),
+                SizedBox(height: 5),
                 Text(
                   '${plant.basePrice} ₽',
                   style: AppText.medium_16.copyWith(color: AppColors.black),
@@ -90,9 +92,14 @@ class _Crad extends StatelessWidget {
                       ),
                     ),
                     IconButton.outlined(
-                      onPressed: () {},
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (_) => OpenDialog(plant: plant),
+                        );
+                      },
                       style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: AppColors.brown, width: 1)
+                        side: BorderSide(color: AppColors.brown, width: 1),
                       ),
                       icon: const Icon(Icons.edit),
                       color: AppColors.brown,
@@ -106,6 +113,151 @@ class _Crad extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// окно редактирования
+class OpenDialog extends StatefulWidget {
+  final Plant plant;
+
+  const OpenDialog({super.key, required this.plant});
+
+  @override
+  State<OpenDialog> createState() => _OpenDialog();
+}
+
+class _OpenDialog extends State<OpenDialog> {
+  late TextEditingController nameController,
+      priceController,
+      descriptionController,
+      careInstructionsController,
+      lightRequirementsController,
+      wateringFrequencyController,
+      heightCmController,
+      plantTypeController,
+      recommendedPotSizeController,
+      ratingController;
+
+  @override
+  void initState() {
+    super.initState();
+    nameController = TextEditingController(text: widget.plant.name);
+    priceController = TextEditingController(
+      text: widget.plant.basePrice.toString(),
+    );
+
+    descriptionController = TextEditingController(
+      text: widget.plant.description,
+    );
+    careInstructionsController = TextEditingController(
+      text: widget.plant.careInstructions,
+    );
+    lightRequirementsController = TextEditingController(
+      text: widget.plant.lightRequirements,
+    );
+    wateringFrequencyController = TextEditingController(
+      text: widget.plant.wateringFrequency,
+    );
+    heightCmController = TextEditingController(
+      text: widget.plant.heightCm.toString(),
+    );
+    plantTypeController = TextEditingController(text: widget.plant.plantType);
+    recommendedPotSizeController = TextEditingController(
+      text: widget.plant.recommendedPotSize,
+    );
+    ratingController = TextEditingController(
+      text: widget.plant.rating.toString(),
+    );
+  }
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    priceController.dispose();
+    descriptionController.dispose();
+    careInstructionsController.dispose();
+    lightRequirementsController.dispose();
+    wateringFrequencyController.dispose();
+    heightCmController.dispose();
+    plantTypeController.dispose();
+    recommendedPotSizeController.dispose();
+    ratingController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              Text('Редактирование товара'),
+              SizedBox(height: 20),
+              Column(
+                children: [
+                  Image.network(widget.plant.fullImageUrl),
+                  Text('id: ${widget.plant.id}'),
+                  AppTextField(
+                    controller: nameController,
+                    labelText: 'Название товара',
+                  ),
+                  SizedBox(height: 20),
+                  AppTextField(
+                    controller: priceController,
+                    labelText: 'Ценв рубли',
+                    isDouble: true,
+                  ),
+                  SizedBox(height: 20),
+                  AppTextField(
+                    controller: descriptionController,
+                    labelText: 'Описание товара',
+                  ),
+                  SizedBox(height: 20),
+                  AppTextField(
+                    controller: careInstructionsController,
+                    labelText: 'Инструкция использования',
+                  ),
+                  SizedBox(height: 20),
+                  AppTextField(
+                    controller: lightRequirementsController,
+                    labelText: 'Требованию к освещению',//отдельная кнопка
+                  ),
+                  SizedBox(height: 20),
+                  AppTextField(
+                    controller: wateringFrequencyController,
+                    labelText: 'Требованию к поливу',//отдельная кнопка
+                  ),
+                  SizedBox(height: 20),
+                  AppTextField(
+                    controller: heightCmController,
+                    labelText: 'Высота',
+                    isDouble: true,
+                  ),
+                  SizedBox(height: 20),
+                  AppTextField(
+                    controller: plantTypeController,
+                    labelText: 'Тип растения',//отдельная кнопка
+                  ),
+                  SizedBox(height: 20),
+                  AppTextField(
+                    controller: recommendedPotSizeController,
+                    labelText: 'Рекомендуемый размер горшка',
+                  ),
+                  SizedBox(height: 20),
+                  AppTextField(
+                    controller: ratingController,
+                    labelText: 'Рейтинг',
+                    isDouble: true,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
