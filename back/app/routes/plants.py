@@ -122,10 +122,25 @@ def get_plants():
         
         plants = query.all()
 
+        data = []
+        for plant in plants:
+            pd = plant.to_dict()
+            pt = getattr(plant, 'plant_type', None)
+            if pt is not None:
+                try:
+                    pid = int(pt)
+                    cat = Category.query.get(pid)
+                    if cat:
+                        pd['plant_type'] = cat.name
+                except (TypeError, ValueError):
+                    # if plant_type is already a name, keep it
+                    pass
+            data.append(pd)
+
         return jsonify({
             'success': True,
-            'data': [plant.to_dict() for plant in plants],
-            'count': len(plants)
+            'data': data,
+            'count': len(data)
         })
     
     except Exception as e:
@@ -154,10 +169,22 @@ def get_plant(plant_id):
             }), 404
         
         plant_data = plant.to_dict()
-        
+
+        # Если в БД хранится id типа растения (plant_type), подменяем на name из categories
+        plant_type_val = getattr(plant, 'plant_type', None)
+        if plant_type_val is not None:
+            try:
+                plant_type_id = int(plant_type_val)
+                cat = Category.query.get(plant_type_id)
+                if cat:
+                        plant_data['plant_type'] = cat.name
+            except (TypeError, ValueError):
+                # plant_type уже строка — оставляем как есть
+                pass
+
         if plant.category:
             plant_data['category'] = plant.category.to_dict()
-        
+
         if plant.supplier:
             plant_data['supplier'] = plant.supplier.to_dict()
         
@@ -543,9 +570,21 @@ def get_categories():
 @bp.route('/filters', methods=['GET'], endpoint='plants_filters')
 def get_filters():
     try:
-        plant_types = db.session.query(PotPlant.plant_type).distinct().all()
-        plant_types = [pt[0] for pt in plant_types if pt[0]]
-        
+        # Получаем уникальные значения plant_type и мапим их на имена категорий
+        raw_pts = db.session.query(PotPlant.plant_type).distinct().all()
+        raw_pts = [pt[0] for pt in raw_pts if pt[0] is not None]
+
+        plant_types = []
+        for raw in raw_pts:
+            try:
+                cid = int(raw)
+                cat = Category.query.get(cid)
+                if cat:
+                    plant_types.append({'id': cid, 'name': cat.name})
+            except (TypeError, ValueError):
+                # если там строка — добавляем как есть
+                plant_types.append({'id': None, 'name': raw})
+
         categories = Category.query.all()
 
         price_range = db.session.query(
