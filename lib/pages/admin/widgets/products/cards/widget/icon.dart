@@ -64,3 +64,10 @@ final lightItems = [
   IconItem(value: 'partial_shade', ico: Icons.wb_twilight, label: 'Полутень'),
   IconItem(value: 'shade', ico: Icons.nights_stay, label: 'Тень'),
 ];
+
+final potSizeItems = [
+  IconItem(value: 'S', ico: Icons.crop_square, label: 'S'),
+  IconItem(value: 'M', ico: Icons.crop_5_4, label: 'M'),
+  IconItem(value: 'L', ico: Icons.check_box_outline_blank, label: 'L'),
+  IconItem(value: 'XL', ico: Icons.crop_din, label: 'XL'),
+];

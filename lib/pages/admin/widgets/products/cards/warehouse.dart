@@ -6,6 +6,7 @@ import 'package:azalia/components/widgets/adminHeader.dart';
 import 'package:azalia/components/widgets/data_pages.dart';
 import 'package:azalia/pages/admin/widgets/products/cards/widget/category.dart';
 import 'package:azalia/pages/admin/widgets/products/cards/widget/icon.dart';
+import 'package:azalia/pages/admin/widgets/products/cards/widget/imageEdit.dart';
 import 'package:azalia/pages/admin/widgets/products/cards/widget/textField.dart';
 import 'package:flutter/material.dart';
 
@@ -132,6 +133,7 @@ class OpenDialog extends StatefulWidget {
 
 class _OpenDialog extends State<OpenDialog> {
   int? selectedCategoryId;
+  late String selectedPotSize;
   late Future<List<Category>> categoriesFuture;
   late String lightValue;
   late TextEditingController nameController,
@@ -183,6 +185,8 @@ class _OpenDialog extends State<OpenDialog> {
     categoriesFuture = PlantService().getCategories();
     selectedCategoryId = widget.plant.categoryId;
     nameController = TextEditingController(text: widget.plant.name ?? '');
+
+    selectedPotSize = widget.plant.recommendedPotSize ?? 'M';
   }
 
   @override
@@ -217,7 +221,7 @@ class _OpenDialog extends State<OpenDialog> {
                     children: [
                       Column(
                         children: [
-                          Image.network(widget.plant.fullImageUrl, width: 113),
+                          ImageEdit(fullImageUrl: widget.plant.fullImageUrl),
                           SizedBox(height: 3),
                           Text(
                             'id: ${widget.plant.id}',
@@ -266,28 +270,6 @@ class _OpenDialog extends State<OpenDialog> {
                     labelText: 'Инструкция использования',
                     necessarily: false,
                   ),
-                  IconValueSelector(
-                    items: lightItems,
-                    selectedValue: lightValue,
-                    onSelected: (value) {
-                      setState(() {
-                        lightValue = value;
-                        lightRequirementsController.text = value;
-                      });
-                    },
-                  ),
-                  SizedBox(height: 15),
-                  AppTextField(
-                    controller: wateringFrequencyController,
-                    labelText: 'Требованию к поливу',
-                    necessarily: false,
-                  ),
-                  AppTextField(
-                    controller: heightCmController,
-                    labelText: 'Высота см',
-                    necessarily: false,
-                    isDouble: true,
-                  ),
                   FutureBuilder<List<Category>>(
                     future: categoriesFuture,
                     builder: (context, snapshot) {
@@ -333,9 +315,51 @@ class _OpenDialog extends State<OpenDialog> {
                     },
                   ),
                   SizedBox(height: 15),
+                  Text(
+                    'Требуемое освещение:',
+                    style: AppText.medium_12.copyWith(
+                      color: AppColors.black_transparent,
+                    ),
+                  ),
+                  SizedBox(height: 10),
+                  IconValueSelector(
+                    items: lightItems,
+                    selectedValue: lightValue,
+                    onSelected: (value) {
+                      setState(() {
+                        lightValue = value;
+                        lightRequirementsController.text = value;
+                      });
+                    },
+                  ),
+                  SizedBox(height: 15),
+                  Text(
+                    'Рекомендуемый размер горшка:',
+                    style: AppText.medium_12.copyWith(
+                      color: AppColors.black_transparent,
+                    ),
+                  ),
+                  SizedBox(height: 10),
+                  IconValueSelector(
+                    items: potSizeItems,
+                    selectedValue: selectedPotSize,
+                    onSelected: (String value) {
+                      setState(() {
+                        selectedPotSize = value;
+                      });
+                    },
+                  ),
+                  SizedBox(height: 15),
                   AppTextField(
-                    controller: recommendedPotSizeController,
-                    labelText: 'Рекомендуемый размер горшка',
+                    controller: wateringFrequencyController,
+                    labelText: 'Требованию к поливу',
+                    necessarily: false,
+                  ),
+                  AppTextField(
+                    controller: heightCmController,
+                    labelText: 'Высота см',
+                    necessarily: false,
+                    isDouble: true,
                   ),
                   AppTextField(
                     controller: ratingController,

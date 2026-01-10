@@ -11,7 +11,7 @@ class AppEditProfile extends StatefulWidget {
   final TextEditingController phoneController;
   final File? selectedImageFile;
   final Function() onUpdateProfile;
-  final Function(File?) onImageUpdated; // Новый колбэк для обновления фото
+  final Function(File?) onImageUpdated;
 
   const AppEditProfile({
     super.key,
@@ -19,7 +19,7 @@ class AppEditProfile extends StatefulWidget {
     required this.phoneController,
     required this.selectedImageFile,
     required this.onUpdateProfile,
-    required this.onImageUpdated, // Обязательный параметр
+    required this.onImageUpdated,
   });
 
   @override
