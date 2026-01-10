@@ -33,9 +33,9 @@ class CartItem {
       userId: json['user_id'] ?? 0,
       plantId: json['plant_id'] ?? 0,
       quantity: json['quantity'] ?? 1,
-      potColor: json['pot_color'],
-      potSize: json['pot_size'],
-      potMaterial: json['pot_material'],
+      potColor: json['pot_color']?.toString(),
+      potSize: json['pot_size']?.toString(),
+      potMaterial: json['pot_material']?.toString(),
       plantUnitPrice: (json['plant_unit_price'] ?? 0).toDouble(),
       potUnitPrice: (json['pot_unit_price'] ?? 0).toDouble(),
       totalPrice: (json['total_price'] ?? 0).toDouble(),
@@ -154,8 +154,8 @@ class PotMaterial {
   factory PotMaterial.fromJson(Map<String, dynamic> json) {
     return PotMaterial(
       id: json['id'] ?? 0,
-      name: json['name'] ?? '',
-      description: json['description'],
+      name: json['name']?.toString() ?? '',
+      description: json['description']?.toString(),
     );
   }
 }
@@ -180,8 +180,8 @@ class PotSize {
   factory PotSize.fromJson(Map<String, dynamic> json) {
     return PotSize(
       id: json['id'] ?? 0,
-      code: json['code'] ?? '',
-      name: json['name'] ?? '',
+      code: json['code']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
       diameterCm: json['diameter_cm'],
       heightCm: json['height_cm'],
       volumeLiters: (json['volume_liters'] ?? 0).toDouble(),
@@ -199,8 +199,8 @@ class PotColor {
   factory PotColor.fromJson(Map<String, dynamic> json) {
     return PotColor(
       id: json['id'] ?? 0,
-      name: json['name'] ?? '',
-      hexCode: json['hex_code'],
+      name: json['name']?.toString() ?? '',
+      hexCode: json['hex_code']?.toString(),
     );
   }
 }
@@ -250,8 +250,8 @@ class PotPriceResponse {
   factory PotPriceResponse.fromJson(Map<String, dynamic> json) {
     return PotPriceResponse(
       price: (json['price'] ?? 0).toDouble(),
-      material: json['material'] ?? '',
-      size: json['size'] ?? '',
+      material: json['material']?.toString() ?? '',
+      size: json['size']?.toString() ?? '',
     );
   }
 }

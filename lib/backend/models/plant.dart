@@ -37,21 +37,21 @@ class Plant {
 
   factory Plant.fromJson(Map<String, dynamic> json) {
     return Plant(
-      id: json['id'],
-      name: json['name'],
-      description: json['description'] ?? '',
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      name: json['name']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
       basePrice: (json['base_price'] as num?)?.toDouble() ?? 0.0,
       inStock: json['in_stock'] ?? false,
-      careInstructions: json['care_instructions'] ?? '',
-      lightRequirements: json['light_requirements'] ?? '',
-      wateringFrequency: json['watering_frequency'] ?? '',
-      heightCm: json['height_cm'] ?? 0,
-      plantType: json['plant_type'],
-      recommendedPotSize: json['recommended_pot_size'],
+      careInstructions: json['care_instructions']?.toString() ?? '',
+      lightRequirements: json['light_requirements']?.toString() ?? '',
+      wateringFrequency: json['watering_frequency']?.toString() ?? '',
+      heightCm: (json['height_cm'] as num?)?.toInt() ?? 0,
+      plantType: json['plant_type']?.toString(),
+      recommendedPotSize: json['recommended_pot_size']?.toString(),
       rating: (json['rating'] as num?)?.toDouble(),
-      imageUrl: json['image_url'],
-      stockQuantity: json['stock_quantity'] ?? 0,
-      categoryId: json['category_id'],
+      imageUrl: json['image_url']?.toString(),
+      stockQuantity: (json['stock_quantity'] as num?)?.toInt() ?? 0,
+      categoryId: (json['category_id'] as num?)?.toInt(),
     );
   }
 
