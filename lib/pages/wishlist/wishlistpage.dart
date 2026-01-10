@@ -1,5 +1,5 @@
 import 'package:azalia/backend/services/cart.dart';
-import 'package:azalia/components/widgets/data_footer.dart';
+import 'package:azalia/components/widgets/data_pages.dart';
 import 'package:flutter/material.dart';
 import 'package:azalia/components/colors.dart';
 import 'package:azalia/components/text_styles.dart';

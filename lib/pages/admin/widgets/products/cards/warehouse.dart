@@ -4,6 +4,8 @@ import 'package:azalia/components/colors.dart';
 import 'package:azalia/components/text_styles.dart';
 import 'package:azalia/components/widgets/adminHeader.dart';
 import 'package:azalia/components/widgets/data_pages.dart';
+import 'package:azalia/pages/admin/widgets/products/cards/widget/category.dart';
+import 'package:azalia/pages/admin/widgets/products/cards/widget/icon.dart';
 import 'package:azalia/pages/admin/widgets/products/cards/widget/textField.dart';
 import 'package:flutter/material.dart';
 
@@ -129,6 +131,9 @@ class OpenDialog extends StatefulWidget {
 }
 
 class _OpenDialog extends State<OpenDialog> {
+  int? selectedCategoryId;
+  late Future<List<Category>> categoriesFuture;
+  late String lightValue;
   late TextEditingController nameController,
       priceController,
       descriptionController,
@@ -143,11 +148,10 @@ class _OpenDialog extends State<OpenDialog> {
   @override
   void initState() {
     super.initState();
-    nameController = TextEditingController(text: widget.plant.name);
+    // все поля цветов
     priceController = TextEditingController(
       text: widget.plant.basePrice.toString(),
     );
-
     descriptionController = TextEditingController(
       text: widget.plant.description,
     );
@@ -170,6 +174,15 @@ class _OpenDialog extends State<OpenDialog> {
     ratingController = TextEditingController(
       text: widget.plant.rating.toString(),
     );
+    // освещение для цветов
+    lightValue = widget.plant.lightRequirements.isNotEmpty
+        ? widget.plant.lightRequirements
+        : lightItems.first.value;
+    lightRequirementsController.text = lightValue;
+    // категории цветов
+    categoriesFuture = PlantService().getCategories();
+    selectedCategoryId = widget.plant.categoryId;
+    nameController = TextEditingController(text: widget.plant.name ?? '');
   }
 
   @override
@@ -199,55 +212,131 @@ class _OpenDialog extends State<OpenDialog> {
               SizedBox(height: 20),
               Column(
                 children: [
-                  Image.network(widget.plant.fullImageUrl),
-                  Text('id: ${widget.plant.id}'),
-                  AppTextField(
-                    controller: nameController,
-                    labelText: 'Название товара',
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Column(
+                        children: [
+                          Image.network(widget.plant.fullImageUrl, width: 113),
+                          SizedBox(height: 3),
+                          Text(
+                            'id: ${widget.plant.id}',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            softWrap: true,
+                          ),
+                        ],
+                      ),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            AppTextField(
+                              controller: nameController,
+                              labelText: 'Название товара',
+                            ),
+                            AppTextField(
+                              controller: priceController,
+                              labelText: 'Цена рубли',
+                              isDouble: true,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  SizedBox(height: 20),
-                  AppTextField(
-                    controller: priceController,
-                    labelText: 'Ценв рубли',
-                    isDouble: true,
+                  Text(
+                    widget.plant.inStock
+                        ? 'В наличии ${widget.plant.stockQuantity} шт.'
+                        : 'Нет на складе',
+                    style: AppText.medium_16.copyWith(
+                      color: widget.plant.inStock
+                          ? AppColors.black_transparent
+                          : AppColors.error,
+                    ),
                   ),
                   SizedBox(height: 20),
                   AppTextField(
                     controller: descriptionController,
                     labelText: 'Описание товара',
+                    necessarily: false,
                   ),
-                  SizedBox(height: 20),
                   AppTextField(
                     controller: careInstructionsController,
                     labelText: 'Инструкция использования',
+                    necessarily: false,
                   ),
-                  SizedBox(height: 20),
-                  AppTextField(
-                    controller: lightRequirementsController,
-                    labelText: 'Требованию к освещению',//отдельная кнопка
+                  IconValueSelector(
+                    items: lightItems,
+                    selectedValue: lightValue,
+                    onSelected: (value) {
+                      setState(() {
+                        lightValue = value;
+                        lightRequirementsController.text = value;
+                      });
+                    },
                   ),
-                  SizedBox(height: 20),
+                  SizedBox(height: 15),
                   AppTextField(
                     controller: wateringFrequencyController,
-                    labelText: 'Требованию к поливу',//отдельная кнопка
+                    labelText: 'Требованию к поливу',
+                    necessarily: false,
                   ),
-                  SizedBox(height: 20),
                   AppTextField(
                     controller: heightCmController,
-                    labelText: 'Высота',
+                    labelText: 'Высота см',
+                    necessarily: false,
                     isDouble: true,
                   ),
-                  SizedBox(height: 20),
-                  AppTextField(
-                    controller: plantTypeController,
-                    labelText: 'Тип растения',//отдельная кнопка
+                  FutureBuilder<List<Category>>(
+                    future: categoriesFuture,
+                    builder: (context, snapshot) {
+                      // Загрузка
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      // Ошибка
+                      if (snapshot.hasError) {
+                        return Center(
+                          child: Text(
+                            'Ошибка получения категорий: ${snapshot.error}',
+                          ),
+                        );
+                      }
+                      // Данные получены
+                      if (!snapshot.hasData) {
+                        return const Center(child: Text('Нет данных'));
+                      }
+                      final List<Category> categories = snapshot.data!;
+                      // Проверка на пустой список
+                      if (categories.isEmpty) {
+                        return const Center(
+                          child: Text('Список категорий пуст'),
+                        );
+                      }
+                      // Отображение списка категорий
+                      return Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: categories.map((category) {
+                          return AdminCategory(
+                            name: category.name,
+                            isActive: selectedCategoryId == category.id,
+                            onTap: () {
+                              setState(() {
+                                selectedCategoryId = category.id;
+                              });
+                            },
+                          );
+                        }).toList(),
+                      );
+                    },
                   ),
-                  SizedBox(height: 20),
+                  SizedBox(height: 15),
                   AppTextField(
                     controller: recommendedPotSizeController,
                     labelText: 'Рекомендуемый размер горшка',
                   ),
-                  SizedBox(height: 20),
                   AppTextField(
                     controller: ratingController,
                     labelText: 'Рейтинг',

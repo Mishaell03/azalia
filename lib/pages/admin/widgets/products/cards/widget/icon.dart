@@ -1,0 +1,66 @@
+import 'package:azalia/components/colors.dart';
+import 'package:azalia/components/text_styles.dart';
+import 'package:flutter/material.dart';
+
+class IconItem {
+  final IconData ico;
+  final String value;
+  final String label;
+
+  const IconItem({required this.ico, required this.label, required this.value});
+}
+
+class IconValueSelector extends StatelessWidget {
+  final List<IconItem> items;
+  final String selectedValue;
+  final Function(String) onSelected;
+
+  const IconValueSelector({
+    super.key,
+    required this.items,
+    required this.selectedValue,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: items.map((item) {
+        final bool isActive = item.value == selectedValue;
+        return GestureDetector(
+          onTap: () => onSelected(item.value),
+          child: Padding(
+            padding: EdgeInsetsGeometry.symmetric(horizontal: 15),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  item.ico,
+                  color: isActive
+                      ? AppColors.brown
+                      : AppColors.black_transparent,
+                ),
+                Text(
+                  item.label,
+                  style: AppText.medium_12.copyWith(
+                    color: isActive
+                        ? AppColors.brown
+                        : AppColors.black_transparent,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+// иконки требуемого овещения
+final lightItems = [
+  IconItem(value: 'full_sun', ico: Icons.wb_sunny, label: 'Солнце'),
+  IconItem(value: 'partial_shade', ico: Icons.wb_twilight, label: 'Полутень'),
+  IconItem(value: 'shade', ico: Icons.nights_stay, label: 'Тень'),
+];

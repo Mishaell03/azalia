@@ -19,46 +19,48 @@ class AppTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      keyboardType: isDouble? TextInputType.number : TextInputType.text,
-      inputFormatters: isDouble
-          ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))]
-          : null,
-      style: AppText.medium_14.copyWith(color: AppColors.grey),
-      decoration: InputDecoration(
+    return Column(
+      children: [
+        TextField(
+          controller: controller,
+          keyboardType: isDouble ? TextInputType.number : TextInputType.text,
+          inputFormatters: isDouble
+              ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))]
+              : null,
+          style: AppText.medium_14.copyWith(color: AppColors.grey),
+          decoration: InputDecoration(
+            labelText: necessarily ? '$labelText *' : labelText,
+            errorStyle: AppText.medium_14.copyWith(color: AppColors.error),
+            floatingLabelStyle: AppText.medium_14.copyWith(
+              color: AppColors.grey,
+            ),
+            labelStyle: AppText.medium_14.copyWith(
+              color: AppColors.black_transparent,
+            ),
+            border: OutlineInputBorder(),
 
-        labelText: necessarily? '$labelText *' : labelText,
-        errorStyle: AppText.medium_14.copyWith(color: AppColors.error),
-        floatingLabelStyle: AppText.medium_14.copyWith(color: AppColors.grey),
-        labelStyle: AppText.medium_14.copyWith(color: AppColors.black_transparent),
-        border: OutlineInputBorder(),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(20),
+              borderSide: const BorderSide(
+                color: AppColors.grey_light,
+                width: 1.5,
+              ),
+            ),
 
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(20),
-          borderSide: const BorderSide(
-            color: AppColors.grey_light,
-            width: 1.5,
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(30),
+              borderSide: const BorderSide(color: AppColors.brown, width: 2),
+            ),
+
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(20),
+              borderSide: const BorderSide(color: AppColors.error, width: 1.5),
+            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 10),
           ),
         ),
-
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(30),
-          borderSide: const BorderSide(
-            color: AppColors.brown,
-            width: 2,
-          ),
-        ),
-
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(20),
-          borderSide: const BorderSide(
-            color: AppColors.error,
-            width: 1.5,
-          ),
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10),
-      ),
+        SizedBox(height: 15),
+      ],
     );
   }
 }

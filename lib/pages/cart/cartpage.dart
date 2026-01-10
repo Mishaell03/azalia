@@ -1,4 +1,4 @@
-import 'package:azalia/components/widgets/data_footer.dart';
+import 'package:azalia/components/widgets/data_pages.dart';
 import 'package:azalia/pages/cart/widgets/unauthorized.dart';
 import 'package:flutter/material.dart';
 import 'package:azalia/components/colors.dart';
