@@ -2,6 +2,13 @@ class ApiConfig {
   static const String baseURL = 'http://127.0.0.1:5000/api';
   static const Duration timeout = Duration(seconds: 10);
 
+  // admin employees
+  static const String whoAmI = '$baseURL/debug/whoami';
+  static const String users = '$baseURL/users';
+  static const String employees = '$baseURL/employees';
+  static String employee(int id) => '$baseURL/employee/$id';
+  static const String assignEmployee = '$baseURL/employees/assign';
+
   // auth
   static const String authVerify = '$baseURL/auth/verify';
   static String authCheckStatus(String code) =>
