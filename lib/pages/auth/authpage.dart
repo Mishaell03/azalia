@@ -85,7 +85,7 @@ class _AuthPageState extends State<AuthPage> {
 
     if (!AuthService.validateCodeFormat(code)) {
       setState(() {
-        _errorText = 'Неверный формат кода';
+        _errorText = 'Код должен состоять из 4 цифр';
       });
       _clearAllFields();
       return;
@@ -103,20 +103,20 @@ class _AuthPageState extends State<AuthPage> {
         _showSuccessDialog(authResponse);
       } else {
         setState(() {
-          _errorText = 'Что-то пошло не так';
+          _errorText = authResponse.message ?? 'Ошибка авторизации';
         });
         _clearAllFields();
       }
     } on AuthException catch (e) {
       setState(() {
-        debugPrint('Ошибка в AuthException: $e');
-        _errorText = 'Что-то пошло не так';
+        debugPrint(e.toString());
+        _errorText = e.message;
       });
       _clearAllFields();
     } catch (e) {
       setState(() {
-        debugPrint('Ошибка очистки полей: $e');
-        _errorText = 'Что-то пошло не так';
+        debugPrint('Unexpected error: $e');
+        _errorText = 'Неизвестная ошибка';
       });
       _clearAllFields();
     } finally {
