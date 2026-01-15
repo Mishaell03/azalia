@@ -41,9 +41,18 @@ def main():
     assign_payload = {
         'telegram_id': 123456,
         'position_id': 1,
-        'salary': 50000
+        'salary': 50000,
     }
-    call('/api/employees/assign', method='post', json_data=assign_payload)
+    
+    deactivation_payload = {
+        'telegram_id': 123456,
+        "is_active": False, 
+    }
+    # call('/api/employees/assign', method='post', json_data=assign_payload)
+
+    # Try deactivation/activation employee
+    # if need activation true and same api
+    call('/api/employees/deactivate', method='post', json_data=deactivation_payload)
 
 
 if __name__ == '__main__':

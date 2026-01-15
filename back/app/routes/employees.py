@@ -233,9 +233,51 @@ def assign_employee():
         if not user:
             return jsonify({'success': False, 'error': 'User not found'}), 404
 
-        if Employee.query.filter_by(telegram_id=telegram_id).first():
-            return jsonify({'success': False, 'error': 'User is already an employee'}), 409
+        # Если сотрудник уже есть — обновляем его данные (позиция, зарплата, is_active)
+        existing_emp = Employee.query.filter_by(telegram_id=user.telegram_id).first()
+        if existing_emp:
+            updated = False
 
+            # Обновление позиции если передана
+            if position_id is not None:
+                try:
+                    pos_id_int = int(position_id)
+                except Exception:
+                    return jsonify({'success': False, 'error': 'Invalid position_id'}), 400
+                pos = Position.query.get(pos_id_int)
+                if not pos:
+                    return jsonify({'success': False, 'error': 'Position not found'}), 404
+                existing_emp.position_id = pos.id
+                updated = True
+
+            # Обновление зарплаты если передана
+            if salary is not None:
+                try:
+                    existing_emp.salary = float(salary)
+                    updated = True
+                except Exception:
+                    return jsonify({'success': False, 'error': 'Invalid salary'}), 400
+
+            # Обновление статуса активности сотрудника (увольнение/восстановление)
+            if 'is_active' in data:
+                try:
+                    existing_emp.is_active = bool(data.get('is_active'))
+                    updated = True
+                except Exception:
+                    return jsonify({'success': False, 'error': 'Invalid is_active value'}), 400
+
+            if not updated:
+                return jsonify({'success': False, 'error': 'No update fields provided'}), 400
+
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                return jsonify({'success': False, 'error': 'Internal server error'}), 500
+
+            return jsonify({'success': True, 'message': 'Employee updated', 'data': existing_emp.to_dict_with_details()}), 200
+
+        # Иначе — создаём нового сотрудника
         if not position_id:
             return jsonify({'success': False, 'error': 'position_id is required'}), 400
         try:
@@ -252,6 +294,107 @@ def assign_employee():
         db.session.commit()
 
         return jsonify({'success': True, 'message': 'User assigned as employee', 'data': emp.to_dict_with_details()}), 201
+
+    except Exception:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': 'Internal server error'}), 500
+
+
+@bp.route('/employees/deactivate', methods=['POST'])
+def deactivate_employee():
+    """Деактивировать (уволить) сотрудника или обновить его is_active/position/salary (только админ)"""
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return jsonify({'success': False, 'error': 'Authorization header required'}), 401
+
+        requester = get_user_by_session(auth_header)
+        if not requester:
+            return jsonify({'success': False, 'error': 'Invalid session token'}), 401
+
+        if not is_admin(requester):
+            return jsonify({'success': False, 'error': 'Admin privileges required'}), 403
+
+        if not request.is_json:
+            return jsonify({'success': False, 'error': 'JSON body required'}), 400
+
+        data = request.get_json()
+        telegram_id = data.get('telegram_id')
+        user_id = data.get('user_id')
+        position_id = data.get('position_id')
+        salary = data.get('salary')
+
+        # Найти пользователя (как в assign)
+        user = None
+        if user_id:
+            try:
+                user = User.query.get(int(user_id))
+            except Exception:
+                user = None
+
+        if not user and telegram_id:
+            try:
+                tid_int = int(telegram_id)
+                user = User.query.filter_by(telegram_id=tid_int).first()
+            except Exception:
+                user = None
+
+        if not user and telegram_id:
+            try:
+                needle = str(telegram_id)
+                all_users = User.query.all()
+                for u in all_users:
+                    if u.telegram_id and needle in str(u.telegram_id):
+                        user = u
+                        break
+            except Exception:
+                user = None
+
+        if not user:
+            return jsonify({'success': False, 'error': 'User not found'}), 404
+
+        existing_emp = Employee.query.filter_by(telegram_id=user.telegram_id).first()
+        if not existing_emp:
+            return jsonify({'success': False, 'error': 'Employee record not found'}), 404
+
+        updated = False
+        # Обновление позиции если передана
+        if position_id is not None:
+            try:
+                pos_id_int = int(position_id)
+            except Exception:
+                return jsonify({'success': False, 'error': 'Invalid position_id'}), 400
+            pos = Position.query.get(pos_id_int)
+            if not pos:
+                return jsonify({'success': False, 'error': 'Position not found'}), 404
+            existing_emp.position_id = pos.id
+            updated = True
+
+        # Обновление зарплаты если передана
+        if salary is not None:
+            try:
+                existing_emp.salary = float(salary)
+                updated = True
+            except Exception:
+                return jsonify({'success': False, 'error': 'Invalid salary'}), 400
+
+        # Деактивация: по умолчанию установить is_active=False, но разрешаем передать явное значение
+        if 'is_active' in data:
+            try:
+                existing_emp.is_active = bool(data.get('is_active'))
+            except Exception:
+                return jsonify({'success': False, 'error': 'Invalid is_active value'}), 400
+        else:
+            existing_emp.is_active = False
+        updated = True
+
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            return jsonify({'success': False, 'error': 'Internal server error'}), 500
+
+        return jsonify({'success': True, 'message': 'Employee deactivated/updated', 'data': existing_emp.to_dict_with_details()}), 200
 
     except Exception:
         db.session.rollback()
