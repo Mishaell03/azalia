@@ -8,6 +8,7 @@ class ApiConfig {
   static const String employees = '$baseURL/employees';
   static String employee(int id) => '$baseURL/employee/$id';
   static const String assignEmployee = '$baseURL/employees/assign';
+  static String employeeDeactivate(int id) => '$baseURL/employees/$id/deactivate';
 
   // auth
   static const String authVerify = '$baseURL/auth/verify';

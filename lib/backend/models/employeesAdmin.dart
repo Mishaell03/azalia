@@ -1,3 +1,53 @@
+/// Универсальная обёртка для ответа с объектом
+class ApiObjectResponse<T> {
+  final bool success;
+  final T data;
+  final String? message;
+
+  ApiObjectResponse({
+    required this.success,
+    required this.data,
+    this.message,
+  });
+
+  factory ApiObjectResponse.fromJson(
+      Map<String, dynamic> json,
+      T Function(Map<String, dynamic>) fromJsonT,
+      ) {
+    return ApiObjectResponse(
+      success: json['success'],
+      data: fromJsonT(json['data']),
+      message: json['message'],
+    );
+  }
+}
+
+/// Универсальная обёртка для ответа с листом объектов
+class ApiListResponse<T> {
+  final bool success;
+  final List<T> data;
+
+  ApiListResponse({
+    required this.success,
+    required this.data,
+  });
+
+  factory ApiListResponse.fromJson(
+      Map<String, dynamic> json,
+      T Function(Map<String, dynamic>) fromJsonT,
+      ) {
+    final items = (json['data'] as List? ?? [])
+        .map((item) => fromJsonT(item as Map<String, dynamic>))
+        .toList();
+
+    return ApiListResponse(
+      success: json['success'] ?? false,
+      data: items,
+    );
+  }
+}
+
+/// Модель пользователя
 class User {
   final int id;
   final String name;
@@ -33,6 +83,7 @@ class User {
   }
 }
 
+/// Ответ WhoAmI
 class WhoAmIResponse {
   final bool success;
   final bool isAdmin;
@@ -53,6 +104,7 @@ class WhoAmIResponse {
   }
 }
 
+/// Позиция сотрудника
 class Position {
   final int id;
   final String title;
@@ -79,6 +131,7 @@ class Position {
   }
 }
 
+/// Информация о пользователе сотрудника
 class EmployeeUserInfo {
   final String name;
   final String phone;
@@ -96,6 +149,7 @@ class EmployeeUserInfo {
   }
 }
 
+/// Сотрудник
 class Employee {
   final int id;
   final int telegramId;
@@ -135,26 +189,4 @@ class Employee {
       userInfo: EmployeeUserInfo.fromJson(json['user_info']),
     );
   }
-}
-
-class ApiListResponse<T> {
-  final bool success;
-  final List<T> data;
-
-  ApiListResponse({
-    required this.success,
-    required this.data,
-  });
-}
-
-class ApiObjectResponse<T> {
-  final bool success;
-  final T data;
-  final String? message;
-
-  ApiObjectResponse({
-    required this.success,
-    required this.data,
-    this.message,
-  });
 }
