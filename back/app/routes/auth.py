@@ -73,7 +73,15 @@ def verify_code():
                 'error': 'Что-то пошло не так'
             }), 400
         
-        auth_code = OAuthCode.query.filter_by(code=code).first()
+        # Ищем валидный (не использованный и не истёкший) код.
+        query = OAuthCode.query.filter_by(code=code)
+        # если указан device_id — предпочитаем точное совпадение по устройству
+        if device_id:
+            query = query.filter_by(device_id=device_id)
+        # только неиспользованные и не истёкшие
+        from datetime import datetime as _dt
+        query = query.filter(OAuthCode.used == False, OAuthCode.expires_at > _dt.utcnow())
+        auth_code = query.order_by(OAuthCode.id.desc()).first()
         
         if not auth_code:
             return jsonify({
@@ -164,7 +172,8 @@ def check_code_status(code):
                 'error': 'Что-то пошло не так'
             }), 400
 
-        auth_code = OAuthCode.query.filter_by(code=code).first()
+        # Для статуса возвращаем наиболее свежую запись с этим кодом
+        auth_code = OAuthCode.query.filter_by(code=code).order_by(OAuthCode.id.desc()).first()
         
         if not auth_code:
             return jsonify({

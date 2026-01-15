@@ -240,11 +240,11 @@ def create_database():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             telegram_id INTEGER NOT NULL,
             device_id TEXT NOT NULL CHECK(length(device_id) <= 255),
-            code TEXT NOT NULL UNIQUE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            expires_at TIMESTAMP NOT NULL,
+            code TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            expires_at TEXT NOT NULL,
             used BOOLEAN DEFAULT FALSE,
-            used_at TIMESTAMP,
+            used_at TEXT,
             FOREIGN KEY (telegram_id) REFERENCES users(telegram_id) ON DELETE CASCADE
         )
     ''')
