@@ -103,7 +103,7 @@ def is_admin(user):
 
 @bp.route('/users', methods=['GET'])
 def list_users():
-    """Список всех пользователей (только для админа)"""
+    """Список всех пользователей (только для админа) - исключая работников"""
     try:
         auth_header = request.headers.get('Authorization')
         if not auth_header:
@@ -113,8 +113,11 @@ def list_users():
         if not requester:
             return jsonify({'success': False, 'error': 'Invalid session token'}), 401
 
-
-        users = User.query.all()
+        # Получаем только пользователей, которые НЕ являются работниками
+        # Исключаем пользователей с telegram_id, которые есть в таблице Employee
+        subquery = db.session.query(Employee.telegram_id)
+        users = User.query.filter(~User.telegram_id.in_(subquery)).all()
+        
         return jsonify({'success': True, 'data': [u.to_dict() for u in users]})
     except Exception:
         return jsonify({'success': False, 'error': 'Internal server error'}), 500
