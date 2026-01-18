@@ -299,7 +299,6 @@ def update_profile():
                 'telegram_id': user.telegram_id,
                 'name': user.name,
                 'phone': user.phone,
-                'session_token': user.session_token,
             }
         }), 200
         

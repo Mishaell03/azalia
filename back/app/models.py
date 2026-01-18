@@ -222,8 +222,6 @@ class User(db.Model):
             'telegram_id': self.telegram_id,
             'name': self.name,
             'phone': self.phone,
-            'session_token': self.session_token,
-            'token_expires_at': self.token_expires_at.isoformat() if self.token_expires_at else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'is_employee': self.is_employee()
