@@ -79,7 +79,7 @@ class SessionService {
     }
 
     return {
-      'Authorization': 'Bearer $_sessionToken',
+      'Authorization': _sessionToken!,
       'X-User-ID': _currentUser!.id.toString(),
       'X-Telegram-ID': _currentUser!.telegramId.toString(),
     };

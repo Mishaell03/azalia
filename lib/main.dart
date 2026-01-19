@@ -3,10 +3,13 @@ import 'package:azalia/router.dart';
 import 'package:flutter/material.dart';
 import 'package:azalia/backend/services/session.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await SessionService().initialize();
-  runApp(MyApp());
+
+  final session = SessionService();
+  await session.initialize();
+
+  runApp(const MyApp());
 }
 
 class MyApp extends StatefulWidget {
