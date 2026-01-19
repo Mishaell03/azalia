@@ -37,7 +37,7 @@ class AdminProductsCartWarehouse extends StatelessWidget {
             // добавить UI
             return const Center(child: Text("Список товаров пуст :("));
           }
-          // UI`
+          // UI
           return ListView.builder(
             itemCount: plants.length,
             itemBuilder: (context, index) {

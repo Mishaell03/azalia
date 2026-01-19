@@ -1,16 +1,24 @@
 import 'dart:convert';
-import 'package:flutter/cupertino.dart';
+import 'package:azalia/backend/services/session.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class ApiClient {
-  final String token;
+  final SessionService _session = SessionService();
 
-  ApiClient({required this.token});
+  Map<String, String> get _headers {
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+    };
 
-  Map<String, String> get _headers => {
-    'Authorization': token,
-    'Content-Type': 'application/json',
-  };
+    final token = _session.sessionToken;
+
+    if (token != null && _session.isTokenValid) {
+      headers['Authorization'] = token;
+    }
+
+    return headers;
+  }
 
   Future<Map<String, dynamic>> get(String url) async {
     final uri = Uri.parse(url);
@@ -46,6 +54,10 @@ class ApiClient {
 
   Map<String, dynamic> _handleResponse(http.Response response) {
     final decoded = jsonDecode(response.body);
+
+    if (response.statusCode == 401) {
+      throw Exception('Unauthorized (token expired or invalid)');
+    }
 
     if (response.statusCode >= 400) {
       throw Exception(
