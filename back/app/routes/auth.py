@@ -222,6 +222,64 @@ def check_code_status(code):
             'success': False,
             'error': 'Что-то пошло не так'
         }), 500
+
+
+@bp.route('/me', methods=['POST'])
+def me():
+    """получить актуальные данные пользователя/роли по session_token"""
+    try:
+        if not request.is_json:
+            return jsonify({'success': False, 'error': 'Неверный формат запроса'}), 400
+
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'Отсутствуют данные'}), 400
+
+        session_token = data.get('session_token')
+        if not session_token or not isinstance(session_token, str):
+            return jsonify({'success': False, 'error': 'Недействительная сессия'}), 401
+
+        clean_token = session_token.strip('"\' ')
+        user = User.query.filter_by(session_token=clean_token).first()
+        if not user:
+            return jsonify({'success': False, 'error': 'Недействительная сессия'}), 401
+
+        if user.token_expires_at and user.token_expires_at < datetime.utcnow():
+            return jsonify({'success': False, 'error': 'Сессия истекла'}), 401
+
+        response_data = {
+            'success': True,
+            'message': 'OK',
+            'user': {
+                'id': user.id,
+                'telegram_id': user.telegram_id,
+                'name': sanitize_input(user.name),
+                'phone': sanitize_input(user.phone) if user.phone else "",
+                'session_token': clean_token
+            }
+        }
+
+        employee = Employee.query.filter_by(telegram_id=user.telegram_id).first()
+        if employee:
+            response_data['employee'] = {
+                'id': employee.id,
+                'position_id': employee.position_id,
+                'is_active': employee.is_active
+            }
+            response_data['is_employee'] = True
+            if employee.position:
+                response_data['position'] = {
+                    'id': employee.position.id,
+                    'title': sanitize_input(employee.position.title)
+                }
+        else:
+            response_data['is_employee'] = False
+
+        return jsonify(response_data), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Error in auth.me: {str(e)}")
+        return jsonify({'success': False, 'error': 'Что-то пошло не так'}), 500
     
 @bp.route('/update_profile', methods=['POST'])
 def update_profile():

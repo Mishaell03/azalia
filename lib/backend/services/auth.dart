@@ -91,6 +91,56 @@ class AuthService {
     }
   }
 
+  static Future<AuthResponse> fetchMe() async {
+    try {
+      final session = SessionService();
+      final token = await session.getToken();
+
+      if (token == null || token.isEmpty) {
+        throw AuthException(message: 'Сессия недействительна', statusCode: 401);
+      }
+
+      final response = await http
+          .post(
+        Uri.parse(ApiConfig.authMe),
+        headers: ApiConfig.headers(),
+        body: json.encode({
+          'session_token': token,
+        }),
+      )
+          .timeout(ApiConfig.timeout);
+
+      final Map<String, dynamic> responseData = json.decode(response.body);
+
+      if (response.statusCode == 200) {
+        final authResponse = AuthResponse.fromJson(responseData);
+
+        await session.saveSession(
+          user: authResponse.user,
+          token: token,
+          expiresAt: DateTime.now().add(const Duration(days: 30)),
+          isEmployee: authResponse.isEmployee,
+          position: authResponse.position,
+        );
+
+        return authResponse;
+      }
+
+      throw AuthException(
+        message: responseData['message'] ??
+            responseData['error'] ??
+            'Ошибка обновления профиля',
+        statusCode: response.statusCode,
+      );
+    } on AuthException {
+      rethrow;
+    } on http.ClientException catch (e) {
+      throw AuthException(message: 'Ошибка сети: ${e.message}');
+    } catch (e) {
+      throw AuthException(message: 'Ошибка обновления профиля: $e');
+    }
+  }
+
   static bool validateCodeFormat(String code) {
     return RegExp(r'^\d{4}$').hasMatch(code);
   }

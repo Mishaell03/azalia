@@ -8,6 +8,7 @@ import 'package:azalia/backend/services/session.dart';
 import 'package:azalia/backend/models/auth.dart';
 import 'package:azalia/components/widgets/footer.dart';
 import 'package:azalia/backend/services/profile.dart';
+import 'package:azalia/backend/services/auth.dart';
 import 'package:azalia/pages/profile/widgets/edit_profile.dart';
 import 'package:azalia/pages/profile/widgets/content.dart';
 import 'package:azalia/pages/profile/widgets/header.dart';
@@ -51,6 +52,20 @@ class _ProfilePageState extends State<ProfilePage> {
           ? user.name.substring(0, 15)
           : user.name;
       _phoneController.text = _formatPhoneNumber(user.phone);
+    }
+  }
+
+  Future<void> _refreshProfile() async {
+    try {
+      // тянем актуальную роль с сервера
+      await AuthService.fetchMe();
+      await _sessionService.initialize();
+      _initializeUserData();
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (mounted) {
+        _showErrorDialog('Не удалось обновить профиль: $e');
+      }
     }
   }
 
@@ -363,32 +378,36 @@ class _ProfilePageState extends State<ProfilePage> {
     bool isEmployee,
     Position? position,
   ) {
-    return CustomScrollView(
-      controller: _scrollController,
-      slivers: [
-        AppProfileHeader(
-          showExpandedHeader: _showExpandedHeader,
-          userName: _nameController.text,
-          positionTitle: position?.title,
-          isEmployee: isEmployee,
-          selectedImageFile: _selectedImageFile,
-          onEditPressed: _showEditProfileDialog,
-          onImageTap: () {},
-        ),
-        SliverToBoxAdapter(
-          child: AppProfileContent(
-            user: user,
+    return RefreshIndicator(
+      onRefresh: _refreshProfile,
+      child: CustomScrollView(
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          AppProfileHeader(
+            showExpandedHeader: _showExpandedHeader,
+            userName: _nameController.text,
+            positionTitle: position?.title,
             isEmployee: isEmployee,
-            position: position,
-            formattedName: _nameController.text,
-            formattedPhone: _phoneController.text,
-            onLogout: _logout,
-            onSettings: () => _showSettings(context),
-            onHelp: () => _showHelp(context),
-            onAbout: () => _showAbout(context),
+            selectedImageFile: _selectedImageFile,
+            onEditPressed: _showEditProfileDialog,
+            onImageTap: () {},
           ),
-        ),
-      ],
+          SliverToBoxAdapter(
+            child: AppProfileContent(
+              user: user,
+              isEmployee: isEmployee,
+              position: position,
+              formattedName: _nameController.text,
+              formattedPhone: _phoneController.text,
+              onLogout: _logout,
+              onSettings: () => _showSettings(context),
+              onHelp: () => _showHelp(context),
+              onAbout: () => _showAbout(context),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

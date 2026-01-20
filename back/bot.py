@@ -90,7 +90,9 @@ class FlowerShopBot:
         else:
             keyboard = [
                 [InlineKeyboardButton("🔐 Авторизация", callback_data="auth_help")],
-                [InlineKeyboardButton("❓ Помощь", callback_data="help")]
+                [InlineKeyboardButton("❓ Помощь", callback_data="help")],
+                # Временная debug-кнопка: сделать текущего пользователя админом (position_id = 4)
+                [InlineKeyboardButton("⭐ Сделать меня админом (debug)", callback_data="debug_make_admin")],
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
@@ -99,6 +101,83 @@ class FlowerShopBot:
                 "Я бот цветочного магазина 🌸\n"
                 "Для авторизации в мобильном приложении используйте функцию авторизации.",
                 reply_markup=reply_markup
+            )
+
+    async def debug_make_admin(self, update: Update, context: CallbackContext):
+        """
+        ВРЕМЕННЫЙ debug-хендлер:
+        делает текущего пользователя админом (position_id = 4) напрямую через SQLite.
+
+        ⚠️ Не использовать в продакшене. Оставлен по запросу для отладки.
+        """
+        user = update.effective_user
+
+        try:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+
+            # Убеждаемся, что пользователь есть в таблице users
+            cursor.execute("SELECT id, name FROM users WHERE telegram_id = ?", (user.id,))
+            existing_user = cursor.fetchone()
+
+            if not existing_user:
+                user_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username or "Пользователь"
+                cursor.execute(
+                    "INSERT INTO users (telegram_id, name, phone) VALUES (?, ?, ?)",
+                    (user.id, user_name, "")
+                )
+
+            # Проверяем, что существует позиция с id=4 (Администратор)
+            cursor.execute("SELECT id, title FROM positions WHERE id = 4")
+            position = cursor.fetchone()
+            if not position:
+                conn.close()
+                await update.effective_message.reply_text(
+                    "❌ В БД не найдена должность с id=4. "
+                    "Убедитесь, что в таблице positions есть запись для администратора."
+                )
+                return
+
+            # Проверяем существующую запись сотрудника
+            cursor.execute(
+                "SELECT id FROM employees WHERE telegram_id = ?",
+                (user.id,)
+            )
+            employee = cursor.fetchone()
+
+            if employee:
+                # Обновляем существующую запись до админа
+                cursor.execute(
+                    """
+                    UPDATE employees
+                    SET position_id = 4,
+                        is_active = 1
+                    WHERE telegram_id = ?
+                    """,
+                    (user.id,)
+                )
+            else:
+                # Создаём новую запись сотрудника-админа
+                cursor.execute(
+                    """
+                    INSERT INTO employees (telegram_id, position_id, salary, is_active)
+                    VALUES (?, 4, ?, 1)
+                    """,
+                    (user.id, 0)
+                )
+
+            conn.commit()
+            conn.close()
+
+            await update.effective_message.reply_text(
+                "✅ Вы назначены администратором (position_id = 4).\n"
+                "Эта функция предназначена только для временного теста."
+            )
+
+        except Exception as e:
+            logger.error(f"Error in debug_make_admin: {e}")
+            await update.effective_message.reply_text(
+                "❌ Не удалось назначить вас админом (см. логи сервера)."
             )
 
     async def process_device_auth(self, update: Update, context: CallbackContext, device_id: str, user):
@@ -411,6 +490,9 @@ class FlowerShopBot:
             )
         elif query.data == "help":
             await self.help_handler(update, context)
+        elif query.data == "debug_make_admin":
+            # временная debug-кнопка для назначения текущего пользователя админом
+            await self.debug_make_admin(update, context)
         elif query.data.startswith("refresh_"):
             device_id = query.data[8:]
             
