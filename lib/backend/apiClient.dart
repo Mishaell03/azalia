@@ -3,7 +3,6 @@ import 'package:azalia/backend/services/session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
-/// Базный API-исключение
 class ApiException implements Exception {
   final String message;
   final int? statusCode;
@@ -13,7 +12,7 @@ class ApiException implements Exception {
   String toString() => 'ApiException(status: $statusCode, message: $message)';
 }
 
-/// Специальное исключение для 401
+/// Спец исключение для 401
 class UnauthorizedException extends ApiException {
   UnauthorizedException(String message) : super(message, 401);
 }
@@ -24,7 +23,7 @@ class ApiClient {
 
   ApiClient();
 
-  /// Формируем заголовки для запроса, берём авторизацию из SessionService
+  /// Формируем заголовки для запроса, берём токен из SessionService
   Map<String, String> get _headers {
     final headers = <String, String>{
       'Content-Type': 'application/json',
@@ -32,10 +31,8 @@ class ApiClient {
 
     try {
       final auth = _session.getAuthHeaders();
-      // getAuthHeaders() по коду возвращает пустой map если токен не валиден
       headers.addAll(auth);
     } catch (e) {
-      // Если по какой-то причине session не готов — пропускаем
       debugPrint('ApiClient: warning while reading session headers: $e');
     }
 
@@ -112,11 +109,11 @@ class ApiClient {
     }
   }
 
-  /// Обработка ответа: декодируем JSON или бросаем понятное исключение
+  /// Обработка ответа: декодируем JSON или выводим исключение
   Map<String, dynamic> _handleResponse(http.Response response) {
     final status = response.statusCode;
 
-    // Пустое тело (204 No Content и т.п.)
+    // Пустое тело
     final body = response.body.trim();
     final bool hasBody = body.isNotEmpty;
 
@@ -127,7 +124,7 @@ class ApiClient {
         if (parsed is Map<String, dynamic>) {
           decoded = parsed;
         } else {
-          // Если сервер вернул не map (например, список), оборачиваем в поле data
+          // Если сервер вернул не map, оборачиваем в поле data
           decoded = {'data': parsed};
         }
       } catch (e) {
@@ -137,7 +134,6 @@ class ApiClient {
     }
 
     if (status == 401) {
-      // Специально обрабатываем 401
       final message = (decoded['error'] ?? 'Unauthorized').toString();
       throw UnauthorizedException(message);
     }
@@ -150,7 +146,7 @@ class ApiClient {
     return decoded;
   }
 
-  /// Логирование запросов (без явного вывода токена, но отмечаем его наличие)
+  /// Логирование запросов
   void _log(
       String method,
       Uri url,
@@ -163,7 +159,7 @@ class ApiClient {
     debugPrint('TOKEN_PRESENT: $tokenPresent');
     debugPrint('STATUS: ${response.statusCode}');
     debugPrint('RESPONSE: ${response.body}');
-    // debugPrint('TOKEN_VALUE: ${_session.sessionToken}');
-    // debugPrint('HEADERS: ${_headers.toString()}');
+    // debugPrint('TOKEN_VALUE: ${_session.sessionToken}'); для отладки
+    // debugPrint('HEADERS: ${_headers.toString()}'); для отладки
   }
 }
