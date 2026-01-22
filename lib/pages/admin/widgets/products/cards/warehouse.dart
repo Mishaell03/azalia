@@ -18,7 +18,7 @@ class AdminProductsCartWarehouse extends StatelessWidget {
     return Scaffold(
       appBar: AppHeader(items: adminProductsHeaderItems),
       body: FutureBuilder<PlantResponse>(
-        future: PlantService().getPlants(),
+        future: PlantService.getPlants(),
         builder: (context, snapshot) {
           // загрузка
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -182,7 +182,7 @@ class _OpenDialog extends State<OpenDialog> {
         : lightItems.first.value;
     lightRequirementsController.text = lightValue;
     // категории цветов
-    categoriesFuture = PlantService().getCategories();
+    categoriesFuture = PlantService.getCategories();
     selectedCategoryId = widget.plant.categoryId;
     nameController = TextEditingController(text: widget.plant.name ?? '');
 

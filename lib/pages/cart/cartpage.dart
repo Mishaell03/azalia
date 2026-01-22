@@ -37,21 +37,14 @@ class _CartPageState extends State<CartPage> {
   }
 
   Future<void> _loadCart() async {
+    setState(() {
+      _isLoading = true;
+      _error = '';
+      _isUnauthorized = false;
+    });
     try {
-      setState(() {
-        _isLoading = true;
-        _error = '';
-        _isUnauthorized = false;
-      });
-
-      final token = await _sessionService.getToken();
-      if (token == null) {
-        _handleUnauthorized();
-        return;
-      }
-
-      final cartResponse = await CartService.getCart(token);
-      _processCartItems(cartResponse.items, token);
+      final cartResponse = await CartService.getCart();
+      _processCartItems(cartResponse.items);
     } catch (e) {
       _handleLoadError(e);
     }
@@ -64,7 +57,7 @@ class _CartPageState extends State<CartPage> {
     });
   }
 
-  void _processCartItems(List<CartItem> items, String token) async {
+  void _processCartItems(List<CartItem> items) async {
     final List<CartItemWithPot> availableItems = [];
     final List<CartItemWithPot> outOfStockItems = [];
 
@@ -73,7 +66,7 @@ class _CartPageState extends State<CartPage> {
 
       if (item.plant.inStock && item.plant.stockQuantity > 0) {
         if (item.quantity > item.plant.stockQuantity) {
-          await _autoReduceQuantity(token, item.id, item.plant.stockQuantity);
+          await _autoReduceQuantity(item.id, item.plant.stockQuantity);
           availableItems.add(
             _createUpdatedItem(item, item.plant.stockQuantity),
           );
@@ -129,12 +122,11 @@ class _CartPageState extends State<CartPage> {
   }
 
   Future<void> _autoReduceQuantity(
-    String token,
     int itemId,
     int availableQuantity,
   ) async {
     try {
-      await CartService.updateCartItem(token, itemId, availableQuantity);
+      await CartService.updateCartItem(itemId, availableQuantity);
     } catch (e) {
       debugPrint('Ошибка автоматического обновления количества: $e');
     }
@@ -188,17 +180,17 @@ class _CartPageState extends State<CartPage> {
 
   void _removeOutOfStockItem(CartItemWithPot item) async {
     try {
-      final token = await _sessionService.getToken();
-      if (token != null) {
-        await CartService.removeFromCart(token, item.id);
-        setState(() {
-          _outOfStockItems.removeWhere((i) => i.id == item.id);
-        });
-
-        _showSnackBar('Товар удален из корзины', isError: false);
-      } else {
+      if (!_sessionService.isLoggedIn || !_sessionService.isTokenValid) {
         _handleUnauthorized();
+        return;
       }
+      
+      await CartService.removeFromCart(item.id);
+      setState(() {
+        _outOfStockItems.removeWhere((i) => i.id == item.id);
+      });
+
+      _showSnackBar('Товар удален из корзины', isError: false);
     } catch (e) {
       debugPrint('Ошибка удаления недоступного товара: $e');
       _showSnackBar('Не удалось удалить товар', isError: true);
@@ -207,13 +199,12 @@ class _CartPageState extends State<CartPage> {
 
   Future<void> _clearCart() async {
     try {
-      final token = await _sessionService.getToken();
-      if (token == null) {
+      if (!_sessionService.isLoggedIn || !_sessionService.isTokenValid) {
         _handleUnauthorized();
         return;
       }
 
-      await CartService.clearCart(token);
+      await CartService.clearCart();
 
       setState(() {
         _cartItems.clear();

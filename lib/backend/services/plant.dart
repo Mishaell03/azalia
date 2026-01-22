@@ -1,13 +1,13 @@
-import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/foundation.dart' hide Category;
-import 'package:http/http.dart' as http;
+import 'package:azalia/backend/apiClient.dart';
 import 'package:azalia/backend/api_config.dart';
 import 'package:azalia/backend/models/plant.dart';
 
 class PlantService {
-  // получение растений с фильтрами
-  Future<PlantResponse> getPlants({
+  static final ApiClient _api = ApiClient();
+
+  /// Получение растений с фильтрами
+  static Future<PlantResponse> getPlants({
     int? categoryId,
     bool? inStock,
     String? plantType,
@@ -29,44 +29,33 @@ class PlantService {
       if (minRating != null) params['min_rating'] = minRating.toString();
       if (maxRating != null) params['max_rating'] = maxRating.toString();
 
-      final uri = Uri.parse(ApiConfig.plants).replace(queryParameters: params);
-      
-      final response = await http
-          .get(uri, headers: ApiConfig.headers())
-          .timeout(ApiConfig.timeout);
-          
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
-        debugPrint('PlantService: Растения загружены');
-        return PlantResponse.fromJson(data);
-      } else {
-        debugPrint('PlantService: Ошибка сервера ${response.statusCode}');
-        throw Exception("Не удалось загрузить растения");
+      String url = ApiConfig.plants;
+      if (params.isNotEmpty) {
+        final queryString = params.entries
+            .map((e) => '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}')
+            .join('&');
+        url = '$url?$queryString';
       }
+      
+      final response = await _api.get(url);
+      debugPrint('PlantService: Растения загружены');
+      return PlantResponse.fromJson(response);
     } catch (e) {
       debugPrint('PlantService: Исключение - $e');
       throw Exception("Не удалось загрузить растения");
     }
   }
 
-  // получение растения по ID
-  Future<Plant> getPlantById(int id) async {
+  /// Получение растения по ID
+  static Future<Plant> getPlantById(int id) async {
     try {
-      final response = await http
-          .get(Uri.parse(ApiConfig.plantsId(id)), headers: ApiConfig.headers())
-          .timeout(ApiConfig.timeout);
+      final response = await _api.get(ApiConfig.plantsId(id));
 
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
-        if (data['success'] == true) {
-          debugPrint('PlantService: Растение загружено (id: $id)');
-          return Plant.fromJson(data['data']);
-        } else {
-          debugPrint('PlantService: Ошибка API');
-          throw Exception('Не удалось загрузить растение');
-        }
+      if (response['success'] == true) {
+        debugPrint('PlantService: Растение загружено (id: $id)');
+        return Plant.fromJson(response['data']);
       } else {
-        debugPrint('PlantService: Ошибка сервера ${response.statusCode}');
+        debugPrint('PlantService: Ошибка API');
         throw Exception('Не удалось загрузить растение');
       }
     } catch (e) {
@@ -75,26 +64,18 @@ class PlantService {
     }
   }
 
-  // получение категорий
-  Future<List<Category>> getCategories() async {
+  /// Получение категорий
+  static Future<List<Category>> getCategories() async {
     try {
-      final response = await http
-          .get(Uri.parse(ApiConfig.categories), headers: ApiConfig.headers())
-          .timeout(ApiConfig.timeout);
+      final response = await _api.get(ApiConfig.categories);
 
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
-        if (data['success']) {
-          debugPrint('PlantService: Категории загружены');
-          return (data['data'] as List)
-              .map((categoryJson) => Category.fromJson(categoryJson))
-              .toList();
-        } else {
-          debugPrint('PlantService: Ошибка API категорий');
-          throw Exception('Не удалось загрузить категории');
-        }
+      if (response['success']) {
+        debugPrint('PlantService: Категории загружены');
+        return (response['data'] as List)
+            .map((categoryJson) => Category.fromJson(categoryJson))
+            .toList();
       } else {
-        debugPrint('PlantService: Ошибка сервера ${response.statusCode}');
+        debugPrint('PlantService: Ошибка API категорий');
         throw Exception('Не удалось загрузить категории');
       }
     } catch (e) {
@@ -103,8 +84,8 @@ class PlantService {
     }
   }
 
-  // получение растений с высоким рейтингом
-  Future<PlantResponse> getTopRatedPlants({
+  /// Получение растений с высоким рейтингом
+  static Future<PlantResponse> getTopRatedPlants({
     double minRating = 4.0,
     int limit = 10,
   }) async {
@@ -114,46 +95,33 @@ class PlantService {
         'limit': limit.toString(),
       };
 
-      final uri = Uri.parse(
-        ApiConfig.topRated,
-      ).replace(queryParameters: params);
-
-      final response = await http
-          .get(uri, headers: ApiConfig.headers())
-          .timeout(ApiConfig.timeout);
-
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
-        debugPrint('PlantService: Популярные растения загружены');
-        return PlantResponse.fromJson(data);
-      } else {
-        debugPrint('PlantService: Ошибка сервера ${response.statusCode}');
-        throw Exception("Не удалось загрузить популярные растения");
+      String url = ApiConfig.topRated;
+      if (params.isNotEmpty) {
+        final queryString = params.entries
+            .map((e) => '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}')
+            .join('&');
+        url = '$url?$queryString';
       }
+
+      final response = await _api.get(url);
+      debugPrint('PlantService: Популярные растения загружены');
+      return PlantResponse.fromJson(response);
     } catch (e) {
       debugPrint('PlantService: Исключение - $e');
       throw Exception("Не удалось загрузить популярные растения");
     }
   }
 
-  // получение фильтров
-  Future<Map<String, dynamic>> getFilters() async {
+  /// Получение фильтров
+  static Future<Map<String, dynamic>> getFilters() async {
     try {
-      final response = await http
-          .get(Uri.parse(ApiConfig.filters), headers: ApiConfig.headers())
-          .timeout(ApiConfig.timeout);
+      final response = await _api.get(ApiConfig.filters);
 
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
-        if (data['success']) {
-          debugPrint('PlantService: Фильтры загружены');
-          return data['data'];
-        } else {
-          debugPrint('PlantService: Ошибка API фильтров');
-          throw Exception('Не удалось загрузить фильтры');
-        }
+      if (response['success']) {
+        debugPrint('PlantService: Фильтры загружены');
+        return response['data'];
       } else {
-        debugPrint('PlantService: Ошибка сервера ${response.statusCode}');
+        debugPrint('PlantService: Ошибка API фильтров');
         throw Exception('Не удалось загрузить фильтры');
       }
     } catch (e) {

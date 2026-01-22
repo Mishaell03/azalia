@@ -146,19 +146,19 @@ class ApiClient {
     return decoded;
   }
 
-  /// Логирование запросов
+  /// Логирование запросов для выявления ошибок
   void _log(
       String method,
       Uri url,
       http.Response response, {
         Map<String, dynamic>? body,
       }) {
-    final tokenPresent = _session.sessionToken != null ? 'yes' : 'no';
+    // final tokenPresent = _session.sessionToken != null ? 'yes' : 'no';
     debugPrint('=== $method $url ===');
-    if (body != null) debugPrint('BODY: $body');
-    debugPrint('TOKEN_PRESENT: $tokenPresent');
-    debugPrint('STATUS: ${response.statusCode}');
-    debugPrint('RESPONSE: ${response.body}');
+    // if (body != null) debugPrint('BODY: $body');
+    // debugPrint('TOKEN_PRESENT: $tokenPresent');
+    // debugPrint('STATUS: ${response.statusCode}');
+    // debugPrint('RESPONSE: ${response.body}');
     // debugPrint('TOKEN_VALUE: ${_session.sessionToken}'); для отладки
     // debugPrint('HEADERS: ${_headers.toString()}'); для отладки
   }

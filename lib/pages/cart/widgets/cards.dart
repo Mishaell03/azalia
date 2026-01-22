@@ -4,7 +4,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:azalia/components/colors.dart';
 import 'package:azalia/pages/error/loading_error.dart';
 import 'package:azalia/components/widgets/love.dart';
-import 'package:azalia/backend/services/wishlist.dart';
 import 'package:azalia/backend/models/cart.dart';
 import 'package:azalia/backend/services/cart.dart';
 
@@ -29,13 +28,6 @@ class _CartCardState extends State<CartCard> {
   bool _showCard = true;
   bool _isRemoving = false;
   bool _isUpdatingQuantity = false;
-  late CartWishlistService _service;
-
-  @override
-  void initState() {
-    super.initState();
-    _service = CartWishlistService(plant: widget.item.plant);
-  }
 
   void _retryLoadImage() {
     setState(() {
@@ -51,11 +43,8 @@ class _CartCardState extends State<CartCard> {
     });
 
     try {
-      final token = await _service.getToken();
-      if (token != null) {
-        await CartService.removeFromCart(token, widget.item.id);
-        _handleRemoveSuccess();
-      }
+      await CartService.removeFromCart(widget.item.id);
+      _handleRemoveSuccess();
     } catch (e) {
       _handleRemoveError(e);
     } finally {
@@ -96,11 +85,8 @@ class _CartCardState extends State<CartCard> {
     });
 
     try {
-      final token = await _service.getToken();
-      if (token != null) {
-        await CartService.updateCartItem(token, widget.item.id, newQuantity);
-        widget.onQuantityChanged?.call(widget.item, newQuantity);
-      }
+      await CartService.updateCartItem(widget.item.id, newQuantity);
+      widget.onQuantityChanged?.call(widget.item, newQuantity);
     } catch (e) {
       _handleQuantityUpdateError(e);
     } finally {

@@ -27,7 +27,6 @@ class _HomePage extends State<HomePage> {
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<RefreshIndicatorState> _refreshIndicatorKey =
       GlobalKey<RefreshIndicatorState>();
-  final PlantService _plantService = PlantService();
 
   // бесконечная карусель
   final int _visibleItemsCount = 10; //сколько прогружать карточек
@@ -70,8 +69,8 @@ class _HomePage extends State<HomePage> {
         _isAllCategory = true; // По умолчанию категория "Все"
       });
 
-      final categories = await _plantService.getCategories();
-      final plants = await _plantService.getPlants();
+      final categories = await PlantService.getCategories();
+      final plants = await PlantService.getPlants();
 
       // фильтр по количеству stockQuantity > 0
       final availablePlants = plants.data.where((plant) => plant.stockQuantity > 0).toList();
@@ -146,7 +145,7 @@ class _HomePage extends State<HomePage> {
     });
 
     try {
-      final plants = await _plantService.getPlants(
+      final plants = await PlantService.getPlants(
         categoryId: category?.id,
       );
 

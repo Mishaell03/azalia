@@ -1,4 +1,4 @@
-import 'package:azalia/backend/services/cart.dart';
+import 'package:azalia/backend/services/wishlist.dart';
 import 'package:azalia/components/widgets/data_pages.dart';
 import 'package:flutter/material.dart';
 import 'package:azalia/components/colors.dart';
@@ -42,13 +42,12 @@ class _WishlistPageState extends State<WishlistPage> {
         _isUnauthorized = false;
       });
 
-      final token = await _sessionService.getToken();
-      if (token == null) {
+      if (!_sessionService.isLoggedIn || !_sessionService.isTokenValid) {
         _handleUnauthorized();
         return;
       }
 
-      final wishlistResponse = await WishlistService.getWishlist(token);
+      final wishlistResponse = await WishlistService.getWishlist();
 
       final plants = wishlistResponse.items.map((item) => item.plant).toList();
 

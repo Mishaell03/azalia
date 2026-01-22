@@ -1,28 +1,18 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
+import 'package:azalia/backend/apiClient.dart';
 import 'package:azalia/backend/api_config.dart';
 import 'package:azalia/backend/models/auth.dart';
 import 'package:azalia/backend/services/session.dart';
 
 class ProfileService {
-  static final ProfileService _instance = ProfileService._internal();
-  factory ProfileService() => _instance;
-  ProfileService._internal();
+  static final ApiClient _api = ApiClient();
 
+  /// Обновление профиля пользователя
   static Future<UpdateProfileResponse> updateProfile({
     required String name,
     required String phone,
   }) async {
     try {
-      final session = SessionService();
-      final token = await session.getToken();
-
-      if (token == null || token.isEmpty) {
-        debugPrint('ProfileService: Недействительная сессия');
-        throw ProfileException(message: 'Сессия недействительна');
-      }
-
       if (name.trim().isEmpty) {
         debugPrint('ProfileService: Пустое имя');
         throw ProfileException(message: 'Имя не может быть пустым');
@@ -33,33 +23,38 @@ class ProfileService {
         throw ProfileException(message: 'Телефон не может быть пустым');
       }
 
-      final response = await http
-          .post(
-            Uri.parse('${ApiConfig.baseURL}/auth/update_profile'),
-            headers: ApiConfig.headers(),
-            body: json.encode({
-              'session_token': token,
-              'name': name.trim(),
-              'phone': phone.trim(),
-            }),
-          )
-          .timeout(ApiConfig.timeout);
+      final session = SessionService();
+      final token = await session.getToken();
+      
+      if (token == null || token.isEmpty) {
+        throw ProfileException(message: 'Сессия недействительна');
+      }
 
-      final Map<String, dynamic> responseData = json.decode(response.body);
+      final response = await _api.post(
+        ApiConfig.updateProfile,
+        body: {
+          'session_token': token,
+          'name': name.trim(),
+          'phone': phone.trim(),
+        },
+      );
 
-      if (response.statusCode == 200) {
+      if (response['success'] == true) {
         debugPrint('ProfileService: Профиль успешно обновлен');
-        return UpdateProfileResponse.fromJson(responseData);
+        return UpdateProfileResponse.fromJson(response);
       } else {
-        debugPrint('ProfileService: Ошибка сервера ${response.statusCode}');
+        debugPrint('ProfileService: Ошибка обновления профиля');
         throw ProfileException(
-          message: 'Не удалось обновить профиль',
-          statusCode: response.statusCode,
+          message: response['error'] ?? response['message'] ?? 'Не удалось обновить профиль',
+          statusCode: 400,
         );
       }
-    } on http.ClientException catch (e) {
-      debugPrint('ProfileService: Ошибка соединения - $e');
-      throw ProfileException(message: 'Ошибка соединения');
+    } on ApiException catch (e) {
+      debugPrint('ProfileService: Ошибка API - $e');
+      throw ProfileException(
+        message: e.message,
+        statusCode: e.statusCode,
+      );
     } on ProfileException {
       rethrow;
     } catch (e) {
@@ -68,10 +63,12 @@ class ProfileService {
     }
   }
 
+  /// Валидация имени
   static bool validateName(String name) {
     return name.trim().isNotEmpty;
   }
 
+  /// Валидация телефона
   static bool validatePhone(String phone) {
     return phone.trim().isNotEmpty;
   }

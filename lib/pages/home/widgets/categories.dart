@@ -22,7 +22,6 @@ class HomeCategory extends StatefulWidget {
 }
 
 class _HomeCategory extends State<HomeCategory> {
-  late PlantService _plantService;
   List<Category> _categories = [];
   bool _isLoading = true;
   String? _error;
@@ -30,7 +29,6 @@ class _HomeCategory extends State<HomeCategory> {
   @override
   void initState() {
     super.initState();
-    _plantService = PlantService();
 
     if (widget.categories != null && widget.categories!.isNotEmpty) {
       setState(() {
@@ -49,7 +47,7 @@ class _HomeCategory extends State<HomeCategory> {
         _error = null;
       });
 
-      final categories = await _plantService.getCategories();
+      final categories = await PlantService.getCategories();
 
       setState(() {
         _categories = categories;
