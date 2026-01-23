@@ -1,5 +1,6 @@
 import 'package:azalia/backend/apiClient.dart';
 import 'package:azalia/backend/api_config.dart';
+import 'package:azalia/backend/models/wishlist.dart';
 import 'package:azalia/backend/models/cart.dart';
 import 'package:azalia/backend/models/plant.dart';
 import 'package:azalia/backend/services/session.dart';
