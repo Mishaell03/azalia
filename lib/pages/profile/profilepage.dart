@@ -64,7 +64,7 @@ class _ProfilePageState extends State<ProfilePage> {
       if (mounted) setState(() {});
     } catch (e) {
       if (mounted) {
-        _showErrorDialog('Не удалось обновить профиль: $e');
+        _showErrorDialog('Не удалось обновить профиль');
       }
     }
   }
@@ -135,7 +135,7 @@ class _ProfilePageState extends State<ProfilePage> {
             newAvatarBase64 = avatarResponse.avatar;
           }
         } catch (e) {
-          _showErrorDialog('Не удалось загрузить аватарку: $e');
+          _showErrorDialog('Не удалось загрузить аватарку');
           return;
         }
       }
@@ -198,12 +198,12 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         );
       } else {
-        _showErrorDialog(response.message);
+        _showErrorDialog('Не удалось обновить профиль');
       }
-    } on ProfileException catch (e) {
-      _showErrorDialog(e.message);
-    } catch (e) {
-      _showErrorDialog('Не удалось обновить данные: $e');
+    } on ProfileException {
+      _showErrorDialog('Не удалось обновить профиль');
+    } catch (_) {
+      _showErrorDialog('Не удалось обновить данные');
     }
   }
 

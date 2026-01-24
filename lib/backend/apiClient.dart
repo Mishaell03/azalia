@@ -48,7 +48,7 @@ class ApiClient {
       _log('GET', uri, response);
       return _handleResponse(response);
     } catch (e) {
-      throw ApiException('Network error: $e');
+      throw ApiException('Ошибка сети');
     }
   }
 
@@ -67,7 +67,7 @@ class ApiClient {
       _log('POST', uri, response, body: body);
       return _handleResponse(response);
     } catch (e) {
-      throw ApiException('Network error: $e');
+      throw ApiException('Ошибка сети');
     }
   }
 
@@ -87,7 +87,7 @@ class ApiClient {
       _log('PUT', uri, response, body: body);
       return _handleResponse(response);
     } catch (e) {
-      throw ApiException('Network error: $e');
+      throw ApiException('Ошибка сети');
     }
   }
 
@@ -106,7 +106,7 @@ class ApiClient {
       _log('DELETE', uri, response, body: body);
       return _handleResponse(response);
     } catch (e) {
-      throw ApiException('Network error: $e');
+      throw ApiException('Ошибка сети');
     }
   }
 
@@ -142,7 +142,7 @@ class ApiClient {
       _log('POST (multipart)', uri, response);
       return _handleResponse(response);
     } catch (e) {
-      throw ApiException('Network error: $e');
+      throw ApiException('Ошибка сети');
     }
   }
 
@@ -165,18 +165,21 @@ class ApiClient {
           decoded = {'data': parsed};
         }
       } catch (e) {
-        // Некорректный JSON
-        throw ApiException('Invalid JSON response', status);
+        throw ApiException('Ошибка обработки ответа', status);
       }
     }
 
     if (status == 401) {
-      final message = (decoded['error'] ?? 'Unauthorized').toString();
-      throw UnauthorizedException(message);
+      throw UnauthorizedException('Не авторизован');
     }
 
     if (status >= 400) {
-      final message = (decoded['error'] ?? 'HTTP $status').toString();
+      String message = 'Ошибка сети';
+      if (status == 404) {
+        message = 'Ресурс не найден';
+      } else if (status == 500) {
+        message = 'Ошибка сервера';
+      }
       throw ApiException(message, status);
     }
 

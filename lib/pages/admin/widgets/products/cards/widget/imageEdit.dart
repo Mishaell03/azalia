@@ -30,7 +30,7 @@ class _ImageEdit extends State<ImageEdit> {
         });
       }
     } catch (e) {
-      _showErrorDialog('Ошибка при выборе изображения: $e');
+      _showErrorDialog('Ошибка при выборе изображения');
     }
   }
 

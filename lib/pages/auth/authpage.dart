@@ -103,20 +103,18 @@ class _AuthPageState extends State<AuthPage> {
         _showSuccessDialog(authResponse);
       } else {
         setState(() {
-          _errorText = authResponse.message;
+          _errorText = 'Неверный код авторизации';
         });
         _clearAllFields();
       }
-    } on AuthException catch (e) {
+    } on AuthException {
       setState(() {
-        debugPrint(e.toString());
-        _errorText = e.message;
+        _errorText = 'Неверный код авторизации';
       });
       _clearAllFields();
-    } catch (e) {
+    } catch (_) {
       setState(() {
-        debugPrint('Unexpected error: $e');
-        _errorText = 'Неизвестная ошибка';
+        _errorText = 'Произошла ошибка. Попробуйте еще раз';
       });
       _clearAllFields();
     } finally {

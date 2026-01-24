@@ -42,7 +42,7 @@ class AuthService {
       );
     } catch (e) {
       throw AuthException(
-        message: 'Ошибка авторизации: $e',
+        message: 'Ошибка авторизации',
       );
     }
   }
@@ -59,7 +59,7 @@ class AuthService {
       );
     } catch (e) {
       throw AuthException(
-        message: 'Ошибка проверки кода: $e',
+        message: 'Ошибка проверки кода',
       );
     }
   }
@@ -112,7 +112,7 @@ class AuthService {
       );
     } catch (e) {
       throw AuthException(
-        message: 'Ошибка обновления профиля: $e',
+        message: 'Ошибка обновления профиля',
       );
     }
   }

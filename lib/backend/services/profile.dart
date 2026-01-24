@@ -46,14 +46,14 @@ class ProfileService {
       } else {
         debugPrint('ProfileService: Ошибка обновления профиля');
         throw ProfileException(
-          message: response['error'] ?? response['message'] ?? 'Не удалось обновить профиль',
+          message: 'Не удалось обновить профиль',
           statusCode: 400,
         );
       }
     } on ApiException catch (e) {
       debugPrint('ProfileService: Ошибка API - $e');
       throw ProfileException(
-        message: e.message,
+        message: 'Не удалось обновить профиль',
         statusCode: e.statusCode,
       );
     } on ProfileException {
@@ -96,14 +96,14 @@ class ProfileService {
       } else {
         debugPrint('ProfileService: Ошибка загрузки аватарки');
         throw ProfileException(
-          message: response['error'] ?? response['message'] ?? 'Не удалось загрузить аватарку',
+          message: 'Не удалось загрузить аватарку',
           statusCode: 400,
         );
       }
     } on ApiException catch (e) {
       debugPrint('ProfileService: Ошибка API - $e');
       throw ProfileException(
-        message: e.message,
+        message: 'Не удалось загрузить аватарку',
         statusCode: e.statusCode,
       );
     } on ProfileException {
@@ -140,7 +140,7 @@ class ProfileService {
       }
       debugPrint('ProfileService: Ошибка API - $e');
       throw ProfileException(
-        message: e.message,
+        message: 'Не удалось получить аватарку',
         statusCode: e.statusCode,
       );
     } catch (e) {
