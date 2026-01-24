@@ -25,31 +25,40 @@ class IconValueSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
       children: items.map((item) {
         final bool isActive = item.value == selectedValue;
-        return GestureDetector(
-          onTap: () => onSelected(item.value),
-          child: Padding(
-            padding: EdgeInsetsGeometry.symmetric(horizontal: 15),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  item.ico,
-                  color: isActive
-                      ? AppColors.brown
-                      : AppColors.black_transparent,
-                ),
-                Text(
-                  item.label,
-                  style: AppText.medium_12.copyWith(
+        return Expanded(
+          child: GestureDetector(
+            onTap: () => onSelected(item.value),
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              padding: EdgeInsets.all(isActive ? 12 : 8),
+              decoration: BoxDecoration(
+                color: isActive ? AppColors.white_dark : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    item.ico,
+                    size: isActive ? 28 : 24,
                     color: isActive
                         ? AppColors.brown
                         : AppColors.black_transparent,
                   ),
-                ),
-              ],
+                  const SizedBox(height: 4),
+                  Text(
+                    textAlign: TextAlign.center,
+                    item.label,
+                    style: (isActive ? AppText.medium_14 : AppText.medium_12).copyWith(
+                      color: isActive
+                          ? AppColors.brown
+                          : AppColors.black_transparent,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );
