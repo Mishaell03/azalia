@@ -48,7 +48,10 @@ class _HomePage extends State<HomePage> {
     _scrollController.addListener(() {
       if (_scrollController.hasClients) {
         final position = _scrollController.position;
-        if (_viewModel.shouldLoadMore(position.pixels, position.maxScrollExtent)) {
+        if (_viewModel.shouldLoadMore(
+          position.pixels,
+          position.maxScrollExtent,
+        )) {
           _viewModel.loadNextCycle();
         }
       }
@@ -63,118 +66,113 @@ class _HomePage extends State<HomePage> {
     _viewModel.selectCategory(category);
   }
 
-  void _onSearchChanged(String query) {
-    _viewModel.setSearchQuery(query);
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: HomeHeader(
-      ),
+      appBar: HomeHeader(),
       bottomNavigationBar: const AppFooter(items: userFooterItems),
       body: _viewModel.isLoading
           ? const LoadingWidget()
           : _viewModel.hasError
-              ? GenericErrorWidget(onRetry: _viewModel.refresh)
-              : RefreshIndicator(
-                  key: _refreshIndicatorKey,
-                  displacement: 70,
-                  onRefresh: _handleRefresh,
-                  child: CustomScrollView(
-                    controller: _scrollController,
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    slivers: [
-                      SliverToBoxAdapter(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(
-                                bottom: 20,
-                                left: 24,
-                                right: 24,
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      "Растения для \nдомашнего уюта",
-                                      style: AppText.semibold_28.copyWith(
-                                        color: AppColors.black,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Image.asset(
-                                    'assets/images/cactus.png',
-                                    fit: BoxFit.contain,
-                                    height: 70,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              height: 33,
-                              child: HomeCategory(
-                                onCategorySelected: _onCategorySelected,
-                                selectedCategory: _viewModel.selectedCategory,
-                                categories: _viewModel.categories,
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                          ],
-                        ),
-                      ),
-                      if (_viewModel.displayedPlants.isEmpty && !_viewModel.isLoading)
-                        SliverToBoxAdapter(
-                          child: Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(32.0),
-                              child: Text(
-                                'Нет доступных растений',
-                                style: AppText.medium_16.copyWith(color: AppColors.grey),
-                              ),
-                            ),
+          ? GenericErrorWidget(onRetry: _viewModel.refresh)
+          : RefreshIndicator(
+              key: _refreshIndicatorKey,
+              displacement: 70,
+              onRefresh: _handleRefresh,
+              child: CustomScrollView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(
+                            bottom: 20,
+                            left: 24,
+                            right: 24,
                           ),
-                        )
-                      else
-                        SliverList(
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) {
-                              final plant = _viewModel.displayedPlants[index];
-                              
-                              if (plant.stockQuantity <= 0) {
-                                return const SizedBox.shrink();
-                              }
-                              
-                              return HomeCard(
-                                key: ValueKey(plant.id),
-                                plant: plant,
-                              );
-                            },
-                            childCount: _viewModel.displayedPlants.length,
-                          ),
-                        ),
-                      SliverToBoxAdapter(
-                        child: _viewModel.selectedCategory == null && 
-                                _viewModel.allPlants.isNotEmpty 
-                            ? Padding(
-                                padding: const EdgeInsets.all(16.0),
-                                child: Center(
-                                  child: Text(
-                                    'Продолжение списка...',
-                                    style: AppText.medium_14.copyWith(color: AppColors.grey),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  "Растения для \nдомашнего уюта",
+                                  style: AppText.semibold_28.copyWith(
+                                    color: AppColors.black,
                                   ),
                                 ),
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                    ],
+                              ),
+                              const SizedBox(width: 16),
+                              Image.asset(
+                                'assets/images/cactus.png',
+                                fit: BoxFit.contain,
+                                height: 70,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          height: 33,
+                          child: HomeCategory(
+                            onCategorySelected: _onCategorySelected,
+                            selectedCategory: _viewModel.selectedCategory,
+                            categories: _viewModel.categories,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+                    ),
                   ),
-                ),
+                  if (_viewModel.displayedPlants.isEmpty &&
+                      !_viewModel.isLoading)
+                    SliverToBoxAdapter(
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(32.0),
+                          child: Text(
+                            'Нет доступных растений',
+                            style: AppText.medium_16.copyWith(
+                              color: AppColors.grey,
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    SliverList(
+                      delegate: SliverChildBuilderDelegate((context, index) {
+                        final plant = _viewModel.displayedPlants[index];
+
+                        if (plant.stockQuantity <= 0) {
+                          return const SizedBox.shrink();
+                        }
+
+                        return HomeCard(key: ValueKey(plant.id), plant: plant);
+                      }, childCount: _viewModel.displayedPlants.length),
+                    ),
+                  SliverToBoxAdapter(
+                    child:
+                        _viewModel.selectedCategory == null &&
+                            _viewModel.allPlants.isNotEmpty
+                        ? Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Center(
+                              child: Text(
+                                'Продолжение списка...',
+                                style: AppText.medium_14.copyWith(
+                                  color: AppColors.grey,
+                                ),
+                              ),
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ],
+              ),
+            ),
     );
   }
 }

@@ -12,6 +12,7 @@ class AppProfileHeader extends StatelessWidget {
   final String? positionTitle;
   final bool isEmployee;
   final File? selectedImageFile;
+  final String? avatarBase64;
   final VoidCallback onEditPressed;
   final VoidCallback onImageTap;
 
@@ -22,6 +23,7 @@ class AppProfileHeader extends StatelessWidget {
     required this.positionTitle,
     required this.isEmployee,
     required this.selectedImageFile,
+    this.avatarBase64,
     required this.onEditPressed,
     required this.onImageTap,
   });
@@ -45,6 +47,7 @@ class AppProfileHeader extends StatelessWidget {
               children: [
                 AppProfileImage(
                   selectedImageFile: selectedImageFile,
+                  avatarBase64: avatarBase64,
                   onTap: () {},
                   size: 40,
                   cameraIconSize: 16,
@@ -95,8 +98,8 @@ class AppProfileHeader extends StatelessWidget {
                   children: [
                     AppProfileImage(
                       selectedImageFile: selectedImageFile,
-                      onTap:
-                          () {},
+                      avatarBase64: avatarBase64,
+                      onTap: () {},
                       size: 80,
                       cameraIconSize: 24,
                       showCameraIcon: false,

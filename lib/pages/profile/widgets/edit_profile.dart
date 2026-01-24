@@ -10,6 +10,7 @@ class AppEditProfile extends StatefulWidget {
   final TextEditingController nameController;
   final TextEditingController phoneController;
   final File? selectedImageFile;
+  final String? avatarBase64;
   final Function() onUpdateProfile;
   final Function(File?) onImageUpdated;
 
@@ -18,6 +19,7 @@ class AppEditProfile extends StatefulWidget {
     required this.nameController,
     required this.phoneController,
     required this.selectedImageFile,
+    this.avatarBase64,
     required this.onUpdateProfile,
     required this.onImageUpdated,
   });
@@ -184,6 +186,10 @@ class _AppEditProfile extends State<AppEditProfile> {
           children: [
             AppProfileImage(
               selectedImageFile: _currentImageFile,
+              // Если выбран новый файл, показываем его, иначе показываем текущую аватарку
+              avatarBase64: _currentImageFile == null 
+                  ? widget.avatarBase64 
+                  : null, 
               onTap: _showImageSourceDialog,
               size: 100,
               cameraIconSize: 32,

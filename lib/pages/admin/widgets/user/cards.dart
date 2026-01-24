@@ -4,6 +4,7 @@ import 'package:azalia/components/colors.dart';
 import 'package:azalia/components/text_styles.dart';
 import 'package:flutter/material.dart';
 import 'package:azalia/backend/models/employeesAdmin.dart';
+import 'package:azalia/pages/profile/widgets/image.dart';
 
 class UserCardData {
   final int id;
@@ -11,6 +12,7 @@ class UserCardData {
   final String name;
   final bool isEmployee;
   final bool isActive;
+  final String? avatarBase64;
 
   const UserCardData({
     required this.id,
@@ -18,6 +20,7 @@ class UserCardData {
     required this.name,
     required this.isEmployee,
     required this.isActive,
+    this.avatarBase64,
   });
 }
 
@@ -104,6 +107,7 @@ class _UsersList extends StatelessWidget {
                 name: user.name,
                 isEmployee: false,
                 isActive: false,
+                avatarBase64: user.avatar,
               ),
             );
           },
@@ -149,6 +153,7 @@ class _EmployeesList extends StatelessWidget {
                 name: employ.userInfo.name,
                 isEmployee: true,
                 isActive: employ.isActive,
+                avatarBase64: employ.userInfo.avatar,
               ),
             );
           },
@@ -171,7 +176,12 @@ class _UserCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
         children: [
-          const Icon(Icons.person, size: 48),
+          AppProfileImage(
+            avatarBase64: data.avatarBase64,
+            onTap: () {},
+            size: 48,
+            showCameraIcon: false,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -207,9 +217,7 @@ class _UserCard extends StatelessWidget {
           ),
 
           IconButton.outlined(
-            onPressed: () {
-              // диалог редактирования
-            },
+            onPressed: () {},
             icon: const Icon(Icons.edit),
             iconSize: 18,
             padding: const EdgeInsets.all(7),

@@ -104,12 +104,14 @@ class _ProfilePageState extends State<ProfilePage> {
 
 
   void _showEditProfileDialog() {
+    final user = _sessionService.currentUser;
     showDialog(
       context: context,
       builder: (context) => AppEditProfile(
         nameController: _nameController,
         phoneController: _phoneController,
         selectedImageFile: _selectedImageFile,
+        avatarBase64: user?.avatar,
         onUpdateProfile: _updateUserProfile,
         onImageUpdated: (File? newImage) {
           setState(() {
@@ -124,22 +126,51 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       final token = await _sessionService.getToken();
 
+      // Загружаем аватарку, если она выбрана
+      String? newAvatarBase64;
+      if (_selectedImageFile != null) {
+        try {
+          final avatarResponse = await ProfileService.uploadAvatar(_selectedImageFile!);
+          if (avatarResponse.success && avatarResponse.avatar != null) {
+            newAvatarBase64 = avatarResponse.avatar;
+          }
+        } catch (e) {
+          _showErrorDialog('Не удалось загрузить аватарку: $e');
+          return;
+        }
+      }
+
+      // Обновляем профиль
       final response = await ProfileService.updateProfile(
         name: _nameController.text.trim(),
         phone: _phoneController.text.trim(),
       );
 
       if (response.success) {
+        // Обновляем пользователя с новой аватаркой
+        final updatedUser = User(
+          id: response.user.id,
+          telegramId: response.user.telegramId,
+          name: response.user.name,
+          phone: response.user.phone,
+          sessionToken: response.user.sessionToken,
+          avatar: newAvatarBase64 ?? response.user.avatar,
+        );
+
         await _sessionService.saveSession(
-          user: response.user,
+          user: updatedUser,
           token: token ?? response.user.sessionToken ?? '',
           expiresAt: DateTime.now().add(const Duration(days: 30)),
           isEmployee: _sessionService.isEmployee,
           position: _sessionService.currentPosition,
+          avatar: newAvatarBase64 ?? updatedUser.avatar,
         );
 
-        _nameController.text = response.user.name;
-        _phoneController.text = _formatPhoneNumber(response.user.phone);
+        _nameController.text = updatedUser.name;
+        _phoneController.text = _formatPhoneNumber(updatedUser.phone);
+        
+        // Очищаем выбранный файл после успешной загрузки
+        _selectedImageFile = null;
 
         showDialog(
           context: context,
@@ -390,6 +421,7 @@ class _ProfilePageState extends State<ProfilePage> {
             positionTitle: position?.title,
             isEmployee: isEmployee,
             selectedImageFile: _selectedImageFile,
+            avatarBase64: user.avatar,
             onEditPressed: _showEditProfileDialog,
             onImageTap: () {},
           ),
