@@ -55,7 +55,7 @@ class AdminProductsCartWarehouse extends StatelessWidget {
 class _Crad extends StatelessWidget {
   final Plant plant;
 
-  const _Crad({super.key, required this.plant});
+  const _Crad({required this.plant});
 
   @override
   Widget build(BuildContext context) {
@@ -184,7 +184,7 @@ class _OpenDialog extends State<OpenDialog> {
     // категории цветов
     categoriesFuture = PlantService.getCategories();
     selectedCategoryId = widget.plant.categoryId;
-    nameController = TextEditingController(text: widget.plant.name ?? '');
+    nameController = TextEditingController(text: widget.plant.name);
 
     selectedPotSize = widget.plant.recommendedPotSize ?? 'M';
   }

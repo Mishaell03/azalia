@@ -69,7 +69,7 @@ class _AdminSettingsPage extends State<AdminUsersPage> {
 }
 
 class _UsersList extends StatelessWidget {
-  const _UsersList({super.key});
+  const _UsersList();
 
   @override
   Widget build(BuildContext context) {
@@ -114,7 +114,7 @@ class _UsersList extends StatelessWidget {
 }
 
 class _EmployeesList extends StatelessWidget {
-  const _EmployeesList({super.key});
+  const _EmployeesList();
 
   @override
   Widget build(BuildContext context) {
@@ -161,7 +161,7 @@ class _EmployeesList extends StatelessWidget {
 class _UserCard extends StatelessWidget {
   final UserCardData data;
 
-  const _UserCard({super.key, required this.data});
+  const _UserCard({required this.data});
 
   @override
   Widget build(BuildContext context) {

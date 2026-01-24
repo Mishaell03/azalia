@@ -103,7 +103,7 @@ class _AuthPageState extends State<AuthPage> {
         _showSuccessDialog(authResponse);
       } else {
         setState(() {
-          _errorText = authResponse.message ?? 'Ошибка авторизации';
+          _errorText = authResponse.message;
         });
         _clearAllFields();
       }

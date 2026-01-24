@@ -22,6 +22,7 @@ class HomeCategory extends StatefulWidget {
 }
 
 class _HomeCategory extends State<HomeCategory> {
+  late PlantService _plantService;
   List<Category> _categories = [];
   bool _isLoading = true;
   String? _error;
@@ -29,6 +30,7 @@ class _HomeCategory extends State<HomeCategory> {
   @override
   void initState() {
     super.initState();
+    _plantService = PlantService();
 
     if (widget.categories != null && widget.categories!.isNotEmpty) {
       setState(() {
@@ -81,6 +83,18 @@ class _HomeCategory extends State<HomeCategory> {
       );
     }
 
+    // Сортируем категории: выбранная категория должна быть первой
+    final sortedCategories = List<Category>.from(_categories);
+    if (widget.selectedCategory != null) {
+      final selectedIndex = sortedCategories.indexWhere(
+        (cat) => cat.id == widget.selectedCategory!.id,
+      );
+      if (selectedIndex != -1) {
+        final selectedCategory = sortedCategories.removeAt(selectedIndex);
+        sortedCategories.insert(0, selectedCategory);
+      }
+    }
+
     return SizedBox(
       height: 35,
       child: ListView(
@@ -94,7 +108,7 @@ class _HomeCategory extends State<HomeCategory> {
           ),
           const SizedBox(width: 12),
 
-          ..._categories.map((category) {
+          ...sortedCategories.map((category) {
             return Padding(
               padding: const EdgeInsets.only(right: 12),
               child: _buildCategoryItem(
