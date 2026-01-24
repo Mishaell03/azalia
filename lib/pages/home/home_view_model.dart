@@ -76,7 +76,29 @@ class HomeViewModel extends ChangeNotifier {
 
   /// Обновление данных (для pull-to-refresh)
   Future<void> refresh() async {
-    await _loadInitialData();
+    _setLoading(true);
+    _clearError();
+    _currentCycle = 0;
+
+    try {
+      final categories = await PlantService.getCategories();
+      final plants = await PlantService.getPlants(
+        categoryId: _selectedCategory?.id,
+        search: _searchQuery.isNotEmpty ? _searchQuery : null,
+      );
+
+      final availablePlants = _filterAvailablePlants(plants.data);
+
+      _categories = categories;
+      _allPlants = availablePlants;
+      _isAllCategory = _selectedCategory == null;
+      _updateDisplayedPlants();
+
+      _setLoading(false);
+    } catch (e) {
+      _setError('Что-то пошло не так', HomePageError.loadPlants);
+      _setLoading(false);
+    }
   }
 
   /// Выбор категории
