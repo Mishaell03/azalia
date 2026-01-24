@@ -208,6 +208,7 @@ class User(db.Model):
     phone = db.Column(db.String(20), nullable=False)
     session_token = db.Column(db.String(255), unique=True)
     token_expires_at = db.Column(db.DateTime)
+    avatar = db.Column(db.LargeBinary)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

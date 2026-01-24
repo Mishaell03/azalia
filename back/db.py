@@ -127,6 +127,7 @@ def create_database():
             phone TEXT NOT NULL,
             session_token TEXT UNIQUE,
             token_expires_at TIMESTAMP,
+            avatar BLOB,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -596,7 +597,30 @@ def get_employee_info(telegram_id):
     conn.close()
     return employee
 
+def migrate_add_avatar_column():
+    """миграция: добавление поля avatar в таблицу users"""
+    conn = sqlite3.connect('flower_shop.db')
+    cursor = conn.cursor()
+    
+    try:
+        # Проверяем, существует ли уже поле avatar
+        cursor.execute("PRAGMA table_info(users)")
+        columns = [column[1] for column in cursor.fetchall()]
+        
+        if 'avatar' not in columns:
+            cursor.execute('ALTER TABLE users ADD COLUMN avatar BLOB')
+            conn.commit()
+            print("Поле avatar успешно добавлено в таблицу users")
+        else:
+            print("Поле avatar уже существует в таблице users")
+    except Exception as e:
+        print(f"Ошибка при миграции: {str(e)}")
+        conn.rollback()
+    finally:
+        conn.close()
+
 if __name__ == "__main__":
     create_database()
+    migrate_add_avatar_column()
     add_sample_data()
     create_triggers()

@@ -2,9 +2,13 @@ from flask import Blueprint, request, jsonify, current_app
 from app import db
 from app.models import OAuthCode, User, Employee
 from datetime import datetime, timedelta
-import random
 import re
-from sqlalchemy import text
+import base64
+import io
+try:
+    from PIL import Image
+except ImportError:
+    Image = None
 
 bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
@@ -40,6 +44,46 @@ def sanitize_input(input_str, max_length=100):
         return ""
     sanitized = re.sub(r'[<>"\'\{\}\[\]\(\)\\\/]', '', str(input_str))
     return sanitized[:max_length]
+
+def get_user_by_session_token(session_token):
+    """получить пользователя по session_token из заголовка или данных"""
+    if not session_token:
+        return None
+    clean_token = session_token.strip('"\' ')
+    user = User.query.filter_by(session_token=clean_token).first()
+    if user and user.token_expires_at and user.token_expires_at < datetime.utcnow():
+        return None
+    return user
+
+def compress_image(image_data, max_size=(400, 400), quality=85):
+    """сжатие изображения"""
+    if Image is None:
+        raise ImportError("PIL/Pillow не установлен")
+    try:
+        img = Image.open(io.BytesIO(image_data))
+        
+        # Конвертируем в RGB если нужно
+        if img.mode in ('RGBA', 'LA', 'P'):
+            background = Image.new('RGB', img.size, (255, 255, 255))
+            if img.mode == 'P':
+                img = img.convert('RGBA')
+            background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+            img = background
+        elif img.mode != 'RGB':
+            img = img.convert('RGB')
+        
+        # Изменяем размер если нужно
+        img.thumbnail(max_size, Image.Resampling.LANCZOS)
+        
+        # Сохраняем в байты
+        output = io.BytesIO()
+        img.save(output, format='JPEG', quality=quality, optimize=True)
+        output.seek(0)
+        
+        return output.getvalue()
+    except Exception as e:
+        current_app.logger.error(f"Error compressing image: {str(e)}")
+        raise
 
 @bp.route('/verify', methods=['POST'])
 def verify_code():
@@ -80,7 +124,7 @@ def verify_code():
             query = query.filter_by(device_id=device_id)
         # только неиспользованные и не истёкшие
         from datetime import datetime as _dt
-        query = query.filter(OAuthCode.used == False, OAuthCode.expires_at > _dt.utcnow())
+        query = query.filter(~OAuthCode.used, OAuthCode.expires_at > _dt.utcnow())
         auth_code = query.order_by(OAuthCode.id.desc()).first()
         
         if not auth_code:
@@ -126,6 +170,13 @@ def verify_code():
                 'error': 'Что-то пошло не так'
             }), 500
         
+        avatar_base64 = None
+        if user.avatar:
+            try:
+                avatar_base64 = base64.b64encode(user.avatar).decode('utf-8')
+            except Exception:
+                pass
+        
         response_data = {
             'success': True,
             'user': {
@@ -134,6 +185,7 @@ def verify_code():
                 'name': sanitize_input(user.name),
                 'phone': sanitize_input(user.phone) if user.phone else "",
                 'session_token': session_token,
+                'avatar': avatar_base64
             },
             'message': 'Authentication successful'
         }
@@ -224,29 +276,33 @@ def check_code_status(code):
         }), 500
 
 
-@bp.route('/me', methods=['POST'])
+@bp.route('/me', methods=['GET', 'POST'])
 def me():
     """получить актуальные данные пользователя/роли по session_token"""
     try:
-        if not request.is_json:
-            return jsonify({'success': False, 'error': 'Неверный формат запроса'}), 400
-
-        data = request.get_json()
-        if not data:
-            return jsonify({'success': False, 'error': 'Отсутствуют данные'}), 400
-
-        session_token = data.get('session_token')
+        # Получаем токен из заголовка Authorization (приоритет) или из тела запроса (для обратной совместимости)
+        auth_header = request.headers.get('Authorization')
+        session_token = auth_header if auth_header else None
+        
+        if not session_token and request.is_json:
+            data = request.get_json()
+            if data:
+                session_token = data.get('session_token')
+        
         if not session_token or not isinstance(session_token, str):
             return jsonify({'success': False, 'error': 'Недействительная сессия'}), 401
-
-        clean_token = session_token.strip('"\' ')
-        user = User.query.filter_by(session_token=clean_token).first()
+        
+        user = get_user_by_session_token(session_token)
         if not user:
             return jsonify({'success': False, 'error': 'Недействительная сессия'}), 401
 
-        if user.token_expires_at and user.token_expires_at < datetime.utcnow():
-            return jsonify({'success': False, 'error': 'Сессия истекла'}), 401
-
+        avatar_base64 = None
+        if user.avatar:
+            try:
+                avatar_base64 = base64.b64encode(user.avatar).decode('utf-8')
+            except Exception:
+                pass
+        
         response_data = {
             'success': True,
             'message': 'OK',
@@ -255,7 +311,8 @@ def me():
                 'telegram_id': user.telegram_id,
                 'name': sanitize_input(user.name),
                 'phone': sanitize_input(user.phone) if user.phone else "",
-                'session_token': clean_token
+                'session_token': user.session_token,
+                'avatar': avatar_base64
             }
         }
 
@@ -284,6 +341,10 @@ def me():
 @bp.route('/update_profile', methods=['POST'])
 def update_profile():
     try:
+        # Получаем токен из заголовка Authorization (приоритет) или из тела запроса (для обратной совместимости)
+        auth_header = request.headers.get('Authorization')
+        session_token = auth_header if auth_header else None
+        
         if not request.is_json:
             return jsonify({
                 'success': False,
@@ -297,15 +358,17 @@ def update_profile():
                 'error': 'Отсутствуют данные'
             }), 400
         
-        session_token = data.get('session_token')
-        name = data.get('name')
-        phone = data.get('phone')
+        if not session_token:
+            session_token = data.get('session_token')
         
         if not session_token or not isinstance(session_token, str):
             return jsonify({
                 'success': False,
                 'error': 'Недействительная сессия'
             }), 401
+        
+        name = data.get('name')
+        phone = data.get('phone')
         
         if not name or not isinstance(name, str) or len(name.strip()) < 2:
             return jsonify({
@@ -330,24 +393,25 @@ def update_profile():
         
         formatted_phone = f"+7{phone_digits[-10:]}"
         
-        user = User.query.filter_by(session_token=session_token).first()
+        user = get_user_by_session_token(session_token)
         if not user:
             return jsonify({
                 'success': False,
                 'error': 'Пользователь не найден'
             }), 404
         
-        if user.token_expires_at and user.token_expires_at < datetime.utcnow():
-            return jsonify({
-                'success': False,
-                'error': 'Сессия истекла'
-            }), 401
-        
         user.name = sanitized_name
         user.phone = formatted_phone
         user.updated_at = datetime.utcnow()
         
         db.session.commit()
+        
+        avatar_base64 = None
+        if user.avatar:
+            try:
+                avatar_base64 = base64.b64encode(user.avatar).decode('utf-8')
+            except Exception:
+                pass
         
         return jsonify({
             'success': True,
@@ -357,12 +421,137 @@ def update_profile():
                 'telegram_id': user.telegram_id,
                 'name': user.name,
                 'phone': user.phone,
+                'avatar': avatar_base64
             }
         }), 200
         
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error in update_profile: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Внутренняя ошибка сервера'
+        }), 500
+
+@bp.route('/avatar', methods=['POST'])
+def upload_avatar():
+    """загрузка/изменение аватарки пользователя"""
+    try:
+        # Получаем токен из заголовка Authorization
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return jsonify({
+                'success': False,
+                'error': 'Токен сессии не предоставлен'
+            }), 401
+        
+        user = get_user_by_session_token(auth_header)
+        if not user:
+            return jsonify({
+                'success': False,
+                'error': 'Недействительная сессия'
+            }), 401
+        
+        # Проверяем наличие файла в запросе
+        if 'avatar' not in request.files:
+            return jsonify({
+                'success': False,
+                'error': 'Файл аватарки не предоставлен'
+            }), 400
+        
+        file = request.files['avatar']
+        if file.filename == '':
+            return jsonify({
+                'success': False,
+                'error': 'Файл не выбран'
+            }), 400
+        
+        # Проверяем формат файла
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+        if not ('.' in file.filename and 
+                file.filename.rsplit('.', 1)[1].lower() in allowed_extensions):
+            return jsonify({
+                'success': False,
+                'error': 'Неподдерживаемый формат изображения'
+            }), 400
+        
+        # Читаем данные файла
+        image_data = file.read()
+        
+        # Проверяем размер файла (максимум 10MB)
+        if len(image_data) > 10 * 1024 * 1024:
+            return jsonify({
+                'success': False,
+                'error': 'Размер файла превышает 10MB'
+            }), 400
+        
+        # Сжимаем изображение
+        try:
+            compressed_image = compress_image(image_data)
+        except Exception as e:
+            current_app.logger.error(f"Error compressing avatar: {str(e)}")
+            return jsonify({
+                'success': False,
+                'error': 'Ошибка обработки изображения'
+            }), 400
+        
+        # Сохраняем в БД
+        user.avatar = compressed_image
+        user.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        # Возвращаем base64 для удобства
+        avatar_base64 = base64.b64encode(compressed_image).decode('utf-8')
+        
+        return jsonify({
+            'success': True,
+            'message': 'Аватарка успешно загружена',
+            'avatar': avatar_base64
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error in upload_avatar: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Внутренняя ошибка сервера'
+        }), 500
+
+@bp.route('/avatar', methods=['GET'])
+def get_avatar():
+    """получение аватарки пользователя"""
+    try:
+        # Получаем токен из заголовка Authorization
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return jsonify({
+                'success': False,
+                'error': 'Токен сессии не предоставлен'
+            }), 401
+        
+        user = get_user_by_session_token(auth_header)
+        if not user:
+            return jsonify({
+                'success': False,
+                'error': 'Недействительная сессия'
+            }), 401
+        
+        if not user.avatar:
+            return jsonify({
+                'success': False,
+                'error': 'Аватарка не найдена'
+            }), 404
+        
+        # Возвращаем base64
+        avatar_base64 = base64.b64encode(user.avatar).decode('utf-8')
+        
+        return jsonify({
+            'success': True,
+            'avatar': avatar_base64
+        }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error in get_avatar: {str(e)}")
         return jsonify({
             'success': False,
             'error': 'Внутренняя ошибка сервера'
