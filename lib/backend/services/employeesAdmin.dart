@@ -21,9 +21,10 @@ class EmployeesService {
     final res = await api.get(ApiConfig.users);
     _checkSuccess(res);
     _log('Список пользователей получен');
-    return (res['data'] as List)
+    final users = (res['data'] as List)
         .map((e) => User.fromJson(e))
         .toList();
+    return users;
   }
 
   /// Получаем список всех сотрудников
@@ -31,9 +32,10 @@ class EmployeesService {
     final res = await api.get(ApiConfig.employees);
     _checkSuccess(res);
     _log('Список сотрудников получен');
-    return (res['data'] as List)
+    final employees = (res['data'] as List)
         .map((e) => Employee.fromJson(e))
         .toList();
+    return employees;
   }
 
   /// Получаем данные конкретного сотрудника

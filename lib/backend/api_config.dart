@@ -1,5 +1,6 @@
 class ApiConfig {
   static const String baseURL = 'http://www.nebinance.ru:5000/api';
+  // static const String baseURL = 'http://127.0.0.1:5000/api';
   static const Duration timeout = Duration(seconds: 10);
 
   // admin employees
@@ -16,6 +17,7 @@ class ApiConfig {
       '$baseURL/auth/check_status/$code';
   static const String updateProfile = '$baseURL/auth/update_profile';
   static const String authMe = '$baseURL/auth/me';
+  static const String avatar = '$baseURL/auth/avatar';
 
   // plants
   static const String plants = '$baseURL/plants/';

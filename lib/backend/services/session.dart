@@ -38,8 +38,22 @@ class SessionService {
     required DateTime expiresAt,
     bool isEmployee = false,
     Position? position,
+    String? avatar, // Обновляем аву если передана
   }) async {
-    _currentUser = user;
+    // Если передана новая ава, обновляем пользователя
+    if (avatar != null) {
+      _currentUser = User(
+        id: user.id,
+        telegramId: user.telegramId,
+        name: user.name,
+        phone: user.phone,
+        sessionToken: user.sessionToken ?? token,
+        avatar: avatar,
+      );
+    } else {
+      // Используем аву из, если она есть
+      _currentUser = user;
+    }
     _sessionToken = token;
     _tokenExpiresAt = expiresAt;
     _isEmployee = isEmployee;

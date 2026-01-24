@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:azalia/backend/services/session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -109,6 +110,42 @@ class ApiClient {
     }
   }
 
+  /// Загрузка файлов
+  Future<Map<String, dynamic>> postMultipart(
+    String url, {
+    required File file,
+    required String fieldName,
+  }) async {
+    final uri = Uri.parse(url);
+    try {
+      final request = http.MultipartRequest('POST', uri);
+      
+      // Добавляем заголовки авторизации
+      final authHeaders = _session.getAuthHeaders();
+      request.headers.addAll(authHeaders);
+      
+      // Добавляем файл
+      final fileStream = http.ByteStream(file.openRead());
+      final fileLength = await file.length();
+      final multipartFile = http.MultipartFile(
+        fieldName,
+        fileStream,
+        fileLength,
+        filename: file.path.split('/').last,
+      );
+      request.files.add(multipartFile);
+      
+      // Отправляем запрос
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+      
+      _log('POST (multipart)', uri, response);
+      return _handleResponse(response);
+    } catch (e) {
+      throw ApiException('Network error: $e');
+    }
+  }
+
   /// Обработка ответа: декодируем JSON или выводим исключение
   Map<String, dynamic> _handleResponse(http.Response response) {
     final status = response.statusCode;
@@ -153,13 +190,14 @@ class ApiClient {
       http.Response response, {
         Map<String, dynamic>? body,
       }) {
-    // final tokenPresent = _session.sessionToken != null ? 'yes' : 'no';
     debugPrint('=== $method $url ===');
+    // final tokenPresent = _session.sessionToken != null ? 'yes' : 'no';
     // if (body != null) debugPrint('BODY: $body');
     // debugPrint('TOKEN_PRESENT: $tokenPresent');
     // debugPrint('STATUS: ${response.statusCode}');
     // debugPrint('RESPONSE: ${response.body}');
-    // debugPrint('TOKEN_VALUE: ${_session.sessionToken}'); для отладки
-    // debugPrint('HEADERS: ${_headers.toString()}'); для отладки
+    // для отладки
+    // debugPrint('TOKEN_VALUE: ${_session.sessionToken}');
+    // debugPrint('HEADERS: ${_headers.toString()}');
   }
 }

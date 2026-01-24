@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:azalia/backend/apiClient.dart';
 import 'package:azalia/backend/api_config.dart';
@@ -71,6 +72,101 @@ class ProfileService {
   /// Валидация телефона
   static bool validatePhone(String phone) {
     return phone.trim().isNotEmpty;
+  }
+
+  /// Загрузка аватарки
+  static Future<UploadAvatarResponse> uploadAvatar(File imageFile) async {
+    try {
+      final session = SessionService();
+      final token = await session.getToken();
+      
+      if (token == null || token.isEmpty) {
+        throw ProfileException(message: 'Сессия недействительна');
+      }
+
+      final response = await _api.postMultipart(
+        ApiConfig.avatar,
+        file: imageFile,
+        fieldName: 'avatar',
+      );
+
+      if (response['success'] == true) {
+        debugPrint('ProfileService: Аватарка успешно загружена');
+        return UploadAvatarResponse.fromJson(response);
+      } else {
+        debugPrint('ProfileService: Ошибка загрузки аватарки');
+        throw ProfileException(
+          message: response['error'] ?? response['message'] ?? 'Не удалось загрузить аватарку',
+          statusCode: 400,
+        );
+      }
+    } on ApiException catch (e) {
+      debugPrint('ProfileService: Ошибка API - $e');
+      throw ProfileException(
+        message: e.message,
+        statusCode: e.statusCode,
+      );
+    } on ProfileException {
+      rethrow;
+    } catch (e) {
+      debugPrint('ProfileService: Исключение - $e');
+      throw ProfileException(message: 'Не удалось загрузить аватарку');
+    }
+  }
+
+  /// Получение аватарки
+  static Future<String?> getAvatar() async {
+    try {
+      final session = SessionService();
+      final token = await session.getToken();
+      
+      if (token == null || token.isEmpty) {
+        throw ProfileException(message: 'Сессия недействительна');
+      }
+
+      final response = await _api.get(ApiConfig.avatar);
+
+      if (response['success'] == true) {
+        debugPrint('ProfileService: Аватарка успешно получена');
+        return response['avatar'] as String?;
+      } else {
+        debugPrint('ProfileService: Аватарка не найдена');
+        return null;
+      }
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) {
+        // Аватарка не найдена - это нормально
+        return null;
+      }
+      debugPrint('ProfileService: Ошибка API - $e');
+      throw ProfileException(
+        message: e.message,
+        statusCode: e.statusCode,
+      );
+    } catch (e) {
+      debugPrint('ProfileService: Исключение - $e');
+      return null;
+    }
+  }
+}
+
+class UploadAvatarResponse {
+  final bool success;
+  final String message;
+  final String? avatar; // base64
+
+  UploadAvatarResponse({
+    required this.success,
+    required this.message,
+    this.avatar,
+  });
+
+  factory UploadAvatarResponse.fromJson(Map<String, dynamic> json) {
+    return UploadAvatarResponse(
+      success: json['success'] ?? false,
+      message: json['message'] ?? '',
+      avatar: json['avatar'],
+    );
   }
 }
 

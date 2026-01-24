@@ -84,12 +84,8 @@ class AuthService {
         );
       }
 
-      final response = await _api.post(
-        ApiConfig.authMe,
-        body: {
-          'session_token': token,
-        },
-      );
+      // Используем GET или POST без body, токен в заголовке Authorization
+      final response = await _api.get(ApiConfig.authMe);
 
       final authResponse = AuthResponse.fromJson(response);
 

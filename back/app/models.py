@@ -218,11 +218,22 @@ class User(db.Model):
     employee_info = db.relationship('Employee', backref='user', lazy=True, uselist=False)
     
     def to_dict(self):
+        avatar_base64 = None
+        if self.avatar:
+            try:
+                import base64
+                avatar_base64 = base64.b64encode(self.avatar).decode('utf-8')
+            except Exception as e:
+                import logging
+                logging.warning(f"Error encoding avatar for user {self.id}: {e}")
+                pass
+        
         return {
             'id': self.id,
             'telegram_id': self.telegram_id,
             'name': self.name,
             'phone': self.phone,
+            'avatar': avatar_base64,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'is_employee': self.is_employee()
@@ -266,9 +277,20 @@ class Employee(db.Model):
         if self.position:
             data['position'] = self.position.to_dict()
         if self.user:
+            avatar_base64 = None
+            if self.user.avatar:
+                try:
+                    import base64
+                    avatar_base64 = base64.b64encode(self.user.avatar).decode('utf-8')
+                except Exception as e:
+                    import logging
+                    logging.warning(f"Error encoding avatar for employee {self.id}: {e}")
+                    pass
+            
             data['user_info'] = {
                 'name': self.user.name,
-                'phone': self.user.phone
+                'phone': self.user.phone,
+                'avatar': avatar_base64
             }
         return data
 

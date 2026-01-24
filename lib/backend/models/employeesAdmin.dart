@@ -55,6 +55,7 @@ class User {
   final int telegramId;
   final bool isEmployee;
   final String? sessionToken;
+  final String? avatar;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -65,6 +66,7 @@ class User {
     required this.telegramId,
     required this.isEmployee,
     this.sessionToken,
+    this.avatar,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -77,6 +79,7 @@ class User {
       telegramId: json['telegram_id'],
       isEmployee: json['is_employee'],
       sessionToken: json['session_token'],
+      avatar: json['avatar'],
       createdAt: DateTime.parse(json['created_at']),
       updatedAt: DateTime.parse(json['updated_at']),
     );
@@ -135,16 +138,19 @@ class Position {
 class EmployeeUserInfo {
   final String name;
   final String phone;
+  final String? avatar;
 
   EmployeeUserInfo({
     required this.name,
     required this.phone,
+    this.avatar,
   });
 
   factory EmployeeUserInfo.fromJson(Map<String, dynamic> json) {
     return EmployeeUserInfo(
       name: json['name'],
       phone: json['phone'],
+      avatar: json['avatar'],
     );
   }
 }
