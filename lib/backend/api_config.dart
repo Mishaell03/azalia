@@ -11,6 +11,13 @@ class ApiConfig {
   static const String assignEmployee = '$baseURL/employees/assign';
   static String employeeDeactivate(int id) => '$baseURL/employees/$id/deactivate';
 
+  // payments
+  static String get paymentGenerateLink => '$baseURL/payments/generate-link';
+  static String paymentLink(int linkId) => '$baseURL/payments/link/$linkId';
+  static String paymentCancel(int linkId) => '$baseURL/payments/link/$linkId/cancel';
+  static String paymentLinkStatus(int linkId) => '$baseURL/payments/status/link/$linkId';
+  static String orderStatus(int orderId) => '$baseURL/payments/status/order/$orderId';
+
   // auth
   static const String authVerify = '$baseURL/auth/verify';
   static String authCheckStatus(String code) =>

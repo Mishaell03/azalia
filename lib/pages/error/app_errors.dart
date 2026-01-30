@@ -6,16 +6,20 @@ class AppErrors {
   static const String addToCartError = 'Не удалось добавить в корзину';
   static const String removeFromCartError = 'Не удалось удалить из корзины';
   static const String addToWishlistError = 'Не удалось добавить в избранное';
-  static const String removeFromWishlistError = 'Не удалось удалить из избранного';
-  static const String unauthorizedMessage = 'Войдите в аккаунт, чтобы выполнить действие';
-  static const String unauthorizedCartMessage = 'Нельзя добавлять в корзину без входа';
-  static const String unauthorizedWishlistMessage = 'Нельзя добавлять в избранное без входа';
-  
+  static const String removeFromWishlistError =
+      'Не удалось удалить из избранного';
+  static const String unauthorizedMessage =
+      'Войдите в аккаунт, чтобы выполнить действие';
+  static const String unauthorizedCartMessage =
+      'Нельзя добавлять в корзину без входа';
+  static const String unauthorizedWishlistMessage =
+      'Нельзя добавлять в избранное без входа';
+
   static bool isUnauthorizedError(String error) {
-    return error.contains(unauthorized) || 
-           error.contains('authorized') || 
-           error.contains('token') ||
-           error.contains('session') ||
-           error.contains('не авторизован');
+    return error.contains(unauthorized) ||
+        error.contains('authorized') ||
+        error.contains('token') ||
+        error.contains('session') ||
+        error.contains('не авторизован');
   }
 }
