@@ -1,3 +1,4 @@
+import 'package:azalia/backend/models/payment/generate_response.dart';
 import 'package:azalia/pages/admin/pages/analytics.dart';
 import 'package:azalia/pages/admin/pages/flowers.dart';
 import 'package:azalia/pages/admin/pages/settings.dart';
@@ -6,6 +7,7 @@ import 'package:azalia/pages/admin/widgets/products/cards/delivery.dart';
 import 'package:azalia/pages/admin/widgets/products/cards/orders.dart';
 import 'package:azalia/pages/admin/widgets/products/cards/procurement.dart';
 import 'package:azalia/pages/admin/widgets/products/cards/warehouse.dart';
+import 'package:azalia/pages/payment/paymentpage.dart';
 import 'package:azalia/pages/wishlist/wishlistpage.dart';
 import 'package:go_router/go_router.dart';
 
@@ -43,6 +45,16 @@ class AppRouter {
         path: '/cart',
         name: 'cart',
         builder: (context, state) => const CartPage(),
+      ),
+      GoRoute(
+        path: '/payment',
+        name: 'payment',
+        builder: (context, state) {
+          final args = state.extra as PaymentRouteArgs;
+          return PaymentPage(
+            args: args,
+          );
+        },
       ),
       GoRoute(
         path: '/admin',
@@ -90,4 +102,16 @@ class AppRouter {
     ],
     errorBuilder: (context, state) => ErrorPage(),
   );
+}
+
+class PaymentRouteArgs {
+  final int paymentLinkId;
+  final int orderId;
+  final String paymentUrl;
+
+  PaymentRouteArgs({
+    required this.paymentLinkId,
+    required this.orderId,
+    required this.paymentUrl,
+  });
 }
