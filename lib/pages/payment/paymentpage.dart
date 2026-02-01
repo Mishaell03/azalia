@@ -1,5 +1,6 @@
 import 'package:azalia/router.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 class PaymentPage extends StatelessWidget {
   final PaymentRouteArgs args;
@@ -15,8 +16,16 @@ class PaymentPage extends StatelessWidget {
           Text('Заказ №${args.orderId}'),
           Text('Сумма к оплате'),
           ElevatedButton(
-            onPressed: () {
-              // открыть WebView
+            onPressed: () async {
+              final result = await context.pushNamed<bool>(
+                'payment_webview',
+                extra: args.paymentUrl,
+              );
+              // if (result == true){
+              //   // успех
+              // } else{
+              //   // отмена
+              // }
             },
             child: const Text('Перейти к оплате'),
           ),

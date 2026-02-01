@@ -7,6 +7,7 @@ import 'package:azalia/pages/admin/widgets/products/cards/delivery.dart';
 import 'package:azalia/pages/admin/widgets/products/cards/orders.dart';
 import 'package:azalia/pages/admin/widgets/products/cards/procurement.dart';
 import 'package:azalia/pages/admin/widgets/products/cards/warehouse.dart';
+import 'package:azalia/pages/payment/payment_webview.dart';
 import 'package:azalia/pages/payment/paymentpage.dart';
 import 'package:azalia/pages/wishlist/wishlistpage.dart';
 import 'package:go_router/go_router.dart';
@@ -54,6 +55,14 @@ class AppRouter {
           return PaymentPage(
             args: args,
           );
+        },
+      ),
+      GoRoute(
+        path: '/payment/webview',
+        name: 'payment_webview',
+        builder: (context, state) {
+          final url = state.extra as String;
+          return PaymentWebViewPage(paymentUrl: url);
         },
       ),
       GoRoute(

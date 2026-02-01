@@ -1,3 +1,5 @@
+import 'package:azalia/backend/apiClient.dart';
+import 'package:azalia/backend/controllers/payment_flow.dart';
 import 'package:azalia/components/widgets/data_pages.dart';
 import 'package:azalia/pages/cart/widgets/unauthorized.dart';
 import 'package:flutter/material.dart';
@@ -29,10 +31,12 @@ class _CartPageState extends State<CartPage> {
   double _totalPrice = 0;
   int _totalItems = 0;
   final SessionService _sessionService = SessionService();
+  late final PaymentFlowController _paymentFlow;
 
   @override
   void initState() {
     super.initState();
+    _paymentFlow = PaymentFlowController(ApiClient());
     _loadCart();
   }
 
@@ -235,7 +239,7 @@ class _CartPageState extends State<CartPage> {
     );
   }
 
-  void _proceedToCheckout() {
+  Future<void> _proceedToCheckout() async {
     if (_cartItems.isEmpty) {
       _showSnackBar(
         'Добавьте товары в корзину для оформления заказа',
@@ -244,11 +248,39 @@ class _CartPageState extends State<CartPage> {
       return;
     }
 
-    _showSnackBar(
-      'Функциональность оформления заказа в разработке',
-      isError: false,
-    );
+    try {
+      // создаём оплату (заказ + ссылка)
+      final payment = await _paymentFlow.startPayment(
+        address: 'Гарабурды 16 дом 8', // позже экран ввода
+        paymentMethod: 'card',
+      );
+
+      // открываем WebView оплаты
+      final result = await context.pushNamed<bool>(
+        'payment_webview',
+        extra: payment.paymentUrl,
+      );
+
+      // обработка результата
+      if (result == true) {
+        _showSnackBar('Оплата прошла успешно', isError: false);
+
+        // await CartService.clearCart();
+        await _loadCart();
+      } else {
+        _showSnackBar('Оплата отменена', isError: true);
+      }
+    } catch (e, stack) {
+      debugPrint('Checkout error: $e');
+      debugPrint('ApiClient POST ERROR: $e');
+      debugPrint('$stack');
+      _showSnackBar(
+        e.toString().replaceAll('Exception: ', ''),
+        isError: true,
+      );
+    }
   }
+
 
   @override
   Widget build(BuildContext context) {

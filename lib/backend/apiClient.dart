@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 class ApiException implements Exception {
   final String message;
   final int? statusCode;
+
   ApiException(this.message, [this.statusCode]);
 
   @override
@@ -26,9 +27,7 @@ class ApiClient {
 
   /// Формируем заголовки для запроса, берём токен из SessionService
   Map<String, String> get _headers {
-    final headers = <String, String>{
-      'Content-Type': 'application/json',
-    };
+    final headers = <String, String>{'Content-Type': 'application/json'};
 
     try {
       final auth = _session.getAuthHeaders();
@@ -48,15 +47,16 @@ class ApiClient {
       _log('GET', uri, response);
       return _handleResponse(response);
     } catch (e) {
-      throw ApiException('Ошибка сети');
+      debugPrint('ApiException get error: $e');
+      throw 'Ошибка сети';
     }
   }
 
   /// POST (body nullable)
   Future<Map<String, dynamic>> post(
-      String url, {
-        Map<String, dynamic>? body,
-      }) async {
+    String url, {
+    Map<String, dynamic>? body,
+  }) async {
     final uri = Uri.parse(url);
     try {
       final response = await http.post(
@@ -67,16 +67,16 @@ class ApiClient {
       _log('POST', uri, response, body: body);
       return _handleResponse(response);
     } catch (e) {
-      throw ApiException('Ошибка сети');
+      debugPrint('ApiException post error: $e');
+      throw 'Ошибка сети';
     }
   }
 
-
   /// PUT (body nullable)
   Future<Map<String, dynamic>> put(
-      String url, {
-        Map<String, dynamic>? body,
-      }) async {
+    String url, {
+    Map<String, dynamic>? body,
+  }) async {
     final uri = Uri.parse(url);
     try {
       final response = await http.put(
@@ -87,15 +87,16 @@ class ApiClient {
       _log('PUT', uri, response, body: body);
       return _handleResponse(response);
     } catch (e) {
-      throw ApiException('Ошибка сети');
+      debugPrint('ApiException put error: $e');
+      throw 'Ошибка сети';
     }
   }
 
   /// DELETE (body nullable)
   Future<Map<String, dynamic>> delete(
-      String url, {
-        Map<String, dynamic>? body,
-      }) async {
+    String url, {
+    Map<String, dynamic>? body,
+  }) async {
     final uri = Uri.parse(url);
     try {
       final response = await http.delete(
@@ -106,7 +107,8 @@ class ApiClient {
       _log('DELETE', uri, response, body: body);
       return _handleResponse(response);
     } catch (e) {
-      throw ApiException('Ошибка сети');
+      debugPrint('ApiException delete error: $e');
+      throw 'Ошибка сети';
     }
   }
 
@@ -119,11 +121,11 @@ class ApiClient {
     final uri = Uri.parse(url);
     try {
       final request = http.MultipartRequest('POST', uri);
-      
+
       // Добавляем заголовки авторизации
       final authHeaders = _session.getAuthHeaders();
       request.headers.addAll(authHeaders);
-      
+
       // Добавляем файл
       final fileStream = http.ByteStream(file.openRead());
       final fileLength = await file.length();
@@ -134,15 +136,16 @@ class ApiClient {
         filename: file.path.split('/').last,
       );
       request.files.add(multipartFile);
-      
+
       // Отправляем запрос
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
-      
+
       _log('POST (multipart)', uri, response);
       return _handleResponse(response);
     } catch (e) {
-      throw ApiException('Ошибка сети');
+      debugPrint('ApiException postMultipart error: $e');
+      throw 'Ошибка сети';
     }
   }
 
@@ -161,16 +164,15 @@ class ApiClient {
         if (parsed is Map<String, dynamic>) {
           decoded = parsed;
         } else {
-          // Если сервер вернул не map, оборачиваем в поле data
           decoded = {'data': parsed};
         }
       } catch (e) {
-        throw ApiException('Ошибка обработки ответа', status);
+        throw 'Ошибка обработки ответа';
       }
     }
 
     if (status == 401) {
-      throw UnauthorizedException('Не авторизован');
+      throw 'Не авторизован';
     }
 
     if (status >= 400) {
@@ -188,17 +190,17 @@ class ApiClient {
 
   /// Логирование запросов для выявления ошибок
   void _log(
-      String method,
-      Uri url,
-      http.Response response, {
-        Map<String, dynamic>? body,
-      }) {
+    String method,
+    Uri url,
+    http.Response response, {
+    Map<String, dynamic>? body,
+  }) {
     debugPrint('=== $method $url ===');
     // final tokenPresent = _session.sessionToken != null ? 'yes' : 'no';
-    // if (body != null) debugPrint('BODY: $body');
+    if (body != null) debugPrint('BODY: $body');
     // debugPrint('TOKEN_PRESENT: $tokenPresent');
     // debugPrint('STATUS: ${response.statusCode}');
-    // debugPrint('RESPONSE: ${response.body}');
+    debugPrint('RESPONSE: ${response.body}');
     // для отладки
     // debugPrint('TOKEN_VALUE: ${_session.sessionToken}');
     // debugPrint('HEADERS: ${_headers.toString()}');

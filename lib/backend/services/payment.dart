@@ -9,49 +9,73 @@ class PaymentService {
 
   PaymentService(this._api);
 
-  // создать ссылку на оплату
+  /// создать ссылку на оплату
   Future<PaymentGenerateResponse> generatePaymentLink({
     required String address,
     required String paymentMethod,
   }) async {
-    final data = await _api.post(
+    final response = await _api.post(
       ApiConfig.paymentGenerateLink,
       body: {
         'address': address,
         'payment_method': paymentMethod,
       },
     );
+
+    // Берём только data из ответа
+    final data = response['data'] as Map<String, dynamic>?;
+    if (data == null) {
+      throw ApiException('Отсутствуют платежные данные');
+    }
     return PaymentGenerateResponse.fromJson(data);
   }
 
-  // получить ссылку на оплату
+  /// получить ссылку на оплату
   Future<PaymentLink> getPaymentLink(int linkId) async {
-    final data = await _api.get(
+    final response = await _api.get(
       ApiConfig.paymentLink(linkId),
     );
+
+    final data = response['data'] as Map<String, dynamic>?;
+    if (data == null) {
+      throw ApiException('Payment link data is missing');
+    }
+
     return PaymentLink.fromJson(data);
   }
 
-  // отменить ссылку
+  /// отменить ссылку
   Future<void> cancelPaymentLink(int linkId) async {
     await _api.post(
-        ApiConfig.paymentCancel(linkId),
+      ApiConfig.paymentCancel(linkId),
     );
   }
 
-  // статус ссылки
+  /// статус ссылки
   Future<PaymentLink> checkPaymentLinkStatus(int linkId) async {
-    final data = await _api.get(
-        ApiConfig.paymentLinkStatus(linkId),
+    final response = await _api.get(
+      ApiConfig.paymentLinkStatus(linkId),
     );
+
+    final data = response['data'] as Map<String, dynamic>?;
+    if (data == null) {
+      throw ApiException('Payment link status data is missing');
+    }
+
     return PaymentLink.fromJson(data);
   }
 
-  // проверить статус заказа
-  Future<OrderStatusResponse> checkOrderStatus(int orderId) async{
-    final data = await _api.get(
+  /// проверить статус заказа
+  Future<OrderStatusResponse> checkOrderStatus(int orderId) async {
+    final response = await _api.get(
       ApiConfig.orderStatus(orderId),
     );
+
+    final data = response['data'] as Map<String, dynamic>?;
+    if (data == null) {
+      throw ApiException('Order status data is missing');
+    }
+
     return OrderStatusResponse.fromJson(data);
   }
 }
