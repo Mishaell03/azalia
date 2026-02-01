@@ -46,27 +46,28 @@ def validate_cart_items(cart_items):
     - Проверяет наличие товара в БД
     - Проверяет цены
     - Проверяет доступное количество
-    Возвращает (is_valid, error_message, total_price)
+    Возвращает (is_valid, error_message, total_price, validated_items)
     """
     if not cart_items:
-        return False, 'Корзина пуста', 0.0
+        return False, 'Корзина пуста', 0.0, []
 
     total_price = 0.0
+    validated_items = []
 
     for item in cart_items:
         plant = PotPlant.query.get(item.plant_id)
         if not plant:
-            return False, f'Растение ID {item.plant_id} не найдено', 0.0
+            return False, f'Растение ID {item.plant_id} не найдено', 0.0, []
 
         if not plant.in_stock or plant.stock_quantity <= 0:
-            return False, f'Растение "{plant.name}" больше не в наличии', 0.0
+            return False, f'Растение "{plant.name}" больше не в наличии', 0.0, []
 
         if item.quantity > plant.stock_quantity:
-            return False, f'Недостаточно "{plant.name}" в наличии. Доступно: {plant.stock_quantity}, запрошено: {item.quantity}', 0.0
+            return False, f'Недостаточно "{plant.name}" в наличии. Доступно: {plant.stock_quantity}, запрошено: {item.quantity}', 0.0, []
 
         # сравниваем цены как строки/числа - предположим что оба NUMERIC
         if float(item.plant_unit_price) != float(plant.base_price):
-            return False, f'Цена растения "{plant.name}" изменилась. Пожалуйста, обновите корзину', 0.0
+            return False, f'Цена растения "{plant.name}" изменилась. Пожалуйста, обновите корзину', 0.0, []
 
         pot_price = 0.0
         if item.pot_size_id and item.pot_material_id:
@@ -75,18 +76,25 @@ def validate_cart_items(cart_items):
                 size_id=item.pot_size_id
             ).first()
             if not pot_price_obj:
-                return False, 'Выбранный горшок больше не доступен', 0.0
+                return False, 'Выбранный горшок больше не доступен', 0.0, []
             if float(item.pot_unit_price) != float(pot_price_obj.price):
-                return False, 'Цена горшка изменилась. Пожалуйста, обновите корзину', 0.0
+                return False, 'Цена горшка изменилась. Пожалуйста, обновите корзину', 0.0, []
             pot_price = float(pot_price_obj.price)
         else:
             if float(item.pot_unit_price) != 0.0:
-                return False, 'Некорректные данные о горшке', 0.0
+                return False, 'Некорректные данные о горшке', 0.0, []
 
         item_total = (float(item.plant_unit_price) + float(item.pot_unit_price)) * int(item.quantity)
         total_price += item_total
+        
+        validated_items.append({
+            'cart_item': item,
+            'plant': plant,
+            'pot_price_obj': pot_price_obj if item.pot_size_id and item.pot_material_id else None,
+            'item_total': item_total
+        })
 
-    return True, None, round(total_price, 2)
+    return True, None, round(total_price, 2), validated_items
 
 def sync_payment_link_with_yookassa(payment_link):
     """
@@ -116,6 +124,8 @@ def sync_payment_link_with_yookassa(payment_link):
             if order:
                 order.status = 'processing'
                 order.is_paid = True
+                # Обновляем количество товаров на складе и удаляем купленные товары из корзины
+                remove_purchased_items_from_cart(order.id, order.user_id)
     elif y_status == 'canceled' and payment_link.status != 'cancelled':
         payment_link.status = 'cancelled'
         if payment_link.order_id:
@@ -133,6 +143,60 @@ def sync_payment_link_with_yookassa(payment_link):
         current_app.logger.error(f"Failed to commit sync changes: {e}")
 
     return payment_link
+
+def remove_purchased_items_from_cart(order_id, user_id):
+    """
+    Удаляет из корзины пользователя только те товары, которые были в заказе.
+    Также обновляет количество товаров на складе.
+    """
+    try:
+        order_items = OrderItem.query.filter_by(order_id=order_id).all()
+        
+        for order_item in order_items:
+            # Находим соответствующие товары в корзине
+            cart_items = CartItem.query.filter_by(
+                user_id=user_id,
+                plant_id=order_item.plant_id
+            ).all()
+            
+            for cart_item in cart_items:
+                # Проверяем соответствие по всем параметрам
+                if (cart_item.quantity == order_item.quantity and
+                    float(cart_item.plant_unit_price) == float(order_item.plant_unit_price) and
+                    float(cart_item.pot_unit_price) == float(order_item.pot_unit_price)):
+                    
+                    # Получаем горшок для проверки цветов/размеров
+                    pot_match = True
+                    if cart_item.pot_color_id:
+                        pot_color = PotColor.query.get(cart_item.pot_color_id)
+                        if pot_color and pot_color.name != order_item.pot_color:
+                            pot_match = False
+                    if cart_item.pot_size_id:
+                        pot_size = PotSize.query.get(cart_item.pot_size_id)
+                        if pot_size and pot_size.code != order_item.pot_size:
+                            pot_match = False
+                    if cart_item.pot_material_id:
+                        pot_material = PotMaterial.query.get(cart_item.pot_material_id)
+                        if pot_material and pot_material.name != order_item.pot_material:
+                            pot_match = False
+                    
+                    if pot_match:
+                        # Удаляем товар из корзины
+                        db.session.delete(cart_item)
+                        # Обновляем количество на складе
+                        plant = PotPlant.query.get(order_item.plant_id)
+                        if plant and plant.stock_quantity >= order_item.quantity:
+                            plant.stock_quantity -= order_item.quantity
+                            if plant.stock_quantity <= 0:
+                                plant.in_stock = False
+                        break
+        
+        db.session.commit()
+        current_app.logger.info(f"Removed purchased items from cart for order {order_id}")
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error removing purchased items from cart: {str(e)}")
 
 def format_payment_link_response(payment_link):
     """Сформировать словарь-ответ для payment_link (без зависимости от модели .to_dict())."""
@@ -155,30 +219,32 @@ def format_payment_link_response(payment_link):
 @bp.route('/generate-link', methods=['POST'])
 def generate_payment_link():
     try:
-        session_id = request.headers.get('X-Session-Id')
-        if not session_id:
-            return jsonify({'success': False, 'error': 'X-Session-Id header required'}), 401
+        # --- Получаем токен с фронта ---
+        session_token = request.headers.get('X-Session-Id') or request.headers.get('Authorization')
+        if not session_token:
+            return jsonify({'success': False, 'error': 'Session token required'}), 401
 
-        user = get_user_by_session(session_id)
+        user = get_user_by_session(session_token)
         if not user:
             return jsonify({'success': False, 'error': 'Invalid or expired session ID'}), 401
 
+        # --- Получаем данные запроса ---
         data = request.get_json() or {}
-        address = data.get('address', '').strip()
+        address = (data.get('address') or '').strip()
         payment_method = data.get('payment_method', 'card')
 
-        if not address:
-            return jsonify({'success': False, 'error': 'Delivery address is required'}), 400
-        if len(address) < 5 or len(address) > 500:
+        if not address or len(address) < 5 or len(address) > 500:
             return jsonify({'success': False, 'error': 'Address must be between 5 and 500 characters'}), 400
         if payment_method not in ['cash', 'card']:
-            return jsonify({'success': False, 'error': 'Invalid payment method. Must be "cash" or "card"'}), 400
+            return jsonify({'success': False, 'error': 'Invalid payment method'}), 400
 
+        # --- Получаем корзину ---
         cart_items = CartItem.query.filter_by(user_id=user.id).all()
-        is_valid, error_message, total_price = validate_cart_items(cart_items)
+        is_valid, error_message, total_price, validated_items = validate_cart_items(cart_items)
         if not is_valid:
             return jsonify({'success': False, 'error': error_message}), 400
 
+        # --- Создаём заказ ---
         order = Order(
             user_id=user.id,
             address=address,
@@ -188,40 +254,42 @@ def generate_payment_link():
             order_date=datetime.utcnow()
         )
         db.session.add(order)
-        db.session.flush()
+        db.session.flush()  # order.id теперь доступен
 
-        for cart_item in cart_items:
+        # --- Создаём OrderItems ---
+        for item_data in validated_items:
+            ci = item_data['cart_item']
             order_item = OrderItem(
                 order_id=order.id,
-                plant_id=cart_item.plant_id,
-                quantity=cart_item.quantity,
-                plant_unit_price=cart_item.plant_unit_price,
+                plant_id=ci.plant_id,
+                quantity=ci.quantity,
+                plant_unit_price=ci.plant_unit_price,
                 pot_color=None,
                 pot_size=None,
                 pot_material=None,
-                pot_unit_price=cart_item.pot_unit_price,
-                total_price=cart_item.total_price
+                pot_unit_price=ci.pot_unit_price,
+                total_price=ci.total_price
             )
-            if cart_item.pot_color_id:
-                pot_color = PotColor.query.get(cart_item.pot_color_id)
+            if ci.pot_color_id:
+                pot_color = PotColor.query.get(ci.pot_color_id)
                 if pot_color:
                     order_item.pot_color = pot_color.name
-            if cart_item.pot_size_id:
-                pot_size = PotSize.query.get(cart_item.pot_size_id)
+            if ci.pot_size_id:
+                pot_size = PotSize.query.get(ci.pot_size_id)
                 if pot_size:
                     order_item.pot_size = pot_size.code
-            if cart_item.pot_material_id:
-                pot_material = PotMaterial.query.get(cart_item.pot_material_id)
+            if ci.pot_material_id:
+                pot_material = PotMaterial.query.get(ci.pot_material_id)
                 if pot_material:
                     order_item.pot_material = pot_material.name
             db.session.add(order_item)
 
-        # Создаём платёж в Yookassa (с копейками)
+        # --- Инициализация Yookassa ---
         if not init_yookassa():
-            current_app.logger.error("Yookassa not initialized")
             db.session.rollback()
             return jsonify({'success': False, 'error': 'Payment gateway not configured'}), 500
 
+        # --- Создаём платёж ---
         try:
             amount_str = "{:.2f}".format(float(total_price))
             payment = Payment.create({
@@ -231,16 +299,16 @@ def generate_payment_link():
                     "return_url": f"{os.environ.get('API_BASE_URL', 'http://localhost:5000')}/api/payments/callback"
                 },
                 "capture": True,
-                "description": f"Заказ растений. Товаров: {len(cart_items)} шт. ID заказа: #{order.id}",
+                "description": f"Заказ растений. ID заказа: #{order.id}, товаров: {len(cart_items)}",
                 "metadata": {"order_id": order.id, "user_id": user.id, "items_count": len(cart_items)}
             }, uuid.uuid4())
             payment_url = payment.confirmation.confirmation_url
             payment_system_id = str(payment.id)
         except Exception as e:
-            current_app.logger.error(f"Yookassa payment creation error: {str(e)}")
             db.session.rollback()
             return jsonify({'success': False, 'error': f'Payment gateway error: {str(e)}'}), 500
 
+        # --- Создаём PaymentLink ---
         expires_at = datetime.utcnow() + timedelta(hours=24)
         payment_link = PaymentLink(
             user_id=user.id,
@@ -252,28 +320,32 @@ def generate_payment_link():
             payment_system_id=payment_system_id
         )
         db.session.add(payment_link)
+        db.session.flush()  # payment_link.id теперь доступен
 
-        # очищаем корзину
-        CartItem.query.filter_by(user_id=user.id).delete()
+        # --- НЕ ОЧИЩАЕМ КОРЗИНУ - она будет очищена только после успешной оплаты ---
         db.session.commit()
 
+        # --- Формируем товары для ответа ---
         items_list = []
-        for cart_item in cart_items:
-            plant = PotPlant.query.get(cart_item.plant_id)
+        for item_data in validated_items:
+            ci = item_data['cart_item']
+            plant = item_data['plant']
             items_list.append({
-                'plant_id': cart_item.plant_id,
+                'cart_item_id': ci.id,  # Сохраняем ID элемента корзины для возможной последующей идентификации
+                'plant_id': ci.plant_id,
                 'plant_name': plant.name if plant else 'Unknown',
-                'quantity': cart_item.quantity,
-                'plant_price': float(cart_item.plant_unit_price),
-                'pot_price': float(cart_item.pot_unit_price),
-                'item_total': float(cart_item.total_price)
+                'quantity': ci.quantity,
+                'plant_price': float(ci.plant_unit_price),
+                'pot_price': float(ci.pot_unit_price),
+                'item_total': float(ci.total_price)
             })
 
+        # --- Возвращаем корректный JSON ---
         return jsonify({
             'success': True,
             'data': {
-                'payment_link_id': payment_link.id,
-                'order_id': order.id,
+                'payment_link_id': int(payment_link.id),
+                'order_id': int(order.id),
                 'payment_url': payment_link.payment_url,
                 'amount': float(total_price),
                 'currency': 'RUB',
@@ -282,7 +354,7 @@ def generate_payment_link():
                 'items': items_list,
                 'address': address,
                 'payment_method': payment_method,
-                'message': 'Оплатите заказ по ссылке выше. После успешной оплаты заказ будет обработан.'
+                'message': 'Оплатите заказ по ссылке выше. После успешной оплаты товары будут удалены из корзины.'
             }
         }), 201
 
@@ -294,9 +366,11 @@ def generate_payment_link():
 @bp.route('/link/<int:link_id>', methods=['GET'])
 def get_payment_link(link_id):
     try:
-        session_id = request.headers.get('X-Session-Id')
+        session_id = request.headers.get('X-Session-Id') or request.headers.get('Authorization')
+        
         if not session_id:
-            return jsonify({'success': False, 'error': 'X-Session-Id header required'}), 401
+            return jsonify({'success': False, 'error': 'Session token required'}), 401
+        
         user = get_user_by_session(session_id)
         if not user:
             return jsonify({'success': False, 'error': 'Invalid or expired session ID'}), 401
@@ -321,9 +395,11 @@ def get_payment_link(link_id):
 @bp.route('/link/<int:link_id>/cancel', methods=['POST'])
 def cancel_payment_link(link_id):
     try:
-        session_id = request.headers.get('X-Session-Id')
+        session_id = request.headers.get('X-Session-Id') or request.headers.get('Authorization')
+        
         if not session_id:
-            return jsonify({'success': False, 'error': 'X-Session-Id header required'}), 401
+            return jsonify({'success': False, 'error': 'Session token required'}), 401
+        
         user = get_user_by_session(session_id)
         if not user:
             return jsonify({'success': False, 'error': 'Invalid or expired session ID'}), 401
@@ -375,7 +451,9 @@ def payment_callback():
                 if order:
                     order.status = 'processing'
                     order.is_paid = True
-            current_app.logger.info(f"Payment {payment_id} confirmed")
+                    # Удаляем только оплаченные товары из корзины
+                    remove_purchased_items_from_cart(order.id, order.user_id)
+            current_app.logger.info(f"Payment {payment_id} confirmed and cart items removed")
         elif status == 'canceled':
             payment_link.status = 'cancelled'
             if payment_link.order_id:
@@ -438,9 +516,11 @@ def user_check_payment_link_status(link_id):
     Синхронизирует статус с Yookassa при наличии payment_system_id.
     """
     try:
-        session_id = request.headers.get('X-Session-Id')
+        session_id = request.headers.get('X-Session-Id') or request.headers.get('Authorization')
+        
         if not session_id:
-            return jsonify({'success': False, 'error': 'X-Session-Id header required'}), 401
+            return jsonify({'success': False, 'error': 'Session token required'}), 401
+        
         user = get_user_by_session(session_id)
         if not user:
             return jsonify({'success': False, 'error': 'Invalid or expired session ID'}), 401
@@ -474,9 +554,11 @@ def user_check_order_status(order_id):
     Возвращает статус заказа и связанную ссылку на оплату (если есть).
     """
     try:
-        session_id = request.headers.get('X-Session-Id')
+        session_id = request.headers.get('X-Session-Id') or request.headers.get('Authorization')
+        
         if not session_id:
-            return jsonify({'success': False, 'error': 'X-Session-Id header required'}), 401
+            return jsonify({'success': False, 'error': 'Session token required'}), 401
+        
         user = get_user_by_session(session_id)
         if not user:
             return jsonify({'success': False, 'error': 'Invalid or expired session ID'}), 401
