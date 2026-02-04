@@ -340,7 +340,7 @@ class _PaymentPageState extends State<PaymentPage> {
                 width: double.infinity,
                 child: OutlinedButton(
                   onPressed: () {
-                    context.pop();
+                    context.go('/cart');
                   },
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),

@@ -204,13 +204,13 @@ class ApiClient {
     Map<String, dynamic>? body,
   }) {
     debugPrint('=== $method $url ===');
-    final tokenPresent = _session.sessionToken != null ? 'yes' : 'no';
-    if (body != null) debugPrint('BODY: $body');
-    debugPrint('TOKEN_PRESENT: $tokenPresent');
-    debugPrint('STATUS: ${response.statusCode}');
-    debugPrint('RESPONSE: ${response.body}');
+    // final tokenPresent = _session.sessionToken != null ? 'yes' : 'no';
+    // if (body != null) debugPrint('BODY: $body');
+    // debugPrint('TOKEN_PRESENT: $tokenPresent');
+    // debugPrint('STATUS: ${response.statusCode}');
+    // debugPrint('RESPONSE: ${response.body}');
     // для отладки
-    debugPrint('TOKEN_VALUE: ${_session.sessionToken}');
-    debugPrint('HEADERS: ${_headers.toString()}');
+    // debugPrint('TOKEN_VALUE: ${_session.sessionToken}');
+    // debugPrint('HEADERS: ${_headers.toString()}');
   }
 }
