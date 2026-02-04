@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:async';
 import 'package:azalia/backend/services/session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -59,16 +60,23 @@ class ApiClient {
   }) async {
     final uri = Uri.parse(url);
     try {
+      debugPrint('ApiClient: POST к $uri');
       final response = await http.post(
         uri,
         headers: _headers,
         body: body != null ? jsonEncode(body) : null,
-      );
+      ).timeout(const Duration(seconds: 10));
       _log('POST', uri, response, body: body);
       return _handleResponse(response);
+    } on TimeoutException {
+      debugPrint('ApiClient: Timeout при POST $uri');
+      throw ApiException('Timeout - сервер не отвечает', 0);
+    } on SocketException catch (e) {
+      debugPrint('ApiClient: SocketException при POST $uri: $e');
+      throw ApiException('Не удалось подключиться к серверу: $e', 0);
     } catch (e) {
-      debugPrint('ApiException post error: $e');
-      throw 'Ошибка сети';
+      debugPrint('ApiClient: Неожиданная ошибка при POST $uri: $e');
+      throw ApiException('Ошибка сети: $e', 0);
     }
   }
 
@@ -196,13 +204,13 @@ class ApiClient {
     Map<String, dynamic>? body,
   }) {
     debugPrint('=== $method $url ===');
-    // final tokenPresent = _session.sessionToken != null ? 'yes' : 'no';
+    final tokenPresent = _session.sessionToken != null ? 'yes' : 'no';
     if (body != null) debugPrint('BODY: $body');
-    // debugPrint('TOKEN_PRESENT: $tokenPresent');
-    // debugPrint('STATUS: ${response.statusCode}');
+    debugPrint('TOKEN_PRESENT: $tokenPresent');
+    debugPrint('STATUS: ${response.statusCode}');
     debugPrint('RESPONSE: ${response.body}');
     // для отладки
-    // debugPrint('TOKEN_VALUE: ${_session.sessionToken}');
-    // debugPrint('HEADERS: ${_headers.toString()}');
+    debugPrint('TOKEN_VALUE: ${_session.sessionToken}');
+    debugPrint('HEADERS: ${_headers.toString()}');
   }
 }

@@ -1,4 +1,3 @@
-import 'package:azalia/backend/models/payment/generate_response.dart';
 import 'package:azalia/pages/admin/pages/analytics.dart';
 import 'package:azalia/pages/admin/pages/flowers.dart';
 import 'package:azalia/pages/admin/pages/settings.dart';
@@ -11,6 +10,7 @@ import 'package:azalia/pages/payment/payment_webview.dart';
 import 'package:azalia/pages/payment/paymentpage.dart';
 import 'package:azalia/pages/wishlist/wishlistpage.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter/material.dart';
 
 import 'package:azalia/pages/home/homepage.dart';
 import 'package:azalia/pages/error/error_page.dart';
@@ -51,10 +51,19 @@ class AppRouter {
         path: '/payment',
         name: 'payment',
         builder: (context, state) {
-          final args = state.extra as PaymentRouteArgs;
-          return PaymentPage(
-            args: args,
-          );
+          try {
+            final args = state.extra as PaymentRouteArgs?;
+            if (args == null) {
+              throw Exception('PaymentRouteArgs is null');
+            }
+            return PaymentPage(args: args);
+          } catch (e) {
+            debugPrint('Payment route error: $e');
+            return Scaffold(
+              appBar: AppBar(title: const Text('Ошибка')),
+              body: Center(child: Text('Ошибка при загрузке: $e')),
+            );
+          }
         },
       ),
       GoRoute(
@@ -117,10 +126,34 @@ class PaymentRouteArgs {
   final int paymentLinkId;
   final int orderId;
   final String paymentUrl;
+  final double totalPrice;
+  final String address;
+  final String paymentMethod;
+  final List<PaymentItemArgs> items;
 
   PaymentRouteArgs({
     required this.paymentLinkId,
     required this.orderId,
     required this.paymentUrl,
+    required this.totalPrice,
+    required this.address,
+    required this.paymentMethod,
+    required this.items,
+  });
+}
+
+class PaymentItemArgs {
+  final String plantName;
+  final int quantity;
+  final double plantPrice;
+  final double potPrice;
+  final double itemTotal;
+
+  PaymentItemArgs({
+    required this.plantName,
+    required this.quantity,
+    required this.plantPrice,
+    required this.potPrice,
+    required this.itemTotal,
   });
 }

@@ -1,5 +1,4 @@
-import 'package:azalia/backend/apiClient.dart';
-import 'package:azalia/backend/controllers/payment_flow.dart';
+import 'package:azalia/backend/controllers/payment_coordinator.dart';
 import 'package:azalia/components/widgets/data_pages.dart';
 import 'package:azalia/pages/cart/widgets/unauthorized.dart';
 import 'package:flutter/material.dart';
@@ -31,12 +30,10 @@ class _CartPageState extends State<CartPage> {
   double _totalPrice = 0;
   int _totalItems = 0;
   final SessionService _sessionService = SessionService();
-  late final PaymentFlowController _paymentFlow;
 
   @override
   void initState() {
     super.initState();
-    _paymentFlow = PaymentFlowController(ApiClient());
     _loadCart();
   }
 
@@ -249,35 +246,46 @@ class _CartPageState extends State<CartPage> {
     }
 
     try {
-      // создаём оплату (заказ + ссылка)
-      final payment = await _paymentFlow.startPayment(
+      debugPrint('_proceedToCheckout: начинаем оформление заказа');
+      
+      if (!context.mounted) {
+        debugPrint('_proceedToCheckout: контекст не смонтирован');
+        return;
+      }
+      
+      final coordinator = PaymentCoordinator(context);
+      debugPrint('_proceedToCheckout: создан PaymentCoordinator');
+      
+      await coordinator.startPaymentFlow(
         address: 'Гарабурды 16 дом 8', // позже экран ввода
         paymentMethod: 'card',
       );
 
-      // открываем WebView оплаты
-      final result = await context.pushNamed<bool>(
-        'payment_webview',
-        extra: payment.paymentUrl,
-      );
-
-      // обработка результата
-      if (result == true) {
-        _showSnackBar('Оплата прошла успешно', isError: false);
-
-        // await CartService.clearCart();
+      debugPrint('_proceedToCheckout: после startPaymentFlow');
+      
+      // После успешной оплаты (когда вернёмся из payment экрана)
+      if (mounted) {
+        // _showSnackBar('Оплата прошла успешно', isError: false);
         await _loadCart();
-      } else {
-        _showSnackBar('Оплата отменена', isError: true);
       }
     } catch (e, stack) {
-      debugPrint('Checkout error: $e');
-      debugPrint('ApiClient POST ERROR: $e');
-      debugPrint('$stack');
-      _showSnackBar(
-        e.toString().replaceAll('Exception: ', ''),
-        isError: true,
-      );
+      debugPrint('_proceedToCheckout error: $e');
+      debugPrint('Stack: $stack');
+      if (mounted) {
+        String errorMessage = e.toString().replaceAll('Exception: ', '').replaceAll('ApiException(status: 0, message: ', '').replaceAll(')', '');
+        
+        // проблема с подключением -> чекнуть впн или интернет
+        if (errorMessage.contains('не удалось подключиться') || 
+            errorMessage.contains('Timeout') ||
+            errorMessage.contains('connection') ||
+            errorMessage.contains('Ошибка сети')) {
+          errorMessage += '\n\nПожалуйста, проверьте:\n'
+              '• Подключение к интернету\n'
+              '• Отключен ли VPN';
+        }
+        
+        _showSnackBar(errorMessage, isError: true);
+      }
     }
   }
 

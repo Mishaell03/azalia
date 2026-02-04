@@ -18,34 +18,64 @@ class PaymentCoordinator {
     required String address,
     required String paymentMethod,
   }) async {
-    // проверка авторизации
-    if (!_session.isLoggedIn || !_session.isTokenValid) {
-      throw Exception('Пользователь не авторизован');
+    try {
+      // проверка авторизации
+      if (!_session.isLoggedIn || !_session.isTokenValid) {
+        debugPrint('PaymentCoordinator: пользователь не авторизован');
+        throw Exception('Пользователь не авторизован');
+      }
+
+      // проверка корзины
+      final cart = await CartService.getCart();
+      if (cart.items.isEmpty) {
+        debugPrint('PaymentCoordinator: корзина пуста');
+        throw Exception('Корзина пуста');
+      }
+
+      debugPrint('PaymentCoordinator: начинаем платёж');
+      final controller = PaymentFlowController(_api);
+
+      final payment = await controller.startPayment(
+        address: address,
+        paymentMethod: paymentMethod,
+      );
+
+      debugPrint('PaymentCoordinator: платёж создан, orderId=${payment.orderId}');
+
+      // навигация
+      if (!context.mounted) {
+        debugPrint('PaymentCoordinator: контекст не смонтирован');
+        return;
+      }
+
+      final items = payment.items.map((item) {
+        return PaymentItemArgs(
+          plantName: item.plantName,
+          quantity: item.quantity,
+          plantPrice: item.plantPrice,
+          potPrice: item.potPrice,
+          itemTotal: item.itemTotal,
+        );
+      }).toList();
+
+      debugPrint('PaymentCoordinator: переходим на payment экран');
+      context.goNamed(
+        'payment',
+        extra: PaymentRouteArgs(
+          paymentLinkId: payment.paymentLinkId,
+          orderId: payment.orderId,
+          paymentUrl: payment.paymentUrl,
+          totalPrice: payment.amount,
+          address: payment.address,
+          paymentMethod: payment.paymentMethod,
+          items: items,
+        ),
+      );
+      debugPrint('PaymentCoordinator: навигация успешна');
+    } catch (e, stackTrace) {
+      debugPrint('PaymentCoordinator Error: $e');
+      debugPrint('Stack trace: $stackTrace');
+      rethrow;
     }
-
-    // проверка корзины
-    final cart = await CartService.getCart();
-    if (cart.items.isEmpty) {
-      throw Exception('Корзина пуста');
-    }
-
-    final controller = PaymentFlowController(_api);
-
-    final payment = await controller.startPayment(
-      address: address,
-      paymentMethod: paymentMethod,
-    );
-
-    // навигация
-    if (!context.mounted) return;
-
-    context.goNamed(
-      'payment',
-      extra: PaymentRouteArgs(
-        paymentLinkId: payment.paymentLinkId,
-        orderId: payment.orderId,
-        paymentUrl: payment.paymentUrl,
-      ),
-    );
   }
 }

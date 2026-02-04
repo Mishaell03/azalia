@@ -37,6 +37,11 @@ class AppText {
     fontWeight: FontWeight.w600,
     fontFamily: "MontserratAlternates",
   );
+  static const semibold_18 = TextStyle(
+    fontSize: 18,
+    fontWeight: FontWeight.w600,
+    fontFamily: "MontserratAlternates",
+  );
   static const semibold_15 = TextStyle(
     fontSize: 15,
     fontWeight: FontWeight.w600,
@@ -80,6 +85,11 @@ class AppText {
   );
   static const medium_12 = TextStyle(
     fontSize: 12,
+    fontWeight: FontWeight.w500,
+    fontFamily: "MontserratAlternates",
+  );
+  static const medium_8 = TextStyle(
+    fontSize:10,
     fontWeight: FontWeight.w500,
     fontFamily: "MontserratAlternates",
   );
