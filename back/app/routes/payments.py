@@ -304,8 +304,11 @@ def generate_payment_link():
             }, uuid.uuid4())
             payment_url = payment.confirmation.confirmation_url
             payment_system_id = str(payment.id)
+            current_app.logger.info(f"Payment created. Order ID: {order.id}, Payment ID: {payment_system_id}")
+            current_app.logger.info(f"Payment URL: {payment_url}")
         except Exception as e:
             db.session.rollback()
+            current_app.logger.error(f"Payment gateway error: {str(e)}")
             return jsonify({'success': False, 'error': f'Payment gateway error: {str(e)}'}), 500
 
         # --- Создаём PaymentLink ---
@@ -476,6 +479,10 @@ def payment_callback():
 # ---------- Внутренняя проверка статуса по payment_id ----------
 @bp.route('/status/<payment_id>', methods=['GET'])
 def check_payment_status(payment_id):
+    """
+    Проверка статуса платежа по payment_id (без авторизации).
+    Используется WebView для проверки успешности платежа.
+    """
     try:
         if not init_yookassa():
             current_app.logger.warning("Yookassa not initialized for status check")
@@ -492,6 +499,8 @@ def check_payment_status(payment_id):
         if payment:
             # sync local link with received Yookassa payment status
             sync_payment_link_with_yookassa(payment_link)
+
+        current_app.logger.info(f"Payment status check for {payment_id}: status={payment_link.status}, yookassa_status={getattr(payment, 'status', None) if payment else 'N/A'}")
 
         return jsonify({
             'success': True,
