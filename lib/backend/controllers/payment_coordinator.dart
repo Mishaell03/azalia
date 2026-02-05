@@ -17,6 +17,7 @@ class PaymentCoordinator {
   Future<void> startPaymentFlow({
     required String address,
     required String paymentMethod,
+    List<int>? selectedItemIds,
   }) async {
     try {
       // проверка авторизации
@@ -38,6 +39,7 @@ class PaymentCoordinator {
       final payment = await controller.startPayment(
         address: address,
         paymentMethod: paymentMethod,
+        selectedItemIds: selectedItemIds,
       );
 
       debugPrint('PaymentCoordinator: платёж создан, orderId=${payment.orderId}');

@@ -146,53 +146,66 @@ def sync_payment_link_with_yookassa(payment_link):
 
 def remove_purchased_items_from_cart(order_id, user_id):
     """
-    Удаляет из корзины пользователя только те товары, которые были в заказе.
+    Удаляет из корзины пользователя только те товары (по ID), которые были в заказе.
     Также обновляет количество товаров на складе.
     """
     try:
         order_items = OrderItem.query.filter_by(order_id=order_id).all()
         
+        # Собираем ID товаров из корзины, которые соответствуют позициям в заказе
+        cart_items_to_remove = []
+        
         for order_item in order_items:
-            # Находим соответствующие товары в корзине
+            # Находим товар в корзине по plant_id и параметрам
             cart_items = CartItem.query.filter_by(
                 user_id=user_id,
-                plant_id=order_item.plant_id
+                plant_id=order_item.plant_id,
+                quantity=order_item.quantity,
+                plant_unit_price=order_item.plant_unit_price,
+                pot_unit_price=order_item.pot_unit_price
             ).all()
             
             for cart_item in cart_items:
-                # Проверяем соответствие по всем параметрам
-                if (cart_item.quantity == order_item.quantity and
-                    float(cart_item.plant_unit_price) == float(order_item.plant_unit_price) and
-                    float(cart_item.pot_unit_price) == float(order_item.pot_unit_price)):
+                # Проверяем параметры горшка
+                pot_match = True
+                if cart_item.pot_color_id:
+                    pot_color = PotColor.query.get(cart_item.pot_color_id)
+                    if not pot_color or pot_color.name != order_item.pot_color:
+                        pot_match = False
+                elif order_item.pot_color:
+                    pot_match = False
                     
-                    # Получаем горшок для проверки цветов/размеров
-                    pot_match = True
-                    if cart_item.pot_color_id:
-                        pot_color = PotColor.query.get(cart_item.pot_color_id)
-                        if pot_color and pot_color.name != order_item.pot_color:
-                            pot_match = False
-                    if cart_item.pot_size_id:
-                        pot_size = PotSize.query.get(cart_item.pot_size_id)
-                        if pot_size and pot_size.code != order_item.pot_size:
-                            pot_match = False
-                    if cart_item.pot_material_id:
-                        pot_material = PotMaterial.query.get(cart_item.pot_material_id)
-                        if pot_material and pot_material.name != order_item.pot_material:
-                            pot_match = False
+                if cart_item.pot_size_id:
+                    pot_size = PotSize.query.get(cart_item.pot_size_id)
+                    if not pot_size or pot_size.code != order_item.pot_size:
+                        pot_match = False
+                elif order_item.pot_size:
+                    pot_match = False
                     
-                    if pot_match:
-                        # Удаляем товар из корзины
-                        db.session.delete(cart_item)
-                        # Обновляем количество на складе
-                        plant = PotPlant.query.get(order_item.plant_id)
-                        if plant and plant.stock_quantity >= order_item.quantity:
-                            plant.stock_quantity -= order_item.quantity
-                            if plant.stock_quantity <= 0:
-                                plant.in_stock = False
-                        break
+                if cart_item.pot_material_id:
+                    pot_material = PotMaterial.query.get(cart_item.pot_material_id)
+                    if not pot_material or pot_material.name != order_item.pot_material:
+                        pot_match = False
+                elif order_item.pot_material:
+                    pot_match = False
+                
+                if pot_match:
+                    # Добавляем ID товара в список на удаление
+                    cart_items_to_remove.append(cart_item.id)
+                    # Обновляем количество на складе
+                    plant = PotPlant.query.get(order_item.plant_id)
+                    if plant and plant.stock_quantity >= order_item.quantity:
+                        plant.stock_quantity -= order_item.quantity
+                        if plant.stock_quantity <= 0:
+                            plant.in_stock = False
+                    break
+        
+        # Удаляем товары по ID
+        if cart_items_to_remove:
+            CartItem.query.filter(CartItem.id.in_(cart_items_to_remove)).delete()
         
         db.session.commit()
-        current_app.logger.info(f"Removed purchased items from cart for order {order_id}")
+        current_app.logger.info(f"Removed {len(cart_items_to_remove)} items from cart for order {order_id}")
         
     except Exception as e:
         db.session.rollback()
@@ -232,14 +245,21 @@ def generate_payment_link():
         data = request.get_json() or {}
         address = (data.get('address') or '').strip()
         payment_method = data.get('payment_method', 'card')
+        selected_item_ids = data.get('selected_item_ids', [])
 
         if not address or len(address) < 5 or len(address) > 500:
             return jsonify({'success': False, 'error': 'Address must be between 5 and 500 characters'}), 400
         if payment_method not in ['cash', 'card']:
             return jsonify({'success': False, 'error': 'Invalid payment method'}), 400
 
-        # --- Получаем корзину ---
-        cart_items = CartItem.query.filter_by(user_id=user.id).all()
+        # --- Получаем только выбранные товары из корзины ---
+        if selected_item_ids:
+            cart_items = CartItem.query.filter_by(user_id=user.id).filter(
+                CartItem.id.in_(selected_item_ids)
+            ).all()
+        else:
+            cart_items = CartItem.query.filter_by(user_id=user.id).all()
+
         is_valid, error_message, total_price, validated_items = validate_cart_items(cart_items)
         if not is_valid:
             return jsonify({'success': False, 'error': error_message}), 400

@@ -13,12 +13,14 @@ class PaymentService {
   Future<PaymentGenerateResponse> generatePaymentLink({
     required String address,
     required String paymentMethod,
+    List<int>? selectedItemIds,
   }) async {
     final response = await _api.post(
       ApiConfig.paymentGenerateLink,
       body: {
         'address': address,
         'payment_method': paymentMethod,
+        'selected_item_ids': selectedItemIds ?? [],
       },
     );
 

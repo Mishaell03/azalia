@@ -6,17 +6,20 @@ import 'package:azalia/pages/error/loading_error.dart';
 import 'package:azalia/components/widgets/love.dart';
 import 'package:azalia/backend/models/cart.dart';
 import 'package:azalia/backend/services/cart.dart';
+import 'package:azalia/backend/services/selected_items_service.dart';
 
 class CartCard extends StatefulWidget {
   final CartItemWithPot item;
   final Function(CartItemWithPot)? onItemRemoved;
   final Function(CartItemWithPot, int)? onQuantityChanged;
+  final Function(CartItemWithPot, bool)? onSelectionChanged;
 
   const CartCard({
     super.key,
     required this.item,
     this.onItemRemoved,
     this.onQuantityChanged,
+    this.onSelectionChanged,
   });
 
   @override
@@ -28,6 +31,37 @@ class _CartCardState extends State<CartCard> {
   bool _showCard = true;
   bool _isRemoving = false;
   bool _isUpdatingQuantity = false;
+  bool _isSelected = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSelectionState();
+  }
+
+  void _loadSelectionState() async {
+    final isSelected = await SelectedItemsService.isItemSelected(widget.item.id);
+    if (mounted) {
+      setState(() {
+        _isSelected = isSelected;
+      });
+    }
+  }
+
+  void _toggleSelection() async {
+    final newState = !_isSelected;
+    setState(() {
+      _isSelected = newState;
+    });
+    
+    if (newState) {
+      await SelectedItemsService.addSelectedItem(widget.item.id);
+    } else {
+      await SelectedItemsService.removeSelectedItem(widget.item.id);
+    }
+    
+    widget.onSelectionChanged?.call(widget.item, newState);
+  }
 
   void _retryLoadImage() {
     setState(() {
@@ -158,7 +192,39 @@ class _CartCardState extends State<CartCard> {
               showSnackbar: true,
             ),
           ),
+          Positioned(
+            top: 4,
+            left: 4,
+            child: _buildCheckboxOverlay(),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCheckboxOverlay() {
+    return GestureDetector(
+      onTap: _toggleSelection,
+      child: Container(
+        width: 24,
+        height: 24,
+        decoration: BoxDecoration(
+          color: AppColors.white.withOpacity(0.9),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: _isSelected ? AppColors.brown : AppColors.grey_light,
+            width: 2,
+          ),
+        ),
+        child: _isSelected
+            ? Center(
+                child: Icon(
+                  Icons.check,
+                  size: 16,
+                  color: AppColors.brown,
+                ),
+              )
+            : const SizedBox.expand(),
       ),
     );
   }
@@ -283,7 +349,7 @@ class _CartCardState extends State<CartCard> {
       children: [
         _buildPriceInfo(),
         const Spacer(),
-        _buildQuantitySelector(),
+        if (_isSelected) _buildQuantitySelector(),
       ],
     );
   }

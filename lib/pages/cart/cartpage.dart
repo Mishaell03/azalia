@@ -8,6 +8,7 @@ import 'package:azalia/components/widgets/footer.dart';
 import 'package:azalia/pages/error/loading_error.dart';
 import 'package:azalia/backend/services/cart.dart';
 import 'package:azalia/backend/services/session.dart';
+import 'package:azalia/backend/services/selected_items_service.dart';
 import 'package:azalia/pages/cart/widgets/cards.dart';
 import 'package:azalia/pages/cart/widgets/out_of_stock.dart';
 import 'package:azalia/pages/cart/widgets/header.dart';
@@ -30,6 +31,7 @@ class _CartPageState extends State<CartPage> {
   double _totalPrice = 0;
   int _totalItems = 0;
   final SessionService _sessionService = SessionService();
+  Set<int> _selectedItemIds = {};
 
   @override
   void initState() {
@@ -79,11 +81,16 @@ class _CartPageState extends State<CartPage> {
       }
     }
 
-    final availableSummary = _calculateSummary(availableItems);
+    // Загружаем сохраненные выбранные товары
+    final savedSelectedIds = await SelectedItemsService.getSelectedItems();
+    final selectedIds = savedSelectedIds.toSet();
+
+    final availableSummary = _calculateSummary(availableItems, selectedIds);
 
     setState(() {
       _cartItems = availableItems;
       _outOfStockItems = outOfStockItems;
+      _selectedItemIds = selectedIds;
       _totalPrice = availableSummary['totalPrice'];
       _totalItems = availableSummary['totalItems'];
       _isLoading = false;
@@ -133,13 +140,16 @@ class _CartPageState extends State<CartPage> {
     }
   }
 
-  Map<String, dynamic> _calculateSummary(List<CartItemWithPot> items) {
+  Map<String, dynamic> _calculateSummary(List<CartItemWithPot> items, [Set<int>? selectedIds]) {
     double totalPrice = 0;
     int totalItems = 0;
+    final idsToCheck = selectedIds ?? _selectedItemIds;
 
     for (final item in items) {
-      totalPrice += item.totalPrice;
-      totalItems += item.quantity;
+      if (idsToCheck.contains(item.id)) {
+        totalPrice += item.totalPrice;
+        totalItems += item.quantity;
+      }
     }
 
     return {'totalPrice': totalPrice, 'totalItems': totalItems};
@@ -148,8 +158,11 @@ class _CartPageState extends State<CartPage> {
   void _onItemRemoved(CartItemWithPot removedItem) {
     setState(() {
       _cartItems.removeWhere((item) => item.id == removedItem.id);
-      _totalPrice -= removedItem.totalPrice;
-      _totalItems -= removedItem.quantity;
+      if (_selectedItemIds.contains(removedItem.id)) {
+        _selectedItemIds.remove(removedItem.id);
+        _totalPrice -= removedItem.totalPrice;
+        _totalItems -= removedItem.quantity;
+      }
     });
   }
 
@@ -175,6 +188,20 @@ class _CartPageState extends State<CartPage> {
           plant: item.plant,
         );
         _cartItems[index] = updatedItem;
+      }
+    });
+  }
+
+  void _onSelectionChanged(CartItemWithPot item, bool isSelected) {
+    setState(() {
+      if (isSelected) {
+        _selectedItemIds.add(item.id);
+        _totalPrice += item.totalPrice;
+        _totalItems += item.quantity;
+      } else {
+        _selectedItemIds.remove(item.id);
+        _totalPrice -= item.totalPrice;
+        _totalItems -= item.quantity;
       }
     });
   }
@@ -206,10 +233,12 @@ class _CartPageState extends State<CartPage> {
       }
 
       await CartService.clearCart();
+      await SelectedItemsService.clearSelectedItems();
 
       setState(() {
         _cartItems.clear();
         _outOfStockItems.clear();
+        _selectedItemIds.clear();
         _totalPrice = 0;
         _totalItems = 0;
       });
@@ -237,16 +266,18 @@ class _CartPageState extends State<CartPage> {
   }
 
   Future<void> _proceedToCheckout() async {
-    if (_cartItems.isEmpty) {
+    final selectedItems = _cartItems.where((item) => _selectedItemIds.contains(item.id)).toList();
+    
+    if (selectedItems.isEmpty) {
       _showSnackBar(
-        'Добавьте товары в корзину для оформления заказа',
+        'Выберите товары для оформления заказа',
         isError: true,
       );
       return;
     }
 
     try {
-      debugPrint('_proceedToCheckout: начинаем оформление заказа');
+      debugPrint('_proceedToCheckout: Оформление заказа');
       
       if (!context.mounted) {
         debugPrint('_proceedToCheckout: контекст не смонтирован');
@@ -256,16 +287,19 @@ class _CartPageState extends State<CartPage> {
       final coordinator = PaymentCoordinator(context);
       debugPrint('_proceedToCheckout: создан PaymentCoordinator');
       
+      // Передаем список выбранных товаров
+      final selectedItemIds = _selectedItemIds.toList();
+      
       await coordinator.startPaymentFlow(
         address: 'Гарабурды 16 дом 8', // позже экран ввода
         paymentMethod: 'card',
+        selectedItemIds: selectedItemIds,
       );
 
       debugPrint('_proceedToCheckout: после startPaymentFlow');
       
-      // После успешной оплаты (когда вернёмся из payment экрана)
+      // После успешной оплаты
       if (mounted) {
-        // _showSnackBar('Оплата прошла успешно', isError: false);
         await _loadCart();
       }
     } catch (e, stack) {
@@ -275,7 +309,7 @@ class _CartPageState extends State<CartPage> {
         String errorMessage = e.toString().replaceAll('Exception: ', '').replaceAll('ApiException(status: 0, message: ', '').replaceAll(')', '');
         
         // проблема с подключением -> чекнуть впн или интернет
-        if (errorMessage.contains('не удалось подключиться') || 
+        if (errorMessage.contains('Не удалось подключиться') || 
             errorMessage.contains('Timeout') ||
             errorMessage.contains('connection') ||
             errorMessage.contains('Ошибка сети')) {
@@ -343,6 +377,7 @@ class _CartPageState extends State<CartPage> {
                 item: item,
                 onItemRemoved: _onItemRemoved,
                 onQuantityChanged: _onQuantityChanged,
+                onSelectionChanged: _onSelectionChanged,
               ),
             )
             .toList(),
@@ -425,6 +460,8 @@ class _CartPageState extends State<CartPage> {
   }
 
   Widget _buildCheckoutSection() {
+    final hasSelectedItems = _selectedItemIds.isNotEmpty;
+    
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -446,6 +483,13 @@ class _CartPageState extends State<CartPage> {
               ),
             ],
           ),
+          if (!hasSelectedItems && _cartItems.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Выберите товары для оформления',
+              style: AppText.medium_14.copyWith(color: AppColors.error),
+            ),
+          ],
           if (_outOfStockItems.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
@@ -457,9 +501,9 @@ class _CartPageState extends State<CartPage> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: _cartItems.isNotEmpty ? _proceedToCheckout : null,
+              onPressed: hasSelectedItems ? _proceedToCheckout : null,
               style: ElevatedButton.styleFrom(
-                backgroundColor: _cartItems.isNotEmpty
+                backgroundColor: hasSelectedItems
                     ? AppColors.brown
                     : AppColors.grey_light,
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -470,7 +514,7 @@ class _CartPageState extends State<CartPage> {
               child: Text(
                 'Перейти к оформлению',
                 style: AppText.medium_16.copyWith(
-                  color: _cartItems.isNotEmpty
+                  color: hasSelectedItems
                       ? AppColors.white
                       : AppColors.grey,
                 ),

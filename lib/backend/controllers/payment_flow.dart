@@ -20,6 +20,7 @@ class PaymentFlowController {
   Future<PaymentGenerateResponse> startPayment({
     required String address,
     required String paymentMethod,
+    List<int>? selectedItemIds,
   }) async {
     // проверка авторизации
     if (!_sessionService.isLoggedIn || !_sessionService.isTokenValid) {
@@ -39,6 +40,7 @@ class PaymentFlowController {
     final paymentResponse = await _paymentService.generatePaymentLink(
       address: address,
       paymentMethod: paymentMethod,
+      selectedItemIds: selectedItemIds,
     );
 
     debugPrint(

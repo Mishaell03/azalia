@@ -234,14 +234,16 @@ class _PaymentPageState extends State<PaymentPage> {
                               size: 25,
                               color: AppColors.brown,
                             ),
-                            SizedBox(width: 10,),
-                            Text('Предупреждение', style: AppText.medium_20,),
+                            SizedBox(width: 10),
+                            Text('Предупреждение', style: AppText.medium_20),
                           ],
                         ),
                         content: Text(
                           'Если вы используете VPN, оплата может работать некорректно.\n\n'
                           'Рекомендуем временно отключить VPN для успешного завершения платежа.',
-                          style: AppText.medium_14.copyWith(color: AppColors.grey),
+                          style: AppText.medium_14.copyWith(
+                            color: AppColors.grey,
+                          ),
                         ),
                         actions: [
                           SizedBox(
@@ -249,16 +251,23 @@ class _PaymentPageState extends State<PaymentPage> {
                             child: OutlinedButton(
                               onPressed: () => Navigator.pop(context, true),
                               style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(18),
                                 ),
-                                side: BorderSide(color: AppColors.brown, width: 1.5),
-                                backgroundColor: AppColors.brown
+                                side: BorderSide(
+                                  color: AppColors.brown,
+                                  width: 1.5,
+                                ),
+                                backgroundColor: AppColors.brown,
                               ),
                               child: Text(
                                 'Продолжить',
-                                style: AppText.semibold_18.copyWith(color: AppColors.white),
+                                style: AppText.semibold_18.copyWith(
+                                  color: AppColors.white,
+                                ),
                               ),
                             ),
                           ),
@@ -268,15 +277,22 @@ class _PaymentPageState extends State<PaymentPage> {
                             child: OutlinedButton(
                               onPressed: () => Navigator.pop(context, false),
                               style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(18),
                                 ),
-                                side: BorderSide(color: AppColors.brown, width: 1.5),
+                                side: BorderSide(
+                                  color: AppColors.brown,
+                                  width: 1.5,
+                                ),
                               ),
                               child: Text(
                                 'Отмена',
-                                style: AppText.semibold_18.copyWith(color: AppColors.brown),
+                                style: AppText.semibold_18.copyWith(
+                                  color: AppColors.brown,
+                                ),
                               ),
                             ),
                           ),
@@ -298,22 +314,31 @@ class _PaymentPageState extends State<PaymentPage> {
                     if (result == true && mounted) {
                       // Успешная оплата
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('✓ Оплата прошла успешно!'),
-                          backgroundColor: Colors.brown,
+                        SnackBar(
+                          content: Text(
+                            '✓ Оплата прошла успешно!',
+                            style: AppText.medium_16.copyWith(
+                              color: AppColors.brown,
+                            ),
+                          ),
+                          backgroundColor: AppColors.white,
                           duration: Duration(seconds: 2),
                         ),
                       );
-                      // Переходим на главную
                       if (mounted) {
                         context.go('/');
                       }
                     } else if (result == false && mounted) {
                       // Отмена оплаты
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Платёж отменён'),
-                          backgroundColor: AppColors.white_transparent,
+                        SnackBar(
+                          content: Text(
+                            'Платёж отменён',
+                            style: AppText.medium_16.copyWith(
+                              color: AppColors.brown,
+                            ),
+                          ),
+                          backgroundColor: AppColors.white,
                           duration: Duration(seconds: 2),
                         ),
                       );
