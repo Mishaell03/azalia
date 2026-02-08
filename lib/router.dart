@@ -8,6 +8,7 @@ import 'package:azalia/pages/admin/widgets/products/cards/procurement.dart';
 import 'package:azalia/pages/admin/widgets/products/cards/warehouse.dart';
 import 'package:azalia/pages/payment/payment_webview.dart';
 import 'package:azalia/pages/payment/paymentpage.dart';
+import 'package:azalia/pages/start/startpage.dart';
 import 'package:azalia/pages/wishlist/wishlistpage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
@@ -20,8 +21,13 @@ import 'package:azalia/pages/cart/cartpage.dart';
 
 class AppRouter {
   late final GoRouter router = GoRouter(
-    initialLocation: '/',
+    initialLocation: '/start',
     routes: [
+      GoRoute(
+        path: '/start',
+        name: 'start',
+        builder: (context, state) => const AppStartPage(),
+      ),
       GoRoute(
         path: '/',
         name: 'home',

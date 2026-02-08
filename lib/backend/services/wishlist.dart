@@ -85,15 +85,15 @@ class CartWishlistService {
     try {
       final isLoggedIn = await isUserLoggedIn();
       if (!isLoggedIn) {
-        debugPrint('CartWishlistService: Пользователь не авторизован');
+        // debugPrint('CartWishlistService: Пользователь не авторизован');
         throw Exception('не авторизован');
       }
 
       if (currentlyInWishlist) {
-        debugPrint('CartWishlistService: Удаление из избранного');
+        // debugPrint('CartWishlistService: Удаление из избранного');
         await WishlistService.removeFromWishlist(plant.id);
       } else {
-        debugPrint('CartWishlistService: Добавление в избранное');
+        // debugPrint('CartWishlistService: Добавление в избранное');
         await WishlistService.addToWishlist(plant.id);
       }
     } catch (e) {
@@ -115,15 +115,15 @@ class CartWishlistService {
     try {
       final isLoggedIn = await isUserLoggedIn();
       if (!isLoggedIn) {
-        debugPrint('CartWishlistService: Пользователь не авторизован');
+        // debugPrint('CartWishlistService: Пользователь не авторизован');
         return false;
       }
 
       final result = await WishlistService.checkWishlist(plant.id);
-      debugPrint('CartWishlistService: Статус избранного - $result');
+      // debugPrint('CartWishlistService: Статус избранного - $result');
       return result;
     } catch (e) {
-      debugPrint('CartWishlistService: Ошибка проверки избранного - $e');
+      // debugPrint('CartWishlistService: Ошибка проверки избранного - $e');
       return false;
     }
   }
@@ -140,11 +140,11 @@ class CartWishlistService {
     try {
       final isLoggedIn = await isUserLoggedIn();
       if (!isLoggedIn) {
-        debugPrint('CartWishlistService: Пользователь не авторизован');
+        // debugPrint('CartWishlistService: Пользователь не авторизован');
         throw Exception('не авторизован');
       }
 
-      debugPrint('CartWishlistService: Добавление в корзину');
+      // debugPrint('CartWishlistService: Добавление в корзину');
       
       final request = AddToCartRequest(
         plantId: plant.id,
@@ -155,7 +155,7 @@ class CartWishlistService {
       );
 
       await CartService.addToCart(request);
-      debugPrint('CartWishlistService: Успешно добавлено в корзину');
+      // debugPrint('CartWishlistService: Успешно добавлено в корзину');
     } catch (e) {
       debugPrint('CartWishlistService: Ошибка добавления в корзину - $e');
       if (e.toString().contains('не авторизован') || 
@@ -177,16 +177,16 @@ class CartWishlistService {
     try {
       final isLoggedIn = await isUserLoggedIn();
       if (!isLoggedIn) {
-        debugPrint('CartWishlistService: Пользователь не авторизован');
+        // debugPrint('CartWishlistService: Пользователь не авторизован');
         return false;
       }
 
       final cart = await CartService.getCart();
       final isInCart = cart.items.any((item) => item.plantId == plant.id);
-      debugPrint('CartWishlistService: Статус корзины - $isInCart');
+      // debugPrint('CartWishlistService: Статус корзины - $isInCart');
       return isInCart;
     } catch (e) {
-      debugPrint('CartWishlistService: Ошибка проверки корзины - $e');
+      // debugPrint('CartWishlistService: Ошибка проверки корзины - $e');
       return false;
     }
   }

@@ -210,7 +210,6 @@ class _AuthPageState extends State<AuthPage> {
               fit: BoxFit.cover,
             ),
           ),
-
           Positioned(
             top: 50,
             left: 20,
@@ -218,14 +217,13 @@ class _AuthPageState extends State<AuthPage> {
               onPressed: () {
                 context.goNamed('home');
               },
-              icon: SvgPicture.asset('assets/icons/Back.svg'),
+              icon: Icon(Icons.close),
               style: IconButton.styleFrom(
                 backgroundColor: Colors.white.withOpacity(0.2),
                 padding: const EdgeInsets.all(8),
               ),
             ),
           ),
-
           Positioned(
             bottom: 0,
             left: 0,

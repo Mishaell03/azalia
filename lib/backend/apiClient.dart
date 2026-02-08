@@ -203,7 +203,7 @@ class ApiClient {
     http.Response response, {
     Map<String, dynamic>? body,
   }) {
-    debugPrint('=== $method $url ===');
+    // debugPrint('=== $method $url ===');
     // final tokenPresent = _session.sessionToken != null ? 'yes' : 'no';
     // if (body != null) debugPrint('BODY: $body');
     // debugPrint('TOKEN_PRESENT: $tokenPresent');
