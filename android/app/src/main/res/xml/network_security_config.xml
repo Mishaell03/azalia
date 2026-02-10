@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<network-security-config>
-    <!-- Разрешить HTTP для домена -->
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">nebinance.ru</domain>
-        <domain includeSubdomains="true">www.nebinance.ru</domain>
-        <domain includeSubdomains="true">155.212.187.35</domain>
-    </domain-config>
-</network-security-config>

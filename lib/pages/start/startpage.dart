@@ -41,7 +41,7 @@ class _AppStartPageState extends State<AppStartPage>
   Future<void> _bootstrap() async {
     try {
       // Даем интерфейсу немного «подышать»
-      await Future.delayed(const Duration(seconds: 6));
+      await Future.delayed(const Duration(seconds: 8));
 
       await _session.initialize();
 
