@@ -17,7 +17,7 @@
 ```json
 {
   "code": "4321",
-  "device_id": "abc123def456" // опционально
+  "device_id": "abc123def456"
 }
 ```
 
@@ -33,7 +33,7 @@
     "session_token": "93719ff544e283126f31c8ec97d56de2a7b3c1af767a30b06b7261803782349b",
     "avatar": "base64_encoded_image_or_null"
   },
-  "role": "customer", // или "employee", "admin"
+  "role": "customer",
   "message": "Authentication successful"
 }
 ```

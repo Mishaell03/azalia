@@ -1,6 +1,6 @@
 from app import db
-from datetime import datetime
-import re
+from datetime import datetime, timedelta
+import secrets
 
 class Position(db.Model):
     """таблицы должностей"""
@@ -243,6 +243,42 @@ class User(db.Model):
         """проверка, является ли пользователь сотрудником"""
         return self.employee_info is not None and self.employee_info.is_active
 
+    @staticmethod
+    def build_display_name(first_name=None, last_name=None, username=None):
+        parts = []
+        for value in (first_name, last_name):
+            if isinstance(value, str) and value.strip():
+                parts.append(value.strip())
+
+        full_name = " ".join(parts).strip()
+        if not full_name and isinstance(username, str) and username.strip():
+            full_name = username.strip()
+        if not full_name:
+            full_name = "Пользователь"
+
+        return full_name[:100]
+
+    @classmethod
+    def get_or_create_by_telegram(
+        cls,
+        telegram_id,
+        first_name=None,
+        last_name=None,
+        username=None,
+        phone="",
+    ):
+        user = cls.query.filter_by(telegram_id=telegram_id).first()
+        if user:
+            return user, False
+
+        user = cls(
+            telegram_id=telegram_id,
+            name=cls.build_display_name(first_name, last_name, username),
+            phone=phone if isinstance(phone, str) else "",
+        )
+        db.session.add(user)
+        return user, True
+
 class Employee(db.Model):
     """таблицы сотрудников"""
     __tablename__ = 'employees'
@@ -465,6 +501,89 @@ class OAuthCode(db.Model):
     
     def is_valid(self):
         return not self.used and self.expires_at > datetime.utcnow()
+
+    @classmethod
+    def get_active_for_device(cls, telegram_id, device_id, now=None):
+        check_time = now or datetime.utcnow()
+        return (
+            cls.query.filter_by(telegram_id=telegram_id, device_id=device_id, used=False)
+            .filter(cls.expires_at > check_time)
+            .order_by(cls.id.desc())
+            .first()
+        )
+
+    @classmethod
+    def get_for_user_by_id(cls, oauth_code_id, telegram_id):
+        return cls.query.filter_by(id=oauth_code_id, telegram_id=telegram_id).first()
+
+    @classmethod
+    def generate_code(cls, length=4):
+        upper_bound = 10**length
+        value = secrets.randbelow(upper_bound)
+        return str(value).zfill(length)
+
+    @classmethod
+    def generate_unique_active_code(cls, now=None, length=4, max_attempts=40):
+        check_time = now or datetime.utcnow()
+        for _ in range(max_attempts):
+            code = cls.generate_code(length=length)
+            exists = (
+                cls.query.filter_by(code=code, used=False)
+                .filter(cls.expires_at > check_time)
+                .first()
+            )
+            if not exists:
+                return code
+        raise ValueError("Не удалось сгенерировать уникальный код авторизации.")
+
+    @classmethod
+    def issue_or_refresh(
+        cls,
+        telegram_id,
+        device_id,
+        ttl_minutes=10,
+        force_refresh=False,
+        oauth_code_id=None,
+    ):
+        now = datetime.utcnow()
+
+        if not force_refresh:
+            active = cls.get_active_for_device(telegram_id=telegram_id, device_id=device_id, now=now)
+            if active:
+                return active, False
+
+        target = None
+        if oauth_code_id is not None:
+            target = cls.get_for_user_by_id(oauth_code_id=oauth_code_id, telegram_id=telegram_id)
+            if target and target.device_id != device_id:
+                target = None
+
+        if target is None:
+            target = (
+                cls.query.filter_by(telegram_id=telegram_id, device_id=device_id)
+                .order_by(cls.id.desc())
+                .first()
+            )
+
+        code = cls.generate_unique_active_code(now=now, length=4)
+        expires_at = now + timedelta(minutes=ttl_minutes)
+
+        if target:
+            target.code = code
+            target.expires_at = expires_at
+            target.used = False
+            target.used_at = None
+            return target, True
+
+        oauth_code = cls(
+            telegram_id=telegram_id,
+            device_id=device_id,
+            code=code,
+            expires_at=expires_at,
+            used=False,
+        )
+        db.session.add(oauth_code)
+        return oauth_code, True
     
 class CartItem(db.Model):
     """таблицы корзины пользователя"""

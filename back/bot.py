@@ -1,511 +1,562 @@
-import os
-import sqlite3
 import logging
+import os
 import re
-from datetime import datetime, timedelta
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler
-import random
+from dataclasses import dataclass
+from typing import Optional
+
 from dotenv import load_dotenv
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import inspect
+from telegram.error import Conflict
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import Application, CallbackContext, CallbackQueryHandler, CommandHandler
 
-def main():
-    load_dotenv()
-    
-    BOT_TOKEN = os.getenv('BOT_TOKEN')
-    if not BOT_TOKEN:
-        print("Ошибка: BOT_TOKEN не установлен в переменных окружения")
-        print("Проверьте файл .env и наличие BOT_TOKEN")
-        return
-
-    DB_PATH = os.getenv('DATABASE_URL')
-    if DB_PATH and DB_PATH.startswith('sqlite:///'):
-        DB_PATH = DB_PATH.replace('sqlite:///', '')
-    
-    bot = FlowerShopBot(BOT_TOKEN, DB_PATH)
-    bot.run()
+from app import create_app, db
+from app.models import Employee, OAuthCode, Position, User
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
 
+DEVICE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{1,255}$")
+REFRESH_CALLBACK_PATTERN = re.compile(r"^refresh:(\d{1,10})$")
+
+
+class ValidationError(Exception):
+    pass
+
+
+class NotFoundError(Exception):
+    pass
+
+
+class ServiceError(Exception):
+    pass
+
+
+def ensure_database_ready(flask_app):
+    with flask_app.app_context():
+        db.create_all()
+
+        inspector = inspect(db.engine)
+        required_tables = {'users', 'employees', 'positions', 'oauth_codes'}
+        existing_tables = set(inspector.get_table_names())
+        missing_tables = required_tables - existing_tables
+        if missing_tables:
+            raise RuntimeError(
+                f'База данных не инициализирована корректно. '
+                f'Отсутствуют таблицы: {", ".join(sorted(missing_tables))}'
+            )
+
+
+@dataclass(frozen=True)
+class BotConfig:
+    token: str
+    database_url: str
+    code_ttl_minutes: int = 10
+    enable_debug_admin: bool = False
+
+    @classmethod
+    def from_env(cls):
+        load_dotenv()
+
+        token = (os.getenv('BOT_TOKEN') or '').strip()
+        if not token:
+            raise ValueError('BOT_TOKEN не установлен в переменных окружения.')
+
+        database_url = cls._normalize_database_url(os.getenv('DATABASE_URL'))
+        code_ttl_minutes = cls._parse_ttl(os.getenv('BOT_CODE_TTL_MINUTES'), default=10)
+        enable_debug_admin = cls._parse_bool(os.getenv('BOT_ENABLE_DEBUG_ADMIN'))
+
+        return cls(
+            token=token,
+            database_url=database_url,
+            code_ttl_minutes=code_ttl_minutes,
+            enable_debug_admin=enable_debug_admin,
+        )
+
+    @staticmethod
+    def _normalize_database_url(raw_value: Optional[str]) -> str:
+        value = (raw_value or '').strip()
+        if not value:
+            return 'sqlite:///flower_shop.db'
+        if '://' not in value:
+            return f'sqlite:///{value}'
+        return value
+
+    @staticmethod
+    def _parse_ttl(raw_value: Optional[str], default: int) -> int:
+        if raw_value is None:
+            return default
+        try:
+            parsed = int(raw_value)
+        except (TypeError, ValueError):
+            return default
+        if parsed < 1:
+            return 1
+        if parsed > 30:
+            return 30
+        return parsed
+
+    @staticmethod
+    def _parse_bool(raw_value: Optional[str]) -> bool:
+        if raw_value is None:
+            return False
+        return raw_value.strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+@dataclass
+class AuthCodeResult:
+    oauth_code_id: int
+    code: str
+    is_employee: bool
+    position_title: Optional[str]
+
+
+def normalize_device_id(raw_device_id: Optional[str]) -> Optional[str]:
+    if not isinstance(raw_device_id, str):
+        return None
+
+    device_id = raw_device_id.strip()
+    if not device_id or len(device_id) > 255:
+        return None
+
+    if not DEVICE_ID_PATTERN.fullmatch(device_id):
+        return None
+
+    return device_id
+
+
+class AuthRepository:
+    @staticmethod
+    def get_or_create_user(telegram_user) -> User:
+        user, _ = User.get_or_create_by_telegram(
+            telegram_id=telegram_user.id,
+            first_name=getattr(telegram_user, 'first_name', None),
+            last_name=getattr(telegram_user, 'last_name', None),
+            username=getattr(telegram_user, 'username', None),
+            phone='',
+        )
+        return user
+
+    @staticmethod
+    def get_active_role(telegram_id: int):
+        employee = Employee.query.filter_by(telegram_id=telegram_id, is_active=True).first()
+        if not employee:
+            return False, None
+        if employee.position:
+            return True, employee.position.title
+        return True, None
+
+    @staticmethod
+    def get_oauth_code_for_user(oauth_code_id: int, telegram_id: int):
+        return OAuthCode.get_for_user_by_id(oauth_code_id=oauth_code_id, telegram_id=telegram_id)
+
+
+class AuthService:
+    def __init__(self, repository: AuthRepository, code_ttl_minutes: int):
+        self.repository = repository
+        self.code_ttl_minutes = code_ttl_minutes
+
+    @staticmethod
+    def _require_telegram_user(telegram_user) -> int:
+        telegram_id = getattr(telegram_user, 'id', None)
+        if not isinstance(telegram_id, int) or telegram_id <= 0:
+            raise ValidationError('Некорректный Telegram-пользователь.')
+        return telegram_id
+
+    def issue_code_for_device(self, telegram_user, device_id: str) -> AuthCodeResult:
+        telegram_id = self._require_telegram_user(telegram_user)
+
+        if not normalize_device_id(device_id):
+            raise ValidationError('Некорректный идентификатор устройства.')
+
+        try:
+            self.repository.get_or_create_user(telegram_user)
+            db.session.flush()
+
+            oauth_code, _ = OAuthCode.issue_or_refresh(
+                telegram_id=telegram_id,
+                device_id=device_id,
+                ttl_minutes=self.code_ttl_minutes,
+                force_refresh=False,
+            )
+
+            is_employee, position_title = self.repository.get_active_role(telegram_id=telegram_id)
+            db.session.commit()
+
+            return AuthCodeResult(
+                oauth_code_id=oauth_code.id,
+                code=oauth_code.code,
+                is_employee=is_employee,
+                position_title=position_title,
+            )
+        except ValueError as exc:
+            db.session.rollback()
+            logger.exception('Code generation error while issuing auth code')
+            raise ServiceError('Не удалось сгенерировать код авторизации.') from exc
+        except SQLAlchemyError as exc:
+            db.session.rollback()
+            logger.exception('Database error while issuing auth code')
+            raise ServiceError('Ошибка при работе с базой данных.') from exc
+
+    def refresh_code_by_record(self, telegram_user, oauth_code_id: int) -> AuthCodeResult:
+        telegram_id = self._require_telegram_user(telegram_user)
+        if not isinstance(oauth_code_id, int) or oauth_code_id <= 0:
+            raise ValidationError('Некорректный идентификатор кода.')
+
+        try:
+            existing_code = self.repository.get_oauth_code_for_user(
+                oauth_code_id=oauth_code_id,
+                telegram_id=telegram_id,
+            )
+            if not existing_code:
+                db.session.rollback()
+                raise NotFoundError('Код не найден.')
+
+            oauth_code, _ = OAuthCode.issue_or_refresh(
+                telegram_id=telegram_id,
+                device_id=existing_code.device_id,
+                ttl_minutes=self.code_ttl_minutes,
+                force_refresh=True,
+                oauth_code_id=oauth_code_id,
+            )
+
+            is_employee, position_title = self.repository.get_active_role(telegram_id=telegram_id)
+            db.session.commit()
+
+            return AuthCodeResult(
+                oauth_code_id=oauth_code.id,
+                code=oauth_code.code,
+                is_employee=is_employee,
+                position_title=position_title,
+            )
+        except NotFoundError:
+            raise
+        except ValueError as exc:
+            db.session.rollback()
+            logger.exception('Code generation error while refreshing auth code')
+            raise ServiceError('Не удалось обновить код авторизации.') from exc
+        except SQLAlchemyError as exc:
+            db.session.rollback()
+            logger.exception('Database error while refreshing auth code')
+            raise ServiceError('Ошибка при работе с базой данных.') from exc
+
+    def make_admin_debug(self, telegram_user, position_id: int = 4):
+        telegram_id = self._require_telegram_user(telegram_user)
+
+        try:
+            self.repository.get_or_create_user(telegram_user)
+            db.session.flush()
+
+            position = db.session.get(Position, position_id)
+            if not position:
+                position = Position(
+                    id=position_id,
+                    title='Администратор (debug)',
+                    responsibilities='Debug access',
+                    requirements='Debug only',
+                )
+                db.session.add(position)
+                db.session.flush()
+
+            employee = Employee.query.filter_by(telegram_id=telegram_id).first()
+            if employee:
+                employee.position_id = position_id
+                employee.is_active = True
+            else:
+                db.session.add(
+                    Employee(
+                        telegram_id=telegram_id,
+                        position_id=position_id,
+                        salary=0,
+                        is_active=True,
+                    )
+                )
+
+            db.session.commit()
+        except NotFoundError:
+            raise
+        except SQLAlchemyError as exc:
+            db.session.rollback()
+            logger.exception('Database error while assigning debug admin role')
+            raise ServiceError('Ошибка при обновлении роли.') from exc
+
+
 class FlowerShopBot:
-    def __init__(self, token: str, db_path: str):
-        self.token = token
-        self.db_path = db_path
-        self.application = Application.builder().token(token).build()
-        
-        self.application.add_handler(CommandHandler("start", self.start_handler))
-        self.application.add_handler(CommandHandler("help", self.help_handler))
-        self.application.add_handler(CommandHandler("auth", self.auth_handler))
+    def __init__(self, config: BotConfig, auth_service: AuthService, flask_app):
+        self.config = config
+        self.auth_service = auth_service
+        self.flask_app = flask_app
+        self.application = Application.builder().token(config.token).build()
+
+        self.application.add_handler(CommandHandler('start', self.start_handler))
+        self.application.add_handler(CommandHandler('help', self.help_handler))
+        self.application.add_handler(CommandHandler('auth', self.auth_disabled_handler))
+        self.application.add_handler(CommandHandler('debug_make_admin', self.debug_make_admin_handler))
         self.application.add_handler(CallbackQueryHandler(self.button_handler))
-        
-    def get_db_connection(self):
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+        self.application.add_error_handler(self.application_error_handler)
 
-    def generate_auth_code(self):
-        while True:
-            code = str(random.randint(1000, 9999))
-            conn = self.get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM oauth_codes WHERE code = ? AND used = 0", (code,))
-            count = cursor.fetchone()[0]
-            conn.close()
-            if count == 0:
-                return code
+    def _build_main_menu_keyboard(self):
+        rows = [
+            [InlineKeyboardButton('🔐 Как авторизоваться', callback_data='auth_help')],
+            [InlineKeyboardButton('❓ Помощь', callback_data='help')],
+            [InlineKeyboardButton('⭐ Сделать меня админом (debug)', callback_data='debug:make_admin')],
+        ]
 
-    def validate_device_id(self, device_id: str) -> bool:
-        """валидация device_id"""
-        if not device_id or len(device_id) > 255:
-            return False
-        # только буквы, цифры + безопасные символы
-        if not re.match(r'^[a-zA-Z0-9_\-.:]+$', device_id):
-            return False
-        return True
+        return InlineKeyboardMarkup(rows)
 
-    def escape_markdown(self, text: str) -> str:
-        """экранируе спецсимволы MarkdownV2"""
-        escape_chars = r'_*[]()~`>#+-=|{}.!'
-        return ''.join(f'\\{char}' if char in escape_chars else char for char in text)
+    @staticmethod
+    def _build_code_keyboard(oauth_code_id: int):
+        return InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton('🔄 Обновить код', callback_data=f'refresh:{oauth_code_id}')],
+                [InlineKeyboardButton('❓ Помощь', callback_data='help')],
+            ]
+        )
+
+    @staticmethod
+    def _build_role_text(is_employee: bool, position_title: Optional[str]) -> str:
+        if not is_employee:
+            return '👤 Роль: Клиент'
+        if position_title:
+            return f'👔 Роль: Сотрудник ({position_title})'
+        return '👔 Роль: Сотрудник'
+
+    def _build_auth_code_text(self, result: AuthCodeResult, refreshed: bool) -> str:
+        title = '✅ Код подтверждения обновлен' if refreshed else '✅ Код подтверждения сгенерирован'
+        role_text = self._build_role_text(result.is_employee, result.position_title)
+
+        return (
+            f'{title}\n\n'
+            f'{role_text}\n'
+            f'🔢 Код: {result.code}\n'
+            f'⏰ Действует {self.config.code_ttl_minutes} минут\n\n'
+            'Введите этот код в мобильном приложении для завершения авторизации.'
+        )
+
+    @staticmethod
+    def _build_auth_help_text() -> str:
+        return (
+            '🔐 Авторизация в мобильном приложении\n\n'
+            '1. Откройте мобильное приложение\n'
+            '2. Нажмите «Войти через Telegram»\n'
+            '3. Перейдите по ссылке, которую откроет приложение\n\n'
+            'После перехода бот автоматически выдаст код подтверждения.'
+        )
+
+    @staticmethod
+    def _build_help_text() -> str:
+        return (
+            '🌸 Цветочный магазин — помощь\n\n'
+            'Доступные команды:\n'
+            '/start — открыть меню\n'
+            '/help — показать помощь\n\n'
+            '/debug_make_admin — назначить себя админом (debug)\n\n'
+            'Авторизация выполняется только через кнопку «Войти через Telegram» в мобильном приложении.'
+        )
 
     async def start_handler(self, update: Update, context: CallbackContext):
-        user = update.effective_user
-        args = context.args
-        
-        if args:
-            device_id = args[0]
-            
-            # валидация device_id
-            if not self.validate_device_id(device_id):
-                await update.message.reply_text(
-                    "❌ Неверный формат идентификатора устройства.\n"
-                    "Используйте ссылку из мобильного приложения."
-                )
-                return
-                
-            await self.process_device_auth(update, context, device_id, user)
-        else:
-            keyboard = [
-                [InlineKeyboardButton("🔐 Авторизация", callback_data="auth_help")],
-                [InlineKeyboardButton("❓ Помощь", callback_data="help")],
-                # Временная debug-кнопка: сделать текущего пользователя админом (position_id = 4)
-                [InlineKeyboardButton("⭐ Сделать меня админом (debug)", callback_data="debug_make_admin")],
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await update.message.reply_text(
-                f"👋 Привет, {user.first_name}!\n\n"
-                "Я бот цветочного магазина 🌸\n"
-                "Для авторизации в мобильном приложении используйте функцию авторизации.",
-                reply_markup=reply_markup
-            )
-
-    async def debug_make_admin(self, update: Update, context: CallbackContext):
-        """
-        ВРЕМЕННЫЙ debug-хендлер:
-        делает текущего пользователя админом (position_id = 4) напрямую через SQLite.
-
-        ⚠️ Не использовать в продакшене. Оставлен по запросу для отладки.
-        """
+        message = update.effective_message
         user = update.effective_user
 
+        if message is None:
+            return
+
+        if user is None:
+            await message.reply_text('❌ Не удалось определить Telegram-пользователя.')
+            return
+
+        args = context.args or []
+        if not args:
+            await message.reply_text(
+                f'👋 Привет, {user.first_name or "друг"}!\n\n'
+                'Я бот цветочного магазина.\n'
+                'Для входа в мобильное приложение используйте кнопку «Войти через Telegram».',
+                reply_markup=self._build_main_menu_keyboard(),
+            )
+            return
+
+        if len(args) != 1:
+            await message.reply_text(
+                '❌ Некорректная ссылка авторизации.\n'
+                'Запустите вход снова из мобильного приложения.'
+            )
+            return
+
+        device_id = normalize_device_id(args[0])
+        if not device_id:
+            await message.reply_text(
+                '❌ Некорректная ссылка авторизации.\n'
+                'Запустите вход снова из мобильного приложения.'
+            )
+            return
+
         try:
-            conn = self.get_db_connection()
-            cursor = conn.cursor()
-
-            # Убеждаемся, что пользователь есть в таблице users
-            cursor.execute("SELECT id, name FROM users WHERE telegram_id = ?", (user.id,))
-            existing_user = cursor.fetchone()
-
-            if not existing_user:
-                user_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username or "Пользователь"
-                cursor.execute(
-                    "INSERT INTO users (telegram_id, name, phone) VALUES (?, ?, ?)",
-                    (user.id, user_name, "")
-                )
-
-            # Проверяем, что существует позиция с id=4 (Администратор)
-            cursor.execute("SELECT id, title FROM positions WHERE id = 4")
-            position = cursor.fetchone()
-            if not position:
-                conn.close()
-                await update.effective_message.reply_text(
-                    "❌ В БД не найдена должность с id=4. "
-                    "Убедитесь, что в таблице positions есть запись для администратора."
-                )
-                return
-
-            # Проверяем существующую запись сотрудника
-            cursor.execute(
-                "SELECT id FROM employees WHERE telegram_id = ?",
-                (user.id,)
+            result = self.auth_service.issue_code_for_device(user, device_id)
+            await message.reply_text(
+                self._build_auth_code_text(result=result, refreshed=False),
+                reply_markup=self._build_code_keyboard(result.oauth_code_id),
             )
-            employee = cursor.fetchone()
-
-            if employee:
-                # Обновляем существующую запись до админа
-                cursor.execute(
-                    """
-                    UPDATE employees
-                    SET position_id = 4,
-                        is_active = 1
-                    WHERE telegram_id = ?
-                    """,
-                    (user.id,)
-                )
-            else:
-                # Создаём новую запись сотрудника-админа
-                cursor.execute(
-                    """
-                    INSERT INTO employees (telegram_id, position_id, salary, is_active)
-                    VALUES (?, 4, ?, 1)
-                    """,
-                    (user.id, 0)
-                )
-
-            conn.commit()
-            conn.close()
-
-            await update.effective_message.reply_text(
-                "✅ Вы назначены администратором (position_id = 4).\n"
-                "Эта функция предназначена только для временного теста."
+        except ValidationError:
+            await message.reply_text(
+                '❌ Неверные данные авторизации.\n'
+                'Запустите вход снова из мобильного приложения.'
             )
-
-        except Exception as e:
-            logger.error(f"Error in debug_make_admin: {e}")
-            await update.effective_message.reply_text(
-                "❌ Не удалось назначить вас админом (см. логи сервера)."
-            )
-
-    async def process_device_auth(self, update: Update, context: CallbackContext, device_id: str, user):
-        try:
-            conn = self.get_db_connection()
-            cursor = conn.cursor()
-            
-            # проверяем/создаем пользователя
-            cursor.execute("SELECT * FROM users WHERE telegram_id = ?", (user.id,))
-            existing_user = cursor.fetchone()
-            
-            if not existing_user:
-                user_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username or "Пользователь"
-                cursor.execute(
-                    "INSERT INTO users (telegram_id, name, phone) VALUES (?, ?, ?)",
-                    (user.id, user_name, "")
-                )
-                user_id = cursor.lastrowid
-            else:
-                user_id = existing_user['id']
-            
-            # проверяем активный код/сессию устройства и пользователя
-            cursor.execute(
-                """SELECT * FROM oauth_codes 
-                WHERE telegram_id = ? AND device_id = ? AND used = 0 AND expires_at > datetime('now')""",
-                (user.id, device_id)
-            )
-            existing_code = cursor.fetchone()
-            
-            if existing_code:
-                auth_code = existing_code['code']
-                logger.info(f"Using existing code {auth_code} for user {user.id} and device {device_id}")
-            else:
-                auth_code = self.generate_auth_code()
-                
-                # удаляем старые записи устройства и пользователя
-                cursor.execute(
-                    "DELETE FROM oauth_codes WHERE telegram_id = ? AND device_id = ? AND used = 0",
-                    (user.id, device_id)
-                )
-                
-                # сохраняем код в бд
-                cursor.execute(
-                    """INSERT INTO oauth_codes 
-                    (telegram_id, device_id, code, expires_at, used) 
-                    VALUES (?, ?, ?, datetime('now', '+10 minutes'), 0)""",
-                    (user.id, device_id, auth_code)
-                )
-                logger.info(f"Generated new code {auth_code} for user {user.id} and device {device_id}")
-            
-            conn.commit()
-            conn.close()
-            
-            role_text = await self.get_user_role_text(user.id)
-            
-            keyboard = [
-                [InlineKeyboardButton("🔄 Обновить код", callback_data=f"refresh_{device_id}")],
-                [InlineKeyboardButton("❓ Помощь", callback_data="help")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await update.message.reply_text(
-                f"✅ *Код подтверждения сгенерирован\\!*\n\n"
-                f"{role_text}\n"
-                f"📱 Device ID: `{self.escape_markdown(device_id)}`\n"
-                f"🔢 Код подтверждения: `{auth_code}`\n"
-                f"⏰ Действует 10 минут\n\n"
-                f"Введите этот код в мобильном приложении для завершения авторизации\\.",
-                parse_mode='MarkdownV2',
-                reply_markup=reply_markup
-            )
-            
-        except Exception as e:
-            logger.error(f"Error processing device auth: {e}")
-            await update.message.reply_text(
-                "❌ Произошла ошибка при генерации кода. Попробуйте еще раз."
-            )
-
-    async def refresh_auth_code(self, update: Update, context: CallbackContext, device_id: str, user):
-        """Обновляет код подтверждения для существующей пары пользователь-устройство"""
-        try:
-            query = update.callback_query
-            await query.answer()
-            
-            # валидация device_id из callback
-            if not self.validate_device_id(device_id):
-                await query.answer("❌ Неверный идентификатор устройства", show_alert=True)
-                return
-            
-            conn = self.get_db_connection()
-            cursor = conn.cursor()
-            
-            new_auth_code = self.generate_auth_code()
-            
-            # обновляем запись
-            cursor.execute(
-                """UPDATE oauth_codes 
-                SET code = ?, expires_at = datetime('now', '+10 minutes'), used = 0
-                WHERE telegram_id = ? AND device_id = ?""",
-                (new_auth_code, user.id, device_id)
-            )
-            
-            if cursor.rowcount == 0:
-                # записи не было - создаем новую
-                cursor.execute(
-                    """INSERT INTO oauth_codes 
-                    (telegram_id, device_id, code, expires_at, used) 
-                    VALUES (?, ?, ?, datetime('now', '+10 minutes'), 0)""",
-                    (user.id, device_id, new_auth_code)
-                )
-            
-            conn.commit()
-            conn.close()
-            
-            role_text = await self.get_user_role_text(user.id)
-            
-            keyboard = [
-                [InlineKeyboardButton("🔄 Обновить код", callback_data=f"refresh_{device_id}")],
-                [InlineKeyboardButton("❓ Помощь", callback_data="help")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await query.edit_message_text(
-                f"✅ *Код подтверждения обновлен\\!*\n\n"
-                f"{role_text}\n"
-                f"📱 Device ID: `{self.escape_markdown(device_id)}`\n"
-                f"🔢 Новый код: `{new_auth_code}`\n"
-                f"⏰ Действует 10 минут\n\n"
-                f"Введите этот код в мобильном приложении для завершения авторизации\\.",
-                parse_mode='MarkdownV2',
-                reply_markup=reply_markup
-            )
-            
-            logger.info(f"Refreshed code to {new_auth_code} for user {user.id} and device {device_id}")
-            
-        except Exception as e:
-            logger.error(f"Error refreshing auth code: {e}")
-            await update.callback_query.answer(
-                "❌ Ошибка при обновлении кода. Попробуйте еще раз.",
-                show_alert=True
-            )
-
-    async def get_user_role_text(self, telegram_id):
-        """текстовое представление роли пользователя"""
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute(
-            """SELECT e.*, p.title as position_title 
-            FROM employees e 
-            LEFT JOIN positions p ON e.position_id = p.id 
-            WHERE e.telegram_id = ? AND e.is_active = 1""",
-            (telegram_id,)
-        )
-        employee_info = cursor.fetchone()
-        conn.close()
-        
-        if employee_info:
-            return f"👔 *Сотрудник* \\({self.escape_markdown(employee_info['position_title'])}\\)"
-        else:
-            return "👤 *Клиент*"
-
-    async def auth_handler(self, update: Update, context: CallbackContext):
-        args = context.args
-        user = update.effective_user
-        
-        if args:
-            if len(args) >= 2:
-                code = args[0]
-                device_id = args[1]
-                
-                # Валидация входных данных
-                if not self.validate_device_id(device_id):
-                    await update.message.reply_text("❌ Неверный формат идентификатора устройства.")
-                    return
-                    
-                if not re.match(r'^\d{4}$', code):
-                    await update.message.reply_text("❌ Код должен состоять из 4 цифр.")
-                    return
-                    
-                await self.process_manual_auth(update, context, code, device_id, user)
-            else:
-                await update.message.reply_text(
-                    "❌ Неверный формат. Используйте:\n"
-                    "`/auth КОД DEVICE_ID`",
-                    parse_mode='Markdown'
-                )
-        else:
-            await update.message.reply_text(
-                "🔐 *Авторизация в мобильном приложении*\n\n"
-                "Чтобы авторизоваться:\n"
-                "1\\. Откройте мобильное приложение\n"
-                "2\\. Нажмите 'Войти через Telegram'\n"
-                "3\\. Используйте полученную ссылку\n\n"
-                "Или введите команду:\n"
-                "`/auth КОД DEVICE_ID`\n\n"
-                "🔗 *Формат ссылки:*\n"
-                "`https://t\\.me/for_the_future_bot?start=DEVICE_ID`",
-                parse_mode='MarkdownV2'
-            )
-
-    async def process_manual_auth(self, update: Update, context: CallbackContext, code: str, device_id: str, user):
-        try:
-            conn = self.get_db_connection()
-            cursor = conn.cursor()
-            
-            cursor.execute("SELECT * FROM users WHERE telegram_id = ?", (user.id,))
-            existing_user = cursor.fetchone()
-            
-            if not existing_user:
-                user_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username or "Пользователь"
-                cursor.execute(
-                    "INSERT INTO users (telegram_id, name, phone) VALUES (?, ?, ?)",
-                    (user.id, user_name, "")
-                )
-                user_id = cursor.lastrowid
-            
-            # проверяем код
-            cursor.execute(
-                "SELECT * FROM oauth_codes WHERE code = ? AND device_id = ?",
-                (code, device_id)
-            )
-            existing_code = cursor.fetchone()
-            
-            if existing_code:
-                if existing_code['telegram_id'] is not None and existing_code['telegram_id'] != user.id:
-                    await update.message.reply_text(
-                        "❌ Этот код уже был использован другим пользователем."
-                    )
-                    conn.close()
-                    return
-                
-                cursor.execute(
-                    """UPDATE oauth_codes 
-                    SET telegram_id = ?, expires_at = datetime('now', '+10 minutes')
-                    WHERE code = ? AND device_id = ?""",
-                    (user.id, code, device_id)
-                )
-            else:
-                cursor.execute(
-                    """INSERT INTO oauth_codes 
-                    (telegram_id, device_id, code, expires_at, used) 
-                    VALUES (?, ?, ?, datetime('now', '+10 minutes'), 0)""",
-                    (user.id, device_id, code)
-                )
-            
-            conn.commit()
-            conn.close()
-            
-            role_text = await self.get_user_role_text(user.id)
-            
-            await update.message.reply_text(
-                f"✅ *Авторизация успешна\\!*\n\n"
-                f"{role_text}\n"
-                f"📱 Код: `{code}`\n"
-                f"⏰ Действует 10 минут\n\n"
-                f"Вернитесь в мобильное приложение для завершения входа\\.",
-                parse_mode='MarkdownV2'
-            )
-            
-            logger.info(f"User {user.id} successfully linked code {code} for device {device_id}")
-            
-        except Exception as e:
-            logger.error(f"Error processing manual auth: {e}")
-            await update.message.reply_text(
-                "❌ Произошла ошибка при обработке кода. Попробуйте еще раз."
-            )
+        except ServiceError:
+            await message.reply_text('❌ Временная ошибка сервера. Попробуйте еще раз позже.')
 
     async def help_handler(self, update: Update, context: CallbackContext):
-        help_text = (
-            "🌸 *Цветочный магазин \\- Помощь*\n\n"
-            "🔐 *Авторизация в приложении:*\n"
-            "1\\. Откройте мобильное приложение\n"
-            "2\\. Нажмите 'Войти через Telegram'\n"
-            "3\\. Используйте полученную ссылку\n\n"
-            "📱 *Доступные команды:*\n"
-            "/start \\- Начать работу с ботом\n"
-            "/auth КОД DEVICE_ID \\- Ручная авторизация\n"
-            "/help \\- Показать эту справку\n\n"
-            "🔗 *Формат ссылки:*\n"
-            "`https://t\\.me/for_the_future_bot?start=DEVICE_ID`\n\n"
-            "❓ *Проблемы с авторизацией\\?*\n"
-            "Убедитесь, что:\n"
-            "• Используете актуальную ссылку из приложения\n"
-            "• Код состоит из 4 цифр\n"
-            "• Ссылка не была использована ранее\n"
-            "• Если код устарел, нажмите 'Обновить код'"
+        message = update.effective_message
+        if message is None:
+            return
+        await message.reply_text(self._build_help_text(), reply_markup=self._build_main_menu_keyboard())
+
+    async def auth_disabled_handler(self, update: Update, context: CallbackContext):
+        message = update.effective_message
+        if message is None:
+            return
+
+        await message.reply_text(
+            '🔒 Ручной ввод кода отключен.\n'
+            'Используйте кнопку «Войти через Telegram» в мобильном приложении.'
         )
-        
-        await update.message.reply_text(help_text, parse_mode='MarkdownV2')
+
+    async def debug_make_admin_handler(self, update: Update, context: CallbackContext):
+        message = update.effective_message
+        user = update.effective_user
+        if message is None:
+            return
+
+        if user is None:
+            await message.reply_text('❌ Не удалось определить пользователя.')
+            return
+
+        try:
+            self.auth_service.make_admin_debug(user)
+            await message.reply_text('✅ Вы назначены администратором (debug-режим).')
+        except NotFoundError as exc:
+            await message.reply_text(f'❌ {exc}')
+        except ServiceError:
+            await message.reply_text('❌ Ошибка при обновлении роли.')
 
     async def button_handler(self, update: Update, context: CallbackContext):
         query = update.callback_query
-        await query.answer()
-        
         user = update.effective_user
-        
-        if query.data == "auth_help":
+
+        if query is None:
+            return
+
+        callback_data = (query.data or '').strip()
+
+        if callback_data == 'auth_help':
+            await query.answer()
             await query.edit_message_text(
-                "🔐 *Авторизация в мобильном приложении*\n\n"
-                "Чтобы авторизоваться:\n"
-                "1\\. Откройте мобильное приложение\n"
-                "2\\. Нажмите 'Войти через Telegram'\n"
-                "3\\. Используйте полученную ссылку\n\n"
-                "Или введите команду:\n"
-                "`/auth КОД DEVICE_ID`\n\n"
-                "🔗 *Формат ссылки:*\n"
-                "`https://t\\.me/for_the_future_bot?start=DEVICE_ID`",
-                parse_mode='MarkdownV2'
+                self._build_auth_help_text(),
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton('❓ Помощь', callback_data='help')]]
+                ),
             )
-        elif query.data == "help":
-            await self.help_handler(update, context)
-        elif query.data == "debug_make_admin":
-            # временная debug-кнопка для назначения текущего пользователя админом
-            await self.debug_make_admin(update, context)
-        elif query.data.startswith("refresh_"):
-            device_id = query.data[8:]
-            
-            # валидация device_id из callback_data
-            if not self.validate_device_id(device_id):
-                await query.answer("❌ Неверный идентификатор устройства", show_alert=True)
+            return
+
+        if callback_data == 'help':
+            await query.answer()
+            await query.edit_message_text(
+                self._build_help_text(),
+                reply_markup=self._build_main_menu_keyboard(),
+            )
+            return
+
+        if callback_data == 'debug:make_admin':
+            if user is None:
+                await query.answer('❌ Не удалось определить пользователя.', show_alert=True)
                 return
-                
-            await self.refresh_auth_code(update, context, device_id, user)
+
+            try:
+                self.auth_service.make_admin_debug(user)
+                await query.answer()
+                await query.edit_message_text(
+                    '✅ Вы назначены администратором (debug-режим).',
+                    reply_markup=self._build_main_menu_keyboard(),
+                )
+            except NotFoundError as exc:
+                await query.answer(str(exc), show_alert=True)
+            except ServiceError:
+                await query.answer('❌ Ошибка при обновлении роли.', show_alert=True)
+            return
+
+        match = REFRESH_CALLBACK_PATTERN.fullmatch(callback_data)
+        if not match:
+            await query.answer('❌ Некорректная команда.', show_alert=True)
+            return
+
+        if user is None:
+            await query.answer('❌ Не удалось определить пользователя.', show_alert=True)
+            return
+
+        oauth_code_id = int(match.group(1))
+
+        try:
+            result = self.auth_service.refresh_code_by_record(user, oauth_code_id)
+            await query.answer('Код обновлен')
+            await query.edit_message_text(
+                self._build_auth_code_text(result=result, refreshed=True),
+                reply_markup=self._build_code_keyboard(result.oauth_code_id),
+            )
+        except ValidationError:
+            await query.answer('❌ Некорректные данные запроса.', show_alert=True)
+        except NotFoundError:
+            await query.answer('❌ Код не найден или больше недоступен.', show_alert=True)
+        except ServiceError:
+            await query.answer('❌ Ошибка при обновлении кода.', show_alert=True)
+
+    async def application_error_handler(self, update: object, context: CallbackContext):
+        error = context.error
+        if isinstance(error, Conflict):
+            logger.error(
+                'Telegram 409 Conflict: обнаружен второй инстанс бота с этим же токеном. '
+                'Останавливаю текущий polling.'
+            )
+            context.application.stop_running()
+            return
+
+        logger.exception('Unhandled telegram application error', exc_info=error)
 
     def run(self):
-        logger.info("Bot is starting...")
-        self.application.run_polling()
+        logger.info('Bot is starting...')
+        with self.flask_app.app_context():
+            self.application.run_polling(drop_pending_updates=True)
+
+
+def main():
+    try:
+        config = BotConfig.from_env()
+    except ValueError as exc:
+        print(f'Ошибка конфигурации: {exc}')
+        return
+
+    os.environ['DATABASE_URL'] = config.database_url
+    flask_app = create_app()
+    try:
+        ensure_database_ready(flask_app)
+    except Exception as exc:
+        print(f'Ошибка инициализации БД: {exc}')
+        return
+
+    auth_service = AuthService(
+        repository=AuthRepository(),
+        code_ttl_minutes=config.code_ttl_minutes,
+    )
+
+    bot = FlowerShopBot(
+        config=config,
+        auth_service=auth_service,
+        flask_app=flask_app,
+    )
+    bot.run()
+
 
 if __name__ == '__main__':
     main()

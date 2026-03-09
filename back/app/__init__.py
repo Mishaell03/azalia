@@ -12,7 +12,16 @@ def create_app():
     
     base_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
     db_path = os.path.join(base_dir, 'flower_shop.db')
-    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}?timeout=30'
+    database_url = os.environ.get('DATABASE_URL')
+    if database_url:
+        if '://' not in database_url:
+            database_url = f'sqlite:///{database_url}'
+        if database_url.startswith('sqlite:///') and 'timeout=' not in database_url:
+            separator = '&' if '?' in database_url else '?'
+            database_url = f'{database_url}{separator}timeout=30'
+        app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+    else:
+        app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}?timeout=30'
     
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
