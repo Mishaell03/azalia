@@ -62,7 +62,7 @@ class _HomePage extends State<HomePage> {
     await _viewModel.refresh();
   }
 
-  void _onCategorySelected(category) {
+  void _onCategorySelected(dynamic category) {
     _viewModel.selectCategory(category);
   }
 
@@ -114,7 +114,7 @@ class _HomePage extends State<HomePage> {
                             ],
                           ),
                         ),
-                        Container(
+                        SizedBox(
                           height: 33,
                           child: HomeCategory(
                             onCategorySelected: _onCategorySelected,
@@ -155,17 +155,19 @@ class _HomePage extends State<HomePage> {
                     ),
                   SliverToBoxAdapter(
                     child:
-                        _viewModel.selectedCategory == null &&
-                            _viewModel.allPlants.isNotEmpty
+                        _viewModel.allPlants.isNotEmpty &&
+                            (_viewModel.hasMore || _viewModel.isLoadingMore)
                         ? Padding(
                             padding: const EdgeInsets.all(16.0),
                             child: Center(
-                              child: Text(
-                                'Продолжение списка...',
-                                style: AppText.medium_14.copyWith(
-                                  color: AppColors.grey,
-                                ),
-                              ),
+                              child: _viewModel.isLoadingMore
+                                  ? const LoadingWidget(size: 24, strokeWidth: 2)
+                                  : Text(
+                                      'Загрузить ещё...',
+                                      style: AppText.medium_14.copyWith(
+                                        color: AppColors.grey,
+                                      ),
+                                    ),
                             ),
                           )
                         : const SizedBox.shrink(),

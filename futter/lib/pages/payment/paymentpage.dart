@@ -145,7 +145,9 @@ class _PaymentPageState extends State<PaymentPage> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      widget.args.address,
+                      widget.args.address?.isNotEmpty == true
+                          ? widget.args.address!
+                          : 'Адрес не указан',
                       style: AppText.medium_16.copyWith(color: AppColors.grey),
                     ),
                     const SizedBox(height: 10),
@@ -304,7 +306,7 @@ class _PaymentPageState extends State<PaymentPage> {
 
                     final result = await context.pushNamed<bool>(
                       'payment_webview',
-                      extra: widget.args.paymentUrl,
+                      extra: widget.args,
                     );
 
                     debugPrint(

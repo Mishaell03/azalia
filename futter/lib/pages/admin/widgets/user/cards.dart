@@ -27,6 +27,7 @@ class UserCardData {
 class AdminUsersPage extends StatefulWidget {
   const AdminUsersPage({super.key});
 
+  @override
   State<AdminUsersPage> createState() => _AdminSettingsPage();
 }
 
@@ -107,7 +108,7 @@ class _UsersList extends StatelessWidget {
                 name: user.name,
                 isEmployee: false,
                 isActive: false,
-                avatarBase64: user.avatar,
+                avatarBase64: user.avatarUrl,
               ),
             );
           },
@@ -150,10 +151,10 @@ class _EmployeesList extends StatelessWidget {
               data: UserCardData(
                 id: employ.id,
                 telegramId: employ.telegramId,
-                name: employ.userInfo.name,
+                name: employ.fullName,
                 isEmployee: true,
                 isActive: employ.isActive,
-                avatarBase64: employ.userInfo.avatar,
+                avatarBase64: employ.avatarUrl,
               ),
             );
           },

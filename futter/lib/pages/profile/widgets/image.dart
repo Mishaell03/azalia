@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+import 'package:azalia/backend/api_config.dart';
 import 'package:flutter/material.dart';
 import 'package:azalia/components/colors.dart';
 
@@ -33,8 +34,22 @@ class AppProfileImage extends StatelessWidget {
     }
     
     if (avatarBase64 != null && avatarBase64!.isNotEmpty) {
+      final avatarValue = avatarBase64!.trim();
+
+      if (_looksLikeImagePath(avatarValue)) {
+        return Image.network(
+          ApiConfig.imageUrl(avatarValue),
+          fit: BoxFit.cover,
+          width: size,
+          height: size,
+          errorBuilder: (context, error, stackTrace) {
+            return _buildPlaceholder();
+          },
+        );
+      }
+
       try {
-        String cleanBase64 = avatarBase64!.trim();
+        String cleanBase64 = avatarValue;
         
         if (cleanBase64.contains(',')) {
           cleanBase64 = cleanBase64.split(',').last.trim();
@@ -120,5 +135,12 @@ class AppProfileImage extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  bool _looksLikeImagePath(String value) {
+    return value.startsWith('http') ||
+        value.startsWith('/') ||
+        value.startsWith('img/') ||
+        value.startsWith('api/');
   }
 }

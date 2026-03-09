@@ -137,13 +137,24 @@ class _WishlistCardState extends State<WishlistCard> {
         color: AppColors.grey_light,
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.error_outline, size: 24, color: AppColors.grey),
-          const SizedBox(height: 4),
+          Icon(
+            Icons.error_outline,
+            size: outOfStock ? 18 : 24,
+            color: AppColors.grey,
+          ),
+          SizedBox(height: outOfStock ? 2 : 4),
           Text(
             'Повторить',
-            style: AppText.medium_12.copyWith(color: AppColors.grey),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: (outOfStock ? AppText.medium_12 : AppText.medium_12)
+                .copyWith(
+                  color: AppColors.grey,
+                  fontSize: outOfStock ? 10 : null,
+                ),
           ),
         ],
       ),

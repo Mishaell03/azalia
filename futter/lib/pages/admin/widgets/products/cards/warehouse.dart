@@ -18,7 +18,7 @@ class AdminProductsCartWarehouse extends StatelessWidget {
     return Scaffold(
       appBar: AppHeader(items: adminProductsHeaderItems),
       body: FutureBuilder<PlantResponse>(
-        future: PlantService.getPlants(),
+        future: PlantService.getPlants(perPage: 100),
         builder: (context, snapshot) {
           // загрузка
           if (snapshot.connectionState == ConnectionState.waiting) {

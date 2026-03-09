@@ -1,21 +1,26 @@
 import 'package:azalia/components/colors.dart';
 import 'package:azalia/components/text_styles.dart';
+import 'package:azalia/backend/apiClient.dart';
+import 'package:azalia/backend/api_config.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:azalia/backend/api_config.dart';
 
 class PaymentWebViewPage extends StatefulWidget {
   final String paymentUrl;
+  final int paymentLinkId;
 
-  const PaymentWebViewPage({super.key, required this.paymentUrl});
+  const PaymentWebViewPage({
+    super.key,
+    required this.paymentUrl,
+    required this.paymentLinkId,
+  });
 
   @override
   State<PaymentWebViewPage> createState() => _PaymentWebViewPage();
 }
 
 class _PaymentWebViewPage extends State<PaymentWebViewPage> {
+  final ApiClient _api = ApiClient();
   late final WebViewController _controller;
   bool _loading = true;
   String _error = '';
@@ -40,6 +45,14 @@ class _PaymentWebViewPage extends State<PaymentWebViewPage> {
           },
           onPageFinished: (String url) {
             debugPrint('PaymentWebViewPage: onPageFinished: $url');
+            final uri = Uri.tryParse(url);
+            final status =
+                uri?.queryParameters['payment_status'] ??
+                uri?.queryParameters['status'];
+            if (status == 'paid' && mounted) {
+              Navigator.pop(context, true);
+              return;
+            }
             setState(() {
               _loading = false;
             });
@@ -85,52 +98,28 @@ class _PaymentWebViewPage extends State<PaymentWebViewPage> {
 
     try {
       debugPrint('PaymentWebViewPage: проверяем статус платежа...');
-
-      // orderId из URL
-      final Uri uri = Uri.parse(widget.paymentUrl);
-      final String? orderId = uri.queryParameters['orderId'];
-
-      if (orderId == null) {
-        setState(() {
-          _error = 'Не удалось определить ID платежа';
-          _isCheckingStatus = false;
-        });
-        return;
-      }
-
-      final response = await http
-          .get(Uri.parse('${ApiConfig.baseURL}/payments/status/$orderId'))
-          .timeout(const Duration(seconds: 10));
+      final response = await _api.get(
+        ApiConfig.paymentLinkStatus(widget.paymentLinkId),
+      );
 
       if (!mounted) return;
 
-      debugPrint('PaymentWebViewPage: статус ответ: ${response.statusCode}');
+      final status = response['data']?['status']?.toString();
+      debugPrint('PaymentWebViewPage: статус платежа: $status');
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final status = data['data']?['status'] ?? data['status'];
+      if (status == 'paid' || status == 'succeeded') {
+        debugPrint('PaymentWebViewPage: оплата подтверждена! закрываем');
+        setState(() {
+          _paymentCompleted = true;
+          _isCheckingStatus = false;
+        });
 
-        debugPrint('PaymentWebViewPage: статус платежа: $status');
-
-        if (status == 'paid' || status == 'succeeded') {
-          debugPrint('PaymentWebViewPage: оплата подтверждена! закрываем');
-          setState(() {
-            _paymentCompleted = true;
-            _isCheckingStatus = false;
-          });
-
-          if (mounted) {
-            Navigator.pop(context, true);
-          }
-        } else {
-          setState(() {
-            _error = 'Платёж не завершён. Статус: $status';
-            _isCheckingStatus = false;
-          });
+        if (mounted) {
+          Navigator.pop(context, true);
         }
       } else {
         setState(() {
-          _error = 'Ошибка при проверке статуса (код ${response.statusCode})';
+          _error = 'Платёж не завершён. Статус: ${status ?? 'unknown'}';
           _isCheckingStatus = false;
         });
       }
