@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import base64
+import json
 import uuid
 from datetime import datetime
 from typing import Optional
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.config import get_settings
@@ -194,7 +199,6 @@ def _sync_payment_and_order(cur, payment_row, new_status: str):
             (order_id,),
         )
 
-        # Удаляем оплаченные товары из корзины и резервируем остатки.
         order_items = cur.execute(
             """
             SELECT product_id, quantity, pot_size_id, pot_material_id, pot_color_id
@@ -290,8 +294,113 @@ def _sync_payment_and_order(cur, payment_row, new_status: str):
         )
 
 
+def _api_origin(request: Request) -> str:
+    return str(request.base_url).rstrip("/")
+
+
+def _api_base_url(request: Request) -> str:
+    return f"{_api_origin(request)}/api"
+
+
+def _yookassa_enabled(settings) -> bool:
+    return bool(settings.YOOKASSA_SHOP_ID and settings.YOOKASSA_API_KEY)
+
+
+def _map_yookassa_status(remote_status: Optional[str]) -> str:
+    if remote_status == "succeeded":
+        return "paid"
+    if remote_status == "canceled":
+        return "failed"
+    return "pending"
+
+
+def _yookassa_request(settings, method: str, path: str, payload: Optional[dict] = None) -> dict:
+    credentials = f"{settings.YOOKASSA_SHOP_ID}:{settings.YOOKASSA_API_KEY}"
+    headers = {
+        "Authorization": f"Basic {base64.b64encode(credentials.encode('utf-8')).decode('utf-8')}",
+        "Content-Type": "application/json",
+    }
+    if method.upper() == "POST":
+        headers["Idempotence-Key"] = str(uuid.uuid4())
+
+    request_obj = urllib_request.Request(
+        url=f"https://api.yookassa.ru/v3/{path.lstrip('/')}",
+        data=json.dumps(payload).encode("utf-8") if payload is not None else None,
+        headers=headers,
+        method=method.upper(),
+    )
+
+    try:
+        with urllib_request.urlopen(request_obj, timeout=20) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib_error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="ignore")
+        raise HTTPException(
+            status_code=502,
+            detail=f"YooKassa error: {body or exc.reason}",
+        )
+    except urllib_error.URLError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"YooKassa unavailable: {exc.reason}",
+        )
+
+
+def _create_yookassa_payment(
+    settings,
+    *,
+    amount: float,
+    order_number: str,
+    return_url: str,
+    payment_method_code: str,
+    metadata: dict[str, str],
+) -> dict:
+    payload = {
+        "amount": {
+            "value": f"{amount:.2f}",
+            "currency": "RUB",
+        },
+        "capture": True,
+        "confirmation": {
+            "type": "redirect",
+            "return_url": return_url,
+        },
+        "description": f"Оплата заказа {order_number}",
+        "metadata": metadata,
+        "payment_method_data": {
+            "type": "sbp" if payment_method_code == "sbp" else "bank_card",
+        },
+    }
+
+    return _yookassa_request(settings, "POST", "/payments", payload)
+
+
+def _fetch_yookassa_payment(settings, external_payment_id: str) -> dict:
+    return _yookassa_request(settings, "GET", f"/payments/{external_payment_id}")
+
+
+def _refresh_payment_status(cur, settings, payment_row) -> str:
+    external_payment_id = payment_row["external_payment_id"]
+    if not _yookassa_enabled(settings) or not external_payment_id:
+        return payment_row["status"]
+
+    remote_payment = _fetch_yookassa_payment(settings, str(external_payment_id))
+    mapped_status = _map_yookassa_status(remote_payment.get("status"))
+
+    if mapped_status == "paid" and payment_row["status"] != "paid":
+        _sync_payment_and_order(cur, payment_row, "paid")
+    elif mapped_status == "failed" and payment_row["status"] not in {"failed", "paid"}:
+        _sync_payment_and_order(cur, payment_row, "failed")
+
+    return mapped_status
+
+
 @router.post("/generate-link", status_code=status.HTTP_201_CREATED, summary="Generate Payment Link")
-def generate_payment_link(payload: GeneratePaymentLinkRequest, user=Depends(get_current_user)):
+def generate_payment_link(
+    payload: GeneratePaymentLinkRequest,
+    request: Request,
+    user=Depends(get_current_user),
+):
     """Создает заказ и платеж, возвращает ссылку/идентификатор для оплаты."""
     settings = get_settings()
 
@@ -388,7 +497,7 @@ def generate_payment_link(payload: GeneratePaymentLinkRequest, user=Depends(get_
                 }
             )
 
-        external_payment_id = f"pay_{uuid.uuid4().hex}"
+        external_payment_id = f"pending_{uuid.uuid4().hex}"
         cur.execute(
             """
             INSERT INTO payments (
@@ -401,11 +510,36 @@ def generate_payment_link(payload: GeneratePaymentLinkRequest, user=Depends(get_
         )
         payment_id = cur.lastrowid
 
+        if not _yookassa_enabled(settings):
+            raise HTTPException(status_code=500, detail="YooKassa is not configured")
+
+        remote_payment = _create_yookassa_payment(
+            settings,
+            amount=total_price,
+            order_number=order_number,
+            return_url=f"{_api_base_url(request)}/payments/return/{payment_id}",
+            payment_method_code=payment_method_code,
+            metadata={
+                "payment_link_id": str(payment_id),
+                "order_id": str(order_id),
+                "user_id": str(user["id"]),
+            },
+        )
+        external_payment_id = str(remote_payment["id"])
+        payment_url = str(
+            remote_payment.get("confirmation", {}).get("confirmation_url") or ""
+        )
+        if not payment_url:
+            raise HTTPException(status_code=502, detail="YooKassa confirmation_url is missing")
+
+        cur.execute(
+            "UPDATE payments SET external_payment_id = ? WHERE id = ?",
+            (external_payment_id, payment_id),
+        )
+
         conn.commit()
     finally:
         conn.close()
-
-    payment_url = f"{settings.API_BASE_URL}/payments/status/{external_payment_id}"
 
     return {
         "success": True,
@@ -424,15 +558,92 @@ def generate_payment_link(payload: GeneratePaymentLinkRequest, user=Depends(get_
     }
 
 
-@router.get("/link/{link_id}", summary="Get Payment Link")
-def get_payment_link(link_id: int, user=Depends(get_current_user)):
-    """Возвращает информацию о платеже по его внутреннему идентификатору."""
+@router.get("/return/{link_id}", response_class=HTMLResponse, summary="YooKassa Return")
+def payment_return(link_id: int, request: Request, payment_status: Optional[str] = None):
+    settings = get_settings()
     conn = get_db_connection()
     try:
-        row = conn.execute(
+        cur = conn.cursor()
+        payment = cur.execute(
             "SELECT * FROM payments WHERE id = ? LIMIT 1",
             (link_id,),
         ).fetchone()
+        if not payment:
+            raise HTTPException(status_code=404, detail="Payment link not found")
+
+        if payment_status is None:
+            current_status = _refresh_payment_status(cur, settings, payment)
+            conn.commit()
+            return RedirectResponse(
+                url=f"{_api_base_url(request)}/payments/return/{link_id}?payment_status={current_status}",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+    finally:
+        conn.close()
+
+    status_text = {
+        "paid": "Оплата подтверждена. Можно вернуться в приложение.",
+        "failed": "Платёж отменён. Можно вернуться в приложение.",
+    }.get(payment_status or "pending", "Платёж ещё обрабатывается. Вернитесь в приложение и обновите статус.")
+
+    return HTMLResponse(
+        f"""
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Возврат в приложение</title>
+    <style>
+      body {{
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #f6f0e8;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }}
+      .card {{
+        max-width: 420px;
+        margin: 24px;
+        padding: 24px;
+        background: #fff;
+        border-radius: 24px;
+        box-shadow: 0 16px 40px rgba(31, 41, 55, 0.08);
+        text-align: center;
+        color: #1f2937;
+      }}
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Azalia</h1>
+      <p>{status_text}</p>
+    </div>
+  </body>
+</html>
+"""
+    )
+
+
+@router.get("/link/{link_id}", summary="Get Payment Link")
+def get_payment_link(link_id: int, user=Depends(get_current_user)):
+    """Возвращает информацию о платеже по его внутреннему идентификатору."""
+    settings = get_settings()
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        row = cur.execute(
+            "SELECT * FROM payments WHERE id = ? LIMIT 1",
+            (link_id,),
+        ).fetchone()
+        if row and int(row["user_id"]) == int(user["id"]):
+            _refresh_payment_status(cur, settings, row)
+            conn.commit()
+            row = cur.execute(
+                "SELECT * FROM payments WHERE id = ? LIMIT 1",
+                (link_id,),
+            ).fetchone()
     finally:
         conn.close()
 
@@ -516,12 +727,21 @@ def check_payment_status(payment_id: str):
     if not clean_payment_id:
         raise HTTPException(status_code=400, detail="Invalid payment id")
 
+    settings = get_settings()
     conn = get_db_connection()
     try:
-        row = conn.execute(
+        cur = conn.cursor()
+        row = cur.execute(
             "SELECT * FROM payments WHERE external_payment_id = ? LIMIT 1",
             (clean_payment_id,),
         ).fetchone()
+        if row:
+            _refresh_payment_status(cur, settings, row)
+            conn.commit()
+            row = cur.execute(
+                "SELECT * FROM payments WHERE external_payment_id = ? LIMIT 1",
+                (clean_payment_id,),
+            ).fetchone()
     finally:
         conn.close()
 
@@ -542,12 +762,21 @@ def check_payment_status(payment_id: str):
 @router.get("/status/link/{link_id}", summary="Check Payment Link Status")
 def user_check_payment_link_status(link_id: int, user=Depends(get_current_user)):
     """Проверка статуса платежа владельцем по id записи payments."""
+    settings = get_settings()
     conn = get_db_connection()
     try:
-        row = conn.execute(
+        cur = conn.cursor()
+        row = cur.execute(
             "SELECT * FROM payments WHERE id = ? LIMIT 1",
             (link_id,),
         ).fetchone()
+        if row and int(row["user_id"]) == int(user["id"]):
+            _refresh_payment_status(cur, settings, row)
+            conn.commit()
+            row = cur.execute(
+                "SELECT * FROM payments WHERE id = ? LIMIT 1",
+                (link_id,),
+            ).fetchone()
     finally:
         conn.close()
 
@@ -562,6 +791,7 @@ def user_check_payment_link_status(link_id: int, user=Depends(get_current_user))
 @router.get("/status/order/{order_id}", summary="Check Order Payment Status")
 def user_check_order_status(order_id: int, user=Depends(get_current_user)):
     """Возвращает статус заказа и связанного с ним платежа."""
+    settings = get_settings()
     conn = get_db_connection()
     try:
         cur = conn.cursor()
@@ -578,6 +808,13 @@ def user_check_order_status(order_id: int, user=Depends(get_current_user)):
             "SELECT * FROM payments WHERE order_id = ? ORDER BY id DESC LIMIT 1",
             (order_id,),
         ).fetchone()
+        if payment:
+            _refresh_payment_status(cur, settings, payment)
+            conn.commit()
+            payment = cur.execute(
+                "SELECT * FROM payments WHERE order_id = ? ORDER BY id DESC LIMIT 1",
+                (order_id,),
+            ).fetchone()
     finally:
         conn.close()
 
