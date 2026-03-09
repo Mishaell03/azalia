@@ -23,6 +23,7 @@ class ApiConfig {
   static const String authVerify = '$baseURL/auth/verify';
   static String authCheckStatus(String code) =>
       '$baseURL/auth/check_status/$code';
+  static const String authValidateToken = '$baseURL/auth/validate_token';
   static const String updateProfile = '$baseURL/auth/update_profile';
   static const String authMe = '$baseURL/auth/me';
   static const String avatar = '$baseURL/auth/avatar';

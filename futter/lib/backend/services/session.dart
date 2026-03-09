@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:azalia/backend/services/auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:azalia/backend/models/auth.dart';
@@ -30,6 +31,31 @@ class SessionService {
 
   Future<void> initialize() async {
     await _loadSessionFromStorage();
+  }
+
+  Future<bool> validateCurrentSession() async {
+    if (!isLoggedIn || _sessionToken == null || _sessionToken!.isEmpty) {
+      await clearSession();
+      return false;
+    }
+
+    if (!isTokenValid) {
+      await clearSession();
+      return false;
+    }
+
+    try {
+      final isValid = await AuthService.validateSessionToken(_sessionToken!);
+      if (!isValid) {
+        await clearSession();
+        return false;
+      }
+
+      return true;
+    } catch (e) {
+      debugPrint('Ошибка проверки токена: $e');
+      return isLoggedIn && isTokenValid;
+    }
   }
 
   Future<void> saveSession({

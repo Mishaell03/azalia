@@ -40,14 +40,16 @@ class _AppStartPageState extends State<AppStartPage>
 
   Future<void> _bootstrap() async {
     try {
-      // Даем интерфейсу немного «подышать»
-      await Future.delayed(const Duration(seconds: 8));
+      final results = await Future.wait<dynamic>([
+        Future.delayed(const Duration(seconds: 8)),
+        _session.validateCurrentSession(),
+      ]);
 
-      await _session.initialize();
+      final hasValidSession = results[1] as bool;
 
       if (!mounted) return;
 
-      if (_session.isLoggedIn && _session.isTokenValid) {
+      if (hasValidSession) {
         context.go('/');
       } else {
         context.go('/auth');

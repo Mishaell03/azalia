@@ -20,6 +20,8 @@ import 'package:azalia/pages/profile/profilepage.dart';
 import 'package:azalia/pages/cart/cartpage.dart';
 
 class AppRouter {
+  AppRouter();
+
   late final GoRouter router = GoRouter(
     initialLocation: '/start',
     routes: [

@@ -64,6 +64,27 @@ class AuthService {
     }
   }
 
+  /// Серверная проверка session token
+  static Future<bool> validateSessionToken(String token) async {
+    try {
+      final response = await _api.post(
+        ApiConfig.authValidateToken,
+        body: {'token': token},
+      );
+
+      return response['is_valid'] == true;
+    } on ApiException catch (e) {
+      throw AuthException(
+        message: e.message,
+        statusCode: e.statusCode,
+      );
+    } catch (e) {
+      throw AuthException(
+        message: 'Ошибка проверки сессии',
+      );
+    }
+  }
+
   /// Получение текущего пользователя (обновление сессии)
   static Future<AuthResponse> fetchMe() async {
     try {
