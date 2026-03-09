@@ -1,13 +1,14 @@
 class ApiConfig {
-  static const String baseURL = 'https://www.nebinance.ru/api';
-  // static const String baseURL = 'http://127.0.0.1:5000/api';
+  // static const String baseURL = 'https://www.nebinance.ru/api';
+  static const String baseURL = 'http://127.0.0.1:5000/api';
   static const Duration timeout = Duration(seconds: 10);
+  static final Uri _baseUri = Uri.parse(baseURL);
 
   // admin employees
   static const String whoAmI = '$baseURL/debug/whoami';
   static const String users = '$baseURL/users';
   static const String employees = '$baseURL/employees';
-  static String employee(int id) => '$baseURL/employee/$id';
+  static String employee(int id) => '$baseURL/employees/$id';
   static const String assignEmployee = '$baseURL/employees/assign';
   static String employeeDeactivate(int id) => '$baseURL/employees/$id/deactivate';
 
@@ -55,8 +56,11 @@ class ApiConfig {
   static String imageUrl(String? imagePath) {
     if (imagePath == null || imagePath.isEmpty) return '';
     if (imagePath.startsWith('http')) return imagePath;
-    if (imagePath.startsWith('api/'))
-      return '$baseURL/${imagePath.substring(4)}';
+    if (imagePath.startsWith('/')) return '${_baseUri.origin}$imagePath';
+    if (imagePath.startsWith('img/')) return '${_baseUri.origin}/$imagePath';
+    if (imagePath.startsWith('api/')) {
+      return '${_baseUri.origin}/${imagePath.substring(4)}';
+    }
     return '$baseURL/$imagePath';
   }
 

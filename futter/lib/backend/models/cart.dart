@@ -28,18 +28,51 @@ class CartItem {
   });
 
   factory CartItem.fromJson(Map<String, dynamic> json) {
+    final productId =
+        (json['plant_id'] as num?)?.toInt() ??
+        (json['product_id'] as num?)?.toInt() ??
+        0;
+
     return CartItem(
       id: json['id'] ?? 0,
       userId: json['user_id'] ?? 0,
-      plantId: json['plant_id'] ?? 0,
+      plantId: productId,
       quantity: json['quantity'] ?? 1,
       potColor: json['pot_color']?.toString(),
       potSize: json['pot_size']?.toString(),
       potMaterial: json['pot_material']?.toString(),
-      plantUnitPrice: (json['plant_unit_price'] ?? 0).toDouble(),
+      plantUnitPrice:
+          (json['plant_unit_price'] ?? json['product_unit_price'] ?? 0)
+              .toDouble(),
       potUnitPrice: (json['pot_unit_price'] ?? 0).toDouble(),
       totalPrice: (json['total_price'] ?? 0).toDouble(),
-      plant: Plant.fromJson(json['plant'] ?? {}),
+      plant: json['plant'] is Map<String, dynamic>
+          ? Plant.fromJson(json['plant'] as Map<String, dynamic>)
+          : Plant.fromJson({
+              'id': productId,
+              'name': json['product_name'],
+              'base_price':
+                  json['plant_unit_price'] ?? json['product_unit_price'],
+              'image_url': json['image_url'],
+              'stock_quantity': 1,
+              'in_stock': true,
+            }),
+    );
+  }
+
+  CartItem copyWith({Plant? plant}) {
+    return CartItem(
+      id: id,
+      userId: userId,
+      plantId: plantId,
+      quantity: quantity,
+      potColor: potColor,
+      potSize: potSize,
+      potMaterial: potMaterial,
+      plantUnitPrice: plantUnitPrice,
+      potUnitPrice: potUnitPrice,
+      totalPrice: totalPrice,
+      plant: plant ?? this.plant,
     );
   }
 

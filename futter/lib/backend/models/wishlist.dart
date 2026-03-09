@@ -14,11 +14,34 @@ class WishlistItem {
   });
 
   factory WishlistItem.fromJson(Map<String, dynamic> json) {
+    final productId =
+        (json['plant_id'] as num?)?.toInt() ??
+        (json['product_id'] as num?)?.toInt() ??
+        0;
+
     return WishlistItem(
       id: json['id'] ?? 0,
       userId: json['user_id'] ?? 0,
-      plantId: json['plant_id'] ?? 0,
-      plant: Plant.fromJson(json['plant'] ?? {}),
+      plantId: productId,
+      plant: json['plant'] is Map<String, dynamic>
+          ? Plant.fromJson(json['plant'] as Map<String, dynamic>)
+          : Plant.fromJson({
+              'id': productId,
+              'name': json['product_name'],
+              'base_price': 0,
+              'image_url': json['image_url'],
+              'stock_quantity': 1,
+              'in_stock': true,
+            }),
+    );
+  }
+
+  WishlistItem copyWith({Plant? plant}) {
+    return WishlistItem(
+      id: id,
+      userId: userId,
+      plantId: plantId,
+      plant: plant ?? this.plant,
     );
   }
 }

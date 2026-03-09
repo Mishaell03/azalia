@@ -6,10 +6,10 @@ class PaymentGenerateResponse {
   final String paymentUrl;
   final double amount;
   final String currency;
-  final DateTime expiresAt;
+  final DateTime? expiresAt;
   final int itemsCount;
   final List<PaymentItem> items;
-  final String address;
+  final String? address;
   final String paymentMethod;
   final String message;
 
@@ -19,29 +19,32 @@ class PaymentGenerateResponse {
     required this.paymentUrl,
     required this.amount,
     required this.currency,
-    required this.expiresAt,
+    this.expiresAt,
     required this.itemsCount,
     required this.items,
-    required this.address,
+    this.address,
     required this.paymentMethod,
     required this.message,
   });
 
   factory PaymentGenerateResponse.fromJson(Map<String, dynamic> json) {
     return PaymentGenerateResponse(
-      paymentLinkId: json['payment_link_id'],
-      orderId: json['order_id'],
-      paymentUrl: json['payment_url'],
+      paymentLinkId: (json['payment_link_id'] as num).toInt(),
+      orderId: (json['order_id'] as num).toInt(),
+      paymentUrl: json['payment_url']?.toString() ?? '',
       amount: (json['amount'] as num).toDouble(),
-      currency: json['currency'],
-      expiresAt: DateTime.parse(json['expires_at']),
-      itemsCount: json['items_count'],
-      items: (json['items'] as List)
-          .map((e) => PaymentItem.fromJson(e))
+      currency: json['currency']?.toString() ?? 'RUB',
+      expiresAt: json['expires_at'] != null
+          ? DateTime.tryParse(json['expires_at'].toString())
+          : null,
+      itemsCount: (json['items_count'] as num?)?.toInt() ?? 0,
+      items: (json['items'] as List? ?? [])
+          .whereType<Map<String, dynamic>>()
+          .map(PaymentItem.fromJson)
           .toList(),
-      address: json['address'],
-      paymentMethod: json['payment_method'],
-      message: json['message'],
+      address: json['address']?.toString(),
+      paymentMethod: json['payment_method']?.toString() ?? 'card',
+      message: json['message']?.toString() ?? '',
     );
   }
 }

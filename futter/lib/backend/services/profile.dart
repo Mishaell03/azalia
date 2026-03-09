@@ -34,7 +34,6 @@ class ProfileService {
       final response = await _api.post(
         ApiConfig.updateProfile,
         body: {
-          'session_token': token,
           'name': name.trim(),
           'phone': phone.trim(),
         },
@@ -128,7 +127,7 @@ class ProfileService {
 
       if (response['success'] == true) {
         debugPrint('ProfileService: Аватарка успешно получена');
-        return response['avatar'] as String?;
+        return response['avatar'] as String? ?? response['avatar_url'] as String?;
       } else {
         debugPrint('ProfileService: Аватарка не найдена');
         return null;
@@ -165,7 +164,7 @@ class UploadAvatarResponse {
     return UploadAvatarResponse(
       success: json['success'] ?? false,
       message: json['message'] ?? '',
-      avatar: json['avatar'],
+      avatar: json['avatar'] ?? json['avatar_url'],
     );
   }
 }

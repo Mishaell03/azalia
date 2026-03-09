@@ -17,8 +17,15 @@ class EmployeesService {
   }
 
   /// Получаем список всех пользователей
-  Future<List<User>> getUsers() async {
-    final res = await api.get(ApiConfig.users);
+  Future<List<User>> getUsers({int page = 1, int perPage = 100}) async {
+    final url = Uri.parse(
+      ApiConfig.users,
+    ).replace(queryParameters: {
+      'page': page.toString(),
+      'per_page': perPage.toString(),
+    }).toString();
+
+    final res = await api.get(url);
     _checkSuccess(res);
     _log('Список пользователей получен');
     final users = (res['data'] as List)

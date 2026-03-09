@@ -47,6 +47,8 @@ class ApiClient {
       final response = await http.get(uri, headers: _headers);
       _log('GET', uri, response);
       return _handleResponse(response);
+    } on ApiException {
+      rethrow;
     } catch (e) {
       debugPrint('ApiException get error: $e');
       throw 'Ошибка сети';
@@ -68,6 +70,8 @@ class ApiClient {
       ).timeout(const Duration(seconds: 10));
       _log('POST', uri, response, body: body);
       return _handleResponse(response);
+    } on ApiException {
+      rethrow;
     } on TimeoutException {
       debugPrint('ApiClient: Timeout при POST $uri');
       throw ApiException('Timeout - сервер не отвечает', 0);
@@ -94,6 +98,8 @@ class ApiClient {
       );
       _log('PUT', uri, response, body: body);
       return _handleResponse(response);
+    } on ApiException {
+      rethrow;
     } catch (e) {
       debugPrint('ApiException put error: $e');
       throw 'Ошибка сети';
@@ -114,6 +120,8 @@ class ApiClient {
       );
       _log('DELETE', uri, response, body: body);
       return _handleResponse(response);
+    } on ApiException {
+      rethrow;
     } catch (e) {
       debugPrint('ApiException delete error: $e');
       throw 'Ошибка сети';
@@ -151,6 +159,8 @@ class ApiClient {
 
       _log('POST (multipart)', uri, response);
       return _handleResponse(response);
+    } on ApiException {
+      rethrow;
     } catch (e) {
       debugPrint('ApiException postMultipart error: $e');
       throw 'Ошибка сети';
@@ -180,23 +190,64 @@ class ApiClient {
     }
 
     if (status == 401) {
-      throw 'Не авторизован';
+      throw UnauthorizedException(_extractErrorMessage(decoded) ?? 'Не авторизован');
     }
 
     if (status >= 400) {
-      String message = 'Ошибка сети';
-      if (status == 404) {
-        message = 'Ресурс не найден';
-      } else if (status == 500) {
-        message = 'Ошибка сервера';
-      }
+      String message =
+          _extractErrorMessage(decoded) ?? _defaultErrorMessage(status);
       throw ApiException(message, status);
     }
 
     return decoded;
   }
 
-  /// Логирование запросов для выявления ошибок
+  String _defaultErrorMessage(int status) {
+    if (status == 404) {
+      return 'Ресурс не найден';
+    }
+    if (status == 422) {
+      return 'Ошибка валидации запроса';
+    }
+    if (status >= 500) {
+      return 'Ошибка сервера';
+    }
+    return 'Ошибка сети';
+  }
+
+  String? _extractErrorMessage(Map<String, dynamic> decoded) {
+    final detail = decoded['detail'];
+    if (detail is String && detail.isNotEmpty) {
+      return detail;
+    }
+    if (detail is List && detail.isNotEmpty) {
+      final parts = detail.map((item) {
+        if (item is Map<String, dynamic>) {
+          final loc = item['loc'] is List ? (item['loc'] as List).join('.') : null;
+          final msg = item['msg']?.toString();
+          if (loc != null && msg != null) {
+            return '$loc: $msg';
+          }
+          return msg ?? item.toString();
+        }
+        return item.toString();
+      }).where((part) => part.isNotEmpty).toList();
+
+      if (parts.isNotEmpty) {
+        return parts.join('\n');
+      }
+    }
+
+    for (final key in ['error', 'message']) {
+      final value = decoded[key];
+      if (value is String && value.isNotEmpty) {
+        return value;
+      }
+    }
+
+    return null;
+  }
+
   void _log(
     String method,
     Uri url,
@@ -209,6 +260,7 @@ class ApiClient {
     // debugPrint('TOKEN_PRESENT: $tokenPresent');
     // debugPrint('STATUS: ${response.statusCode}');
     // debugPrint('RESPONSE: ${response.body}');
+
     // для отладки
     // debugPrint('TOKEN_VALUE: ${_session.sessionToken}');
     // debugPrint('HEADERS: ${_headers.toString()}');

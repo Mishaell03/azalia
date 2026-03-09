@@ -5,6 +5,7 @@ import 'package:azalia/backend/models/cart.dart';
 import 'package:azalia/backend/models/plant.dart';
 import 'package:azalia/backend/services/session.dart';
 import 'package:azalia/backend/services/cart.dart';
+import 'package:azalia/backend/services/plant.dart';
 import 'package:flutter/foundation.dart';
 
 /// Сервис для работы с избранным (wishlist)
@@ -19,7 +20,13 @@ class WishlistService {
         response['error'] ?? 'Не удалось загрузить список желаний',
       );
     }
-    return WishlistResponse.fromJson(response['data']);
+
+    final wishlist = WishlistResponse.fromJson(response['data']);
+    final hydratedItems = await Future.wait(
+      wishlist.items.map(_hydrateWishlistItem),
+    );
+
+    return WishlistResponse(items: hydratedItems, count: wishlist.count);
   }
 
   /// Добавить товар в избранное
@@ -33,7 +40,7 @@ class WishlistService {
         response['error'] ?? 'Не удалось добавить в список желаний',
       );
     }
-    return WishlistItem.fromJson(response['data']);
+    return _hydrateWishlistItem(WishlistItem.fromJson(response['data']));
   }
 
   /// Удалить товар из избранного
@@ -63,6 +70,15 @@ class WishlistService {
     return WishlistCheckResponse
         .fromJson(response['data'])
         .inWishlist;
+  }
+
+  static Future<WishlistItem> _hydrateWishlistItem(WishlistItem item) async {
+    try {
+      final plant = await PlantService.getPlantById(item.plantId);
+      return item.copyWith(plant: plant);
+    } catch (_) {
+      return item;
+    }
   }
 }
 

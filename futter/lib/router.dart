@@ -76,8 +76,11 @@ class AppRouter {
         path: '/payment/webview',
         name: 'payment_webview',
         builder: (context, state) {
-          final url = state.extra as String;
-          return PaymentWebViewPage(paymentUrl: url);
+          final args = state.extra as PaymentRouteArgs;
+          return PaymentWebViewPage(
+            paymentUrl: args.paymentUrl,
+            paymentLinkId: args.paymentLinkId,
+          );
         },
       ),
       GoRoute(
@@ -133,7 +136,7 @@ class PaymentRouteArgs {
   final int orderId;
   final String paymentUrl;
   final double totalPrice;
-  final String address;
+  final String? address;
   final String paymentMethod;
   final List<PaymentItemArgs> items;
 
@@ -142,7 +145,7 @@ class PaymentRouteArgs {
     required this.orderId,
     required this.paymentUrl,
     required this.totalPrice,
-    required this.address,
+    this.address,
     required this.paymentMethod,
     required this.items,
   });

@@ -1,6 +1,7 @@
 import 'package:azalia/backend/apiClient.dart';
 import 'package:azalia/backend/api_config.dart';
 import 'package:azalia/backend/models/cart.dart';
+import 'package:azalia/backend/services/plant.dart';
 
 /// Сервис для работы с корзиной
 class CartService {
@@ -12,7 +13,13 @@ class CartService {
     if (response['success'] != true) {
       throw Exception(response['error'] ?? 'Ошибка загрузки корзины');
     }
-    return CartResponse.fromJson(response['data']);
+
+    final cart = CartResponse.fromJson(response['data']);
+    final hydratedItems = await Future.wait(
+      cart.items.map(_hydrateCartItem),
+    );
+
+    return CartResponse(items: hydratedItems, summary: cart.summary);
   }
 
   /// Добавить товар в корзину
@@ -25,7 +32,7 @@ class CartService {
     if (response['success'] != true) {
       throw Exception(response['error'] ?? 'Ошибка добавления в корзину');
     }
-    return CartItem.fromJson(response['data']);
+    return _hydrateCartItem(CartItem.fromJson(response['data']));
   }
 
   /// Обновить количество товара в корзине
@@ -37,7 +44,7 @@ class CartService {
     if (response['success'] != true) {
       throw Exception(response['error'] ?? 'Не удалось обновить корзину');
     }
-    return CartItem.fromJson(response['data']);
+    return _hydrateCartItem(CartItem.fromJson(response['data']));
   }
 
   /// Удалить товар из корзины
@@ -54,6 +61,15 @@ class CartService {
 
     if (response['success'] != true) {
       throw Exception(response['error'] ?? 'Не удалось очистить корзину');
+    }
+  }
+
+  static Future<CartItem> _hydrateCartItem(CartItem item) async {
+    try {
+      final plant = await PlantService.getPlantById(item.plantId);
+      return item.copyWith(plant: plant);
+    } catch (_) {
+      return item;
     }
   }
 }

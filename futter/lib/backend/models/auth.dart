@@ -22,7 +22,7 @@ class User {
       name: json['name'] ?? '',
       phone: json['phone'] ?? '',
       sessionToken: json['session_token'],
-      avatar: json['avatar'],
+      avatar: json['avatar'] ?? json['avatar_url'],
     );
   }
 
