@@ -1,404 +1,421 @@
-from flask import Blueprint, jsonify, request, current_app
-from app import db
-from app.models import User, Employee, Position
-import os
-import re
+from __future__ import annotations
 
-bp = Blueprint('employees', __name__, url_prefix='/api')
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.db import get_db_connection
+from app.routes.utils import get_current_user, is_admin_user, require_admin
+
+router = APIRouter(prefix="/api", tags=["employees"])
 
 
-def get_user_by_session(session_token):
-    """получить пользователя по session_token (без импорта циклов)"""
-    if not session_token:
-        return None
-    clean_token = session_token.strip('"\' ')
-    user = User.query.filter_by(session_token=clean_token).first()
-    if not user:
-        return None
-    if user.token_expires_at and user.token_expires_at < __import__('datetime').datetime.utcnow():
-        return None
+class AssignEmployeeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: Optional[int] = Field(default=None, ge=1)
+    telegram_id: Optional[int] = Field(default=None, ge=1)
+    position_id: Optional[int] = Field(default=None, ge=1)
+    store_id: Optional[int] = Field(default=None, ge=1)
+    salary: Optional[float] = Field(default=None, ge=0)
+    is_active: Optional[bool] = None
+
+
+class DeactivateEmployeeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: Optional[int] = Field(default=None, ge=1)
+    telegram_id: Optional[int] = Field(default=None, ge=1)
+    position_id: Optional[int] = Field(default=None, ge=1)
+    store_id: Optional[int] = Field(default=None, ge=1)
+    salary: Optional[float] = Field(default=None, ge=0)
+    is_active: Optional[bool] = None
+
+
+def _resolve_user(cur, user_id: Optional[int], telegram_id: Optional[int]):
+    user = None
+    if user_id is not None:
+        user = cur.execute(
+            "SELECT id, telegram_id, full_name, phone, avatar_url, status FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+
+    if user is None and telegram_id is not None:
+        user = cur.execute(
+            "SELECT id, telegram_id, full_name, phone, avatar_url, status FROM users WHERE telegram_id = ?",
+            (telegram_id,),
+        ).fetchone()
+
     return user
 
 
-def is_admin(user):
-    """Проверка, является ли пользователь администратором по списку TELEGRAM_ID в переменной окружения ADMIN_IDS"""
-    if not user:
-        return False
+def _employee_with_details(cur, employee_id: int):
+    return cur.execute(
+        """
+        SELECT
+            e.id,
+            e.user_id,
+            e.position_id,
+            e.store_id,
+            e.salary,
+            e.hired_at,
+            e.fired_at,
+            e.is_active,
+            e.created_at,
+            e.updated_at,
+            u.telegram_id,
+            u.full_name,
+            u.phone,
+            u.avatar_url,
+            p.title AS position_title,
+            s.name AS store_name,
+            s.address AS store_address
+        FROM employees e
+        JOIN users u ON u.id = e.user_id
+        JOIN positions p ON p.id = e.position_id
+        JOIN stores s ON s.id = e.store_id
+        WHERE e.id = ?
+        LIMIT 1
+        """,
+        (employee_id,),
+    ).fetchone()
+
+
+def _employee_to_dict(row):
+    return {
+        "id": row["id"],
+        "user_id": row["user_id"],
+        "telegram_id": row["telegram_id"],
+        "full_name": row["full_name"],
+        "phone": row["phone"],
+        "avatar_url": row["avatar_url"],
+        "position_id": row["position_id"],
+        "position_title": row["position_title"],
+        "store_id": row["store_id"],
+        "store_name": row["store_name"],
+        "store_address": row["store_address"],
+        "salary": float(row["salary"] or 0),
+        "hired_at": row["hired_at"],
+        "fired_at": row["fired_at"],
+        "is_active": bool(row["is_active"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+@router.get("/users")
+def list_users(
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, ge=1, le=100),
+    user=Depends(get_current_user),
+):
+    require_admin(user)
+    offset = (page - 1) * per_page
+
+    conn = get_db_connection()
     try:
-        if int(getattr(user, 'id', 0)) == 4:
-            return True
-    except Exception:
-        pass
+        total = int(
+            conn.execute(
+                """
+                SELECT COUNT(*) AS total
+                FROM users u
+                LEFT JOIN employees e ON e.user_id = u.id
+                WHERE e.id IS NULL
+                """
+            ).fetchone()["total"]
+        )
+        rows = conn.execute(
+            """
+            SELECT
+                u.id,
+                u.telegram_id,
+                u.full_name,
+                u.phone,
+                u.avatar_url,
+                u.status,
+                u.created_at,
+                u.updated_at
+            FROM users u
+            LEFT JOIN employees e ON e.user_id = u.id
+            WHERE e.id IS NULL
+            ORDER BY u.id ASC
+            LIMIT ? OFFSET ?
+            """
+            ,
+            (per_page, offset),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    pages = (total + per_page - 1) // per_page
+    return {
+        "success": True,
+        "data": [
+            {
+                "id": row["id"],
+                "telegram_id": row["telegram_id"],
+                "name": row["full_name"],
+                "phone": row["phone"],
+                "avatar_url": row["avatar_url"],
+                "status": row["status"],
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            }
+            for row in rows
+        ],
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "pages": pages,
+        },
+    }
+
+
+@router.get("/debug/whoami")
+def debug_whoami(user=Depends(get_current_user)):
+    return {
+        "success": True,
+        "user": {
+            "id": user["id"],
+            "telegram_id": user["telegram_id"],
+            "name": user["full_name"],
+            "phone": user["phone"],
+            "avatar_url": user["avatar_url"],
+            "status": user["status"],
+            "session_token": user["session_token"],
+            "session_expires_at": user["expires_at"],
+        },
+        "is_admin": is_admin_user(user),
+    }
+
+
+@router.get("/employees")
+def get_employees(user=Depends(get_current_user)):
+    require_admin(user)
+
+    conn = get_db_connection()
     try:
-        if int(getattr(user, 'telegram_id', 0)) == 4:
-            return True
-    except Exception:
-        pass
+        rows = conn.execute(
+            """
+            SELECT
+                e.id,
+                e.user_id,
+                e.position_id,
+                e.store_id,
+                e.salary,
+                e.hired_at,
+                e.fired_at,
+                e.is_active,
+                e.created_at,
+                e.updated_at,
+                u.telegram_id,
+                u.full_name,
+                u.phone,
+                u.avatar_url,
+                p.title AS position_title,
+                s.name AS store_name,
+                s.address AS store_address
+            FROM employees e
+            JOIN users u ON u.id = e.user_id
+            JOIN positions p ON p.id = e.position_id
+            JOIN stores s ON s.id = e.store_id
+            ORDER BY e.id ASC
+            """
+        ).fetchall()
+    finally:
+        conn.close()
 
-    admin_env = os.environ.get('ADMIN_IDS') or current_app.config.get('ADMIN_IDS')
-    ids = []
-    if admin_env:
-        try:
-            ids = [int(x.strip()) for x in re.split(r'[,;\s]+', admin_env) if x.strip()]
-        except Exception:
-            ids = []
+    return {"success": True, "data": [_employee_to_dict(row) for row in rows]}
 
+
+@router.get("/employees/{employee_id}")
+def get_employee(employee_id: int, user=Depends(get_current_user)):
+    require_admin(user)
+
+    conn = get_db_connection()
     try:
-        user_tid = int(getattr(user, 'telegram_id', 0))
-    except Exception:
-        user_tid = None
+        row = _employee_with_details(conn.cursor(), employee_id)
+    finally:
+        conn.close()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    return {"success": True, "data": _employee_to_dict(row)}
+
+
+@router.post("/employees/assign", status_code=status.HTTP_201_CREATED)
+def assign_employee(payload: AssignEmployeeRequest, user=Depends(get_current_user)):
+    require_admin(user)
+
+    if payload.user_id is None and payload.telegram_id is None:
+        raise HTTPException(status_code=400, detail="user_id or telegram_id is required")
+
+    conn = get_db_connection()
     try:
-        user_uid = int(getattr(user, 'id', 0))
-    except Exception:
-        user_uid = None
+        cur = conn.cursor()
 
-    if user_tid and user_tid in ids:
-        return True
-    if user_uid and user_uid in ids:
-        return True
-    try:
-        emp = getattr(user, 'employee_info', None)
-        if emp:
-            pos = None
-            try:
-                pos = Position.query.get(emp.position_id)
-            except Exception:
-                pos = None
-            if pos:
-                title = (getattr(pos, 'title', '') or '').lower()
-                if 'админ' in title or getattr(pos, 'id', None) == 4 or getattr(emp, 'position_id', None) == 4:
-                    return True
+        target_user = _resolve_user(cur, payload.user_id, payload.telegram_id)
+        if not target_user:
+            raise HTTPException(status_code=404, detail="User not found")
 
-        user_tid = getattr(user, 'telegram_id', None)
-        candidates = []
-        if user_tid is not None:
-            candidates.append(user_tid)
-            candidates.append(str(user_tid))
-        try:
-            uid = int(getattr(user, 'id', 0))
-            candidates.append(uid)
-            candidates.append(str(uid))
-        except Exception:
-            pass
+        existing = cur.execute(
+            "SELECT id FROM employees WHERE user_id = ?",
+            (target_user["id"],),
+        ).fetchone()
 
-        for cand in candidates:
-            try:
-                emp = Employee.query.filter_by(telegram_id=cand).first()
-            except Exception:
-                emp = None
-            if emp:
-                try:
-                    pos = Position.query.get(emp.position_id)
-                except Exception:
-                    pos = None
-                if pos:
-                    title = (getattr(pos, 'title', '') or '').lower()
-                    if 'админ' in title or getattr(pos, 'id', None) == 4 or getattr(emp, 'position_id', None) == 4:
-                        return True
-    except Exception:
-        pass
-
-    return False
-
-
-@bp.route('/users', methods=['GET'])
-def list_users():
-    """Список всех пользователей (только для админа) - исключая работников"""
-    try:
-        auth_header = request.headers.get('Authorization')
-        if not auth_header:
-            return jsonify({'success': False, 'error': 'Authorization header required'}), 401
-
-        requester = get_user_by_session(auth_header)
-        if not requester:
-            return jsonify({'success': False, 'error': 'Invalid session token'}), 401
-
-        # Получаем только пользователей, которые НЕ являются работниками
-        # Исключаем пользователей с telegram_id, которые есть в таблице Employee
-        subquery = db.session.query(Employee.telegram_id)
-        users = User.query.filter(~User.telegram_id.in_(subquery)).all()
-        
-        return jsonify({'success': True, 'data': [u.to_dict() for u in users]})
-    except Exception:
-        return jsonify({'success': False, 'error': 'Internal server error'}), 500
-
-
-@bp.route('/debug/whoami', methods=['GET'])
-def debug_whoami():
-    """Отладочный endpoint: вернуть информацию о пользователе по session token"""
-    try:
-        auth_header = request.headers.get('Authorization')
-        if not auth_header:
-            return jsonify({'success': False, 'error': 'Authorization header required'}), 401
-
-        requester = get_user_by_session(auth_header)
-        if not requester:
-            return jsonify({'success': False, 'error': 'Invalid session token'}), 401
-
-        return jsonify({'success': True, 'user': requester.to_dict(), 'is_admin': is_admin(requester)})
-    except Exception:
-        return jsonify({'success': False, 'error': 'Internal server error'}), 500
-
-
-@bp.route('/employees', methods=['GET'])
-def get_employees():
-    """Список всех сотрудников с подробной информацией"""
-    try:
-        auth_header = request.headers.get('Authorization')
-        if not auth_header:
-            return jsonify({'success': False, 'error': 'Authorization header required'}), 401
-
-        requester = get_user_by_session(auth_header)
-        if not requester:
-            return jsonify({'success': False, 'error': 'Invalid session token'}), 401
-
-        employees = Employee.query.all()
-        return jsonify({'success': True, 'data': [e.to_dict_with_details() for e in employees]})
-    except Exception:
-        return jsonify({'success': False, 'error': 'Internal server error'}), 500
-
-
-@bp.route('/employees/<int:employee_id>', methods=['GET'])
-def get_employee(employee_id):
-    """Получить информацию о конкретном сотруднике"""
-    try:
-        auth_header = request.headers.get('Authorization')
-        if not auth_header:
-            return jsonify({'success': False, 'error': 'Authorization header required'}), 401
-
-        requester = get_user_by_session(auth_header)
-        if not requester:
-            return jsonify({'success': False, 'error': 'Invalid session token'}), 401
-
-        emp = Employee.query.get(employee_id)
-        if not emp:
-            return jsonify({'success': False, 'error': 'Employee not found'}), 404
-
-        return jsonify({'success': True, 'data': emp.to_dict_with_details()})
-    except Exception:
-        return jsonify({'success': False, 'error': 'Internal server error'}), 500
-
-
-@bp.route('/employees/assign', methods=['POST'])
-def assign_employee():
-    """Назначить пользователя сотрудником (только админ)"""
-    try:
-        auth_header = request.headers.get('Authorization')
-        if not auth_header:
-            return jsonify({'success': False, 'error': 'Authorization header required'}), 401
-
-        requester = get_user_by_session(auth_header)
-        if not requester:
-            return jsonify({'success': False, 'error': 'Invalid session token'}), 401
-
-        if not is_admin(requester):
-            return jsonify({'success': False, 'error': 'Admin privileges required'}), 403
-
-        if not request.is_json:
-            return jsonify({'success': False, 'error': 'JSON body required'}), 400
-
-        data = request.get_json()
-        telegram_id = data.get('telegram_id')
-        user_id = data.get('user_id')
-        position_id = data.get('position_id')
-        salary = data.get('salary')
-
-        # Найти пользователя по user_id или telegram_id. Поддерживаем частичное совпадение telegram_id
-        user = None
-        if user_id:
-            try:
-                user = User.query.get(int(user_id))
-            except Exception:
-                user = None
-
-        if not user and telegram_id:
-            # попытка точного совпадения
-            try:
-                tid_int = int(telegram_id)
-                user = User.query.filter_by(telegram_id=tid_int).first()
-            except Exception:
-                user = None
-
-        if not user and telegram_id:
-            # попытка частичного совпадения: найти пользователя, у которого telegram_id содержит переданную строку
-            try:
-                needle = str(telegram_id)
-                all_users = User.query.all()
-                for u in all_users:
-                    if u.telegram_id and needle in str(u.telegram_id):
-                        user = u
-                        break
-            except Exception:
-                user = None
-
-        if not user:
-            return jsonify({'success': False, 'error': 'User not found'}), 404
-        if not user:
-            return jsonify({'success': False, 'error': 'User not found'}), 404
-
-        # Если сотрудник уже есть — обновляем его данные (позиция, зарплата, is_active)
-        existing_emp = Employee.query.filter_by(telegram_id=user.telegram_id).first()
-        if existing_emp:
-            updated = False
-
-            # Обновление позиции если передана
-            if position_id is not None:
-                try:
-                    pos_id_int = int(position_id)
-                except Exception:
-                    return jsonify({'success': False, 'error': 'Invalid position_id'}), 400
-                pos = Position.query.get(pos_id_int)
-                if not pos:
-                    return jsonify({'success': False, 'error': 'Position not found'}), 404
-                existing_emp.position_id = pos.id
-                updated = True
-
-            # Обновление зарплаты если передана
-            if salary is not None:
-                try:
-                    existing_emp.salary = float(salary)
-                    updated = True
-                except Exception:
-                    return jsonify({'success': False, 'error': 'Invalid salary'}), 400
-
-            # Обновление статуса активности сотрудника (увольнение/восстановление)
-            if 'is_active' in data:
-                try:
-                    existing_emp.is_active = bool(data.get('is_active'))
-                    updated = True
-                except Exception:
-                    return jsonify({'success': False, 'error': 'Invalid is_active value'}), 400
-
-            if not updated:
-                return jsonify({'success': False, 'error': 'No update fields provided'}), 400
-
-            try:
-                db.session.commit()
-            except Exception:
-                db.session.rollback()
-                return jsonify({'success': False, 'error': 'Internal server error'}), 500
-
-            return jsonify({'success': True, 'message': 'Employee updated', 'data': existing_emp.to_dict_with_details()}), 200
-
-        # Иначе — создаём нового сотрудника
-        if not position_id:
-            return jsonify({'success': False, 'error': 'position_id is required'}), 400
-        try:
-            position_id = int(position_id)
-        except Exception:
-            return jsonify({'success': False, 'error': 'Invalid position_id'}), 400
-
-        position = Position.query.get(position_id)
-        if not position:
-            return jsonify({'success': False, 'error': 'Position not found'}), 404
-
-        emp = Employee(telegram_id=user.telegram_id, position_id=position.id, salary=salary)
-        db.session.add(emp)
-        db.session.commit()
-
-        return jsonify({'success': True, 'message': 'User assigned as employee', 'data': emp.to_dict_with_details()}), 201
-
-    except Exception:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': 'Internal server error'}), 500
-
-
-@bp.route('/employees/deactivate', methods=['POST'])
-def deactivate_employee():
-    """Деактивировать (уволить) сотрудника или обновить его is_active/position/salary (только админ)"""
-    try:
-        auth_header = request.headers.get('Authorization')
-        if not auth_header:
-            return jsonify({'success': False, 'error': 'Authorization header required'}), 401
-
-        requester = get_user_by_session(auth_header)
-        if not requester:
-            return jsonify({'success': False, 'error': 'Invalid session token'}), 401
-
-        if not is_admin(requester):
-            return jsonify({'success': False, 'error': 'Admin privileges required'}), 403
-
-        if not request.is_json:
-            return jsonify({'success': False, 'error': 'JSON body required'}), 400
-
-        data = request.get_json()
-        telegram_id = data.get('telegram_id')
-        user_id = data.get('user_id')
-        position_id = data.get('position_id')
-        salary = data.get('salary')
-
-        # Найти пользователя (как в assign)
-        user = None
-        if user_id:
-            try:
-                user = User.query.get(int(user_id))
-            except Exception:
-                user = None
-
-        if not user and telegram_id:
-            try:
-                tid_int = int(telegram_id)
-                user = User.query.filter_by(telegram_id=tid_int).first()
-            except Exception:
-                user = None
-
-        if not user and telegram_id:
-            try:
-                needle = str(telegram_id)
-                all_users = User.query.all()
-                for u in all_users:
-                    if u.telegram_id and needle in str(u.telegram_id):
-                        user = u
-                        break
-            except Exception:
-                user = None
-
-        if not user:
-            return jsonify({'success': False, 'error': 'User not found'}), 404
-
-        existing_emp = Employee.query.filter_by(telegram_id=user.telegram_id).first()
-        if not existing_emp:
-            return jsonify({'success': False, 'error': 'Employee record not found'}), 404
-
-        updated = False
-        # Обновление позиции если передана
-        if position_id is not None:
-            try:
-                pos_id_int = int(position_id)
-            except Exception:
-                return jsonify({'success': False, 'error': 'Invalid position_id'}), 400
-            pos = Position.query.get(pos_id_int)
+        if payload.position_id is not None:
+            pos = cur.execute("SELECT id FROM positions WHERE id = ?", (payload.position_id,)).fetchone()
             if not pos:
-                return jsonify({'success': False, 'error': 'Position not found'}), 404
-            existing_emp.position_id = pos.id
-            updated = True
+                raise HTTPException(status_code=404, detail="Position not found")
 
-        # Обновление зарплаты если передана
-        if salary is not None:
-            try:
-                existing_emp.salary = float(salary)
-                updated = True
-            except Exception:
-                return jsonify({'success': False, 'error': 'Invalid salary'}), 400
+        if payload.store_id is not None:
+            store = cur.execute("SELECT id FROM stores WHERE id = ?", (payload.store_id,)).fetchone()
+            if not store:
+                raise HTTPException(status_code=404, detail="Store not found")
 
-        # Деактивация: по умолчанию установить is_active=False, но разрешаем передать явное значение
-        if 'is_active' in data:
-            try:
-                existing_emp.is_active = bool(data.get('is_active'))
-            except Exception:
-                return jsonify({'success': False, 'error': 'Invalid is_active value'}), 400
+        if existing:
+            updates = {}
+            if payload.position_id is not None:
+                updates["position_id"] = payload.position_id
+            if payload.store_id is not None:
+                updates["store_id"] = payload.store_id
+            if payload.salary is not None:
+                updates["salary"] = payload.salary
+            if payload.is_active is not None:
+                updates["is_active"] = int(payload.is_active)
+                updates["fired_at"] = None if payload.is_active else "CURRENT_TIMESTAMP"
+
+            if not updates:
+                raise HTTPException(status_code=400, detail="No update fields provided")
+
+            set_parts = []
+            params: list[object] = []
+            for key, value in updates.items():
+                if value == "CURRENT_TIMESTAMP":
+                    set_parts.append(f"{key} = CURRENT_TIMESTAMP")
+                else:
+                    set_parts.append(f"{key} = ?")
+                    params.append(value)
+            params.append(existing["id"])
+
+            cur.execute(
+                f"UPDATE employees SET {', '.join(set_parts)} WHERE id = ?",
+                tuple(params),
+            )
+            conn.commit()
+
+            updated = _employee_with_details(cur, existing["id"])
+            return {
+                "success": True,
+                "message": "Employee updated",
+                "data": _employee_to_dict(updated),
+            }
+
+        if payload.position_id is None:
+            raise HTTPException(status_code=400, detail="position_id is required")
+
+        store_id = payload.store_id or 1
+        store = cur.execute("SELECT id FROM stores WHERE id = ?", (store_id,)).fetchone()
+        if not store:
+            raise HTTPException(status_code=404, detail="Store not found")
+
+        cur.execute(
+            """
+            INSERT INTO employees (user_id, position_id, store_id, salary, is_active)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                target_user["id"],
+                payload.position_id,
+                store_id,
+                payload.salary,
+                1 if payload.is_active is None else int(payload.is_active),
+            ),
+        )
+        employee_id = cur.lastrowid
+        conn.commit()
+
+        created = _employee_with_details(cur, employee_id)
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "message": "User assigned as employee",
+        "data": _employee_to_dict(created),
+    }
+
+
+@router.post("/employees/deactivate")
+def deactivate_employee(payload: DeactivateEmployeeRequest, user=Depends(get_current_user)):
+    require_admin(user)
+
+    if payload.user_id is None and payload.telegram_id is None:
+        raise HTTPException(status_code=400, detail="user_id or telegram_id is required")
+
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+
+        target_user = _resolve_user(cur, payload.user_id, payload.telegram_id)
+        if not target_user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        employee = cur.execute(
+            "SELECT id FROM employees WHERE user_id = ?",
+            (target_user["id"],),
+        ).fetchone()
+        if not employee:
+            raise HTTPException(status_code=404, detail="Employee record not found")
+
+        if payload.position_id is not None:
+            pos = cur.execute("SELECT id FROM positions WHERE id = ?", (payload.position_id,)).fetchone()
+            if not pos:
+                raise HTTPException(status_code=404, detail="Position not found")
+
+        if payload.store_id is not None:
+            store = cur.execute("SELECT id FROM stores WHERE id = ?", (payload.store_id,)).fetchone()
+            if not store:
+                raise HTTPException(status_code=404, detail="Store not found")
+
+        updates = {}
+        if payload.position_id is not None:
+            updates["position_id"] = payload.position_id
+        if payload.store_id is not None:
+            updates["store_id"] = payload.store_id
+        if payload.salary is not None:
+            updates["salary"] = payload.salary
+
+        is_active = False if payload.is_active is None else payload.is_active
+        updates["is_active"] = int(is_active)
+
+        set_parts = []
+        params: list[object] = []
+        for key, value in updates.items():
+            set_parts.append(f"{key} = ?")
+            params.append(value)
+
+        if is_active:
+            set_parts.append("fired_at = NULL")
         else:
-            existing_emp.is_active = False
-        updated = True
+            set_parts.append("fired_at = CURRENT_TIMESTAMP")
 
-        try:
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-            return jsonify({'success': False, 'error': 'Internal server error'}), 500
+        params.append(employee["id"])
+        cur.execute(
+            f"UPDATE employees SET {', '.join(set_parts)} WHERE id = ?",
+            tuple(params),
+        )
+        conn.commit()
 
-        return jsonify({'success': True, 'message': 'Employee deactivated/updated', 'data': existing_emp.to_dict_with_details()}), 200
+        updated = _employee_with_details(cur, employee["id"])
+    finally:
+        conn.close()
 
-    except Exception:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': 'Internal server error'}), 500
+    return {
+        "success": True,
+        "message": "Employee deactivated/updated",
+        "data": _employee_to_dict(updated),
+    }

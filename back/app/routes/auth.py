@@ -1,558 +1,431 @@
-from flask import Blueprint, request, jsonify, current_app
-from app import db
-from app.models import OAuthCode, User, Employee
-from datetime import datetime, timedelta
-import re
+from __future__ import annotations
+
 import base64
-import io
-try:
-    from PIL import Image
-except ImportError:
-    Image = None
+import re
+import secrets
+import uuid
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Optional
 
-bp = Blueprint('auth', __name__, url_prefix='/api/auth')
+from fastapi import APIRouter, Depends, File, HTTPException, Header, UploadFile
+from pydantic import BaseModel, ConfigDict, Field
 
-def validate_telegram_id(telegram_id):
-    """валидация telegram_id с защитой"""
-    if not telegram_id:
-        return False
-    try:
-        telegram_id = int(telegram_id)
-        return 1 <= telegram_id <= 2**63 - 1
-    except (ValueError, TypeError):
-        return False
+from app.config import BASE_DIR
+from app.db import get_db_connection
+from app.routes.utils import (
+    clean_text,
+    get_current_user,
+    is_valid_session_token,
+    normalize_device_id,
+    normalize_token,
+)
 
-def validate_code_format(code):
-    """валидация формата кода с защитой"""
-    if not isinstance(code, str):
-        return False
-    return bool(re.match(r'^\d{4}$', code))
+router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-def safe_int(value, default=None):
-    """преобразование в int с защитой от переполнения"""
-    try:
-        num = int(value)
-        if -2**31 <= num <= 2**31 - 1:
-            return num
-        return default
-    except (ValueError, TypeError, OverflowError):
-        return default
+CODE_PATTERN = re.compile(r"^\d{4,8}$")
+PHONE_DIGITS_PATTERN = re.compile(r"\d")
+ALLOWED_AVATAR_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+MAX_AVATAR_SIZE_BYTES = 10 * 1024 * 1024
 
-def sanitize_input(input_str, max_length=100):
-    """очистка входных данных"""
-    if not input_str:
-        return ""
-    sanitized = re.sub(r'[<>"\'\{\}\[\]\(\)\\\/]', '', str(input_str))
-    return sanitized[:max_length]
 
-def get_user_by_session_token(session_token):
-    """получить пользователя по session_token из заголовка или данных"""
-    if not session_token:
+class VerifyCodeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(min_length=4, max_length=8)
+    device_id: Optional[str] = Field(default=None, max_length=255)
+
+
+class UpdateProfileRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=2, max_length=100)
+    phone: str = Field(min_length=10, max_length=25)
+
+
+class ValidateTokenRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    token: str = Field(min_length=8, max_length=256)
+
+
+def _serialize_employee(cur, user_id: int):
+    employee = cur.execute(
+        """
+        SELECT
+            e.id,
+            e.position_id,
+            e.store_id,
+            e.salary,
+            e.is_active,
+            p.title AS position_title
+        FROM employees e
+        JOIN positions p ON p.id = e.position_id
+        WHERE e.user_id = ?
+        LIMIT 1
+        """,
+        (user_id,),
+    ).fetchone()
+
+    if not employee:
         return None
-    clean_token = session_token.strip('"\' ')
-    user = User.query.filter_by(session_token=clean_token).first()
-    if user and user.token_expires_at and user.token_expires_at < datetime.utcnow():
-        return None
-    return user
 
-def compress_image(image_data, max_size=(400, 400), quality=85):
-    """сжатие изображения"""
-    if Image is None:
-        raise ImportError("PIL/Pillow не установлен")
-    try:
-        img = Image.open(io.BytesIO(image_data))
-        
-        # Конвертируем в RGB если нужно
-        if img.mode in ('RGBA', 'LA', 'P'):
-            background = Image.new('RGB', img.size, (255, 255, 255))
-            if img.mode == 'P':
-                img = img.convert('RGBA')
-            background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
-            img = background
-        elif img.mode != 'RGB':
-            img = img.convert('RGB')
-        
-        # Изменяем размер если нужно
-        img.thumbnail(max_size, Image.Resampling.LANCZOS)
-        
-        # Сохраняем в байты
-        output = io.BytesIO()
-        img.save(output, format='JPEG', quality=quality, optimize=True)
-        output.seek(0)
-        
-        return output.getvalue()
-    except Exception as e:
-        current_app.logger.error(f"Error compressing image: {str(e)}")
-        raise
+    return {
+        "id": employee["id"],
+        "position_id": employee["position_id"],
+        "store_id": employee["store_id"],
+        "salary": float(employee["salary"] or 0),
+        "is_active": bool(employee["is_active"]),
+        "position": {
+            "id": employee["position_id"],
+            "title": employee["position_title"],
+        },
+    }
 
-@bp.route('/verify', methods=['POST'])
-def verify_code():
-    """приложение проверяет код"""
+
+def _normalize_phone(phone: str) -> str:
+    digits = "".join(PHONE_DIGITS_PATTERN.findall(phone))
+    if len(digits) < 10:
+        raise HTTPException(status_code=400, detail="Некорректный номер телефона")
+    return "+7" + digits[-10:]
+
+
+def _extract_session_token(
+    authorization: Optional[str],
+) -> str:
+    token = normalize_token(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Недействительная сессия")
+    return token
+
+
+@router.post("/validate_token")
+def validate_token(payload: ValidateTokenRequest):
+    is_valid = is_valid_session_token(payload.token)
+    return {"success": True, "is_valid": is_valid}
+
+
+def _get_user_with_session(token: str):
+    conn = get_db_connection()
     try:
-        if not request.is_json:
-            return jsonify({
-                'success': False,
-                'error': 'Что-то пошло не так'
-            }), 400
-        
-        data = request.get_json()
-        if not data:
-            return jsonify({
-                'success': False,
-                'error': 'Что-то пошло не так'
-            }), 400
-        
-        code = data.get('code')
-        device_id = data.get('device_id')
-        
-        if not code:
-            return jsonify({
-                'success': False,
-                'error': 'Что-то пошло не так'
-            }), 400
-        
-        if not validate_code_format(code):
-            return jsonify({
-                'success': False,
-                'error': 'Что-то пошло не так'
-            }), 400
-        
-        # Ищем валидный (не использованный и не истёкший) код.
-        query = OAuthCode.query.filter_by(code=code)
-        # если указан device_id — предпочитаем точное совпадение по устройству
+        row = conn.execute(
+            """
+            SELECT
+                u.id,
+                u.telegram_id,
+                u.full_name,
+                u.phone,
+                u.avatar_url,
+                u.status,
+                us.session_token,
+                us.device_id,
+                us.expires_at
+            FROM user_sessions us
+            JOIN users u ON u.id = us.user_id
+            WHERE us.session_token = ?
+              AND us.is_active = 1
+              AND datetime(us.expires_at) > datetime('now')
+              AND u.status = 'active'
+            LIMIT 1
+            """,
+            (token,),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    return row
+
+
+@router.post("/verify")
+def verify_code(payload: VerifyCodeRequest):
+    code = clean_text(payload.code, max_len=8)
+    if not CODE_PATTERN.fullmatch(code):
+        raise HTTPException(status_code=400, detail="Что-то пошло не так")
+
+    device_id = normalize_device_id(payload.device_id)
+
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+
+        sql = """
+            SELECT
+                ac.id,
+                ac.user_id,
+                ac.code,
+                ac.device_id,
+                ac.expires_at,
+                u.telegram_id,
+                u.full_name,
+                u.phone,
+                u.avatar_url
+            FROM auth_codes ac
+            JOIN users u ON u.id = ac.user_id
+            WHERE ac.code = ?
+              AND ac.used_at IS NULL
+              AND datetime(ac.expires_at) > datetime('now')
+        """
+        params: list[object] = [code]
+
         if device_id:
-            query = query.filter_by(device_id=device_id)
-        # только неиспользованные и не истёкшие
-        from datetime import datetime as _dt
-        query = query.filter(~OAuthCode.used, OAuthCode.expires_at > _dt.utcnow())
-        auth_code = query.order_by(OAuthCode.id.desc()).first()
-        
-        if not auth_code:
-            return jsonify({
-                'success': False,
-                'error': 'Что-то пошло не так'
-            }), 404
-        
-        if auth_code.expires_at < datetime.utcnow():
-            return jsonify({
-                'success': False,
-                'error': 'Что-то пошло не так'
-            }), 410
-        
-        if auth_code.used:
-            return jsonify({
-                'success': False,
-                'error': 'Что-то пошло не так'
-            }), 409
-        
-        user = User.query.filter_by(telegram_id=auth_code.telegram_id).first()
-        if not user:
-            return jsonify({
-                'success': False,
-                'error': 'Что-то пошло не так'
-            }), 404
-        
-        employee = Employee.query.filter_by(telegram_id=user.telegram_id).first()
-        
-        try:
-            import secrets
-            session_token = secrets.token_hex(32)
-            user.session_token = session_token
-            user.token_expires_at = datetime.utcnow() + timedelta(days=30)
-            
-            auth_code.used = True
-            auth_code.used_at = datetime.utcnow()
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-            return jsonify({
-                'success': False,
-                'error': 'Что-то пошло не так'
-            }), 500
-        
-        avatar_base64 = None
-        if user.avatar:
-            try:
-                avatar_base64 = base64.b64encode(user.avatar).decode('utf-8')
-            except Exception:
-                pass
-        
-        response_data = {
-            'success': True,
-            'user': {
-                'id': user.id,
-                'telegram_id': user.telegram_id,
-                'name': sanitize_input(user.name),
-                'phone': sanitize_input(user.phone) if user.phone else "",
-                'session_token': session_token,
-                'avatar': avatar_base64
-            },
-            'message': 'Authentication successful'
-        }
-        
-        if employee:
-            response_data['employee'] = {
-                'id': employee.id,
-                'position_id': employee.position_id,
-                'is_active': employee.is_active
-            }
-            response_data['is_employee'] = True
-            if employee.position:
-                response_data['position'] = {
-                    'id': employee.position.id,
-                    'title': sanitize_input(employee.position.title)
-                }
-        else:
-            response_data['is_employee'] = False
-        
-        return jsonify(response_data), 200
-        
-    except Exception:
-        db.session.rollback()
-        return jsonify({
-            'success': False,
-            'error': 'Что-то пошло не так'
-        }), 500
+            sql += " AND ac.device_id = ?"
+            params.append(device_id)
 
-@bp.route('/check_status/<code>', methods=['GET'])
-def check_code_status(code):
-    """проверка статуса кода авторизации"""
-    try:
-        if not validate_code_format(code):
-            return jsonify({
-                'success': False,
-                'error': 'Что-то пошло не так'
-            }), 400
+        sql += " ORDER BY ac.id DESC LIMIT 1"
 
-        # Для статуса возвращаем наиболее свежую запись с этим кодом
-        auth_code = OAuthCode.query.filter_by(code=code).order_by(OAuthCode.id.desc()).first()
-        
+        auth_code = cur.execute(sql, tuple(params)).fetchone()
         if not auth_code:
-            return jsonify({
-                'success': False,
-                'error': 'Что-то пошло не так'
-            }), 404
-        
-        status = {
-            'code': auth_code.code,
-            'expires_at': auth_code.expires_at.isoformat() if auth_code.expires_at else None,
-            'used': auth_code.used,
-            'user_linked': auth_code.telegram_id is not None,
-            'is_valid': (
-                not auth_code.used and 
-                auth_code.expires_at and 
-                auth_code.expires_at > datetime.utcnow()
+            raise HTTPException(status_code=404, detail="Что-то пошло не так")
+
+        session_token = secrets.token_urlsafe(48)
+        expires_at = (datetime.utcnow() + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+
+        cur.execute(
+            "UPDATE auth_codes SET used_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (auth_code["id"],),
+        )
+
+        cur.execute(
+            """
+            INSERT INTO user_sessions (
+                user_id, device_id, session_token, refresh_token,
+                device_name, platform, ip_address, user_agent,
+                is_active, expires_at, last_seen_at
             )
-        }
-        
-        if auth_code.telegram_id:
-            user = User.query.filter_by(telegram_id=auth_code.telegram_id).first()
-            if user:
-                status['user'] = {
-                    'id': user.id,
-                    'telegram_id': user.telegram_id,
-                    'name': sanitize_input(user.name)
-                }
-                
-                employee = Employee.query.filter_by(telegram_id=user.telegram_id).first()
-                if employee:
-                    status['employee'] = {
-                        'id': employee.id,
-                        'position_id': employee.position_id
-                    }
-                    status['is_employee'] = True
-                else:
-                    status['is_employee'] = False
-        
-        return jsonify({
-            'success': True,
-            'status': status
-        }), 200
-        
-    except Exception:
-        return jsonify({
-            'success': False,
-            'error': 'Что-то пошло не так'
-        }), 500
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, CURRENT_TIMESTAMP)
+            """,
+            (
+                auth_code["user_id"],
+                device_id,
+                session_token,
+                secrets.token_urlsafe(32),
+                None,
+                None,
+                None,
+                None,
+                expires_at,
+            ),
+        )
+
+        employee = _serialize_employee(cur, int(auth_code["user_id"]))
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    response = {
+        "success": True,
+        "user": {
+            "id": auth_code["user_id"],
+            "telegram_id": auth_code["telegram_id"],
+            "name": auth_code["full_name"],
+            "phone": auth_code["phone"],
+            "session_token": session_token,
+            "avatar_url": auth_code["avatar_url"],
+        },
+        "message": "Authentication successful",
+        "is_employee": bool(employee),
+    }
+
+    if employee:
+        response["employee"] = employee
+
+    return response
 
 
-@bp.route('/me', methods=['GET', 'POST'])
-def me():
-    """получить актуальные данные пользователя/роли по session_token"""
+@router.get("/check_status/{code}")
+def check_code_status(code: str):
+    clean_code = clean_text(code, max_len=8)
+    if not CODE_PATTERN.fullmatch(clean_code):
+        raise HTTPException(status_code=400, detail="Что-то пошло не так")
+
+    conn = get_db_connection()
     try:
-        # Получаем токен из заголовка Authorization (приоритет) или из тела запроса (для обратной совместимости)
-        auth_header = request.headers.get('Authorization')
-        session_token = auth_header if auth_header else None
-        
-        if not session_token and request.is_json:
-            data = request.get_json()
-            if data:
-                session_token = data.get('session_token')
-        
-        if not session_token or not isinstance(session_token, str):
-            return jsonify({'success': False, 'error': 'Недействительная сессия'}), 401
-        
-        user = get_user_by_session_token(session_token)
-        if not user:
-            return jsonify({'success': False, 'error': 'Недействительная сессия'}), 401
+        cur = conn.cursor()
+        auth_code = cur.execute(
+            """
+            SELECT ac.*, u.telegram_id, u.full_name
+            FROM auth_codes ac
+            JOIN users u ON u.id = ac.user_id
+            WHERE ac.code = ?
+            ORDER BY ac.id DESC
+            LIMIT 1
+            """,
+            (clean_code,),
+        ).fetchone()
 
-        avatar_base64 = None
-        if user.avatar:
-            try:
-                avatar_base64 = base64.b64encode(user.avatar).decode('utf-8')
-            except Exception:
-                pass
-        
-        response_data = {
-            'success': True,
-            'message': 'OK',
-            'user': {
-                'id': user.id,
-                'telegram_id': user.telegram_id,
-                'name': sanitize_input(user.name),
-                'phone': sanitize_input(user.phone) if user.phone else "",
-                'session_token': user.session_token,
-                'avatar': avatar_base64
-            }
-        }
+        if not auth_code:
+            raise HTTPException(status_code=404, detail="Что-то пошло не так")
 
-        employee = Employee.query.filter_by(telegram_id=user.telegram_id).first()
-        if employee:
-            response_data['employee'] = {
-                'id': employee.id,
-                'position_id': employee.position_id,
-                'is_active': employee.is_active
-            }
-            response_data['is_employee'] = True
-            if employee.position:
-                response_data['position'] = {
-                    'id': employee.position.id,
-                    'title': sanitize_input(employee.position.title)
-                }
-        else:
-            response_data['is_employee'] = False
+        employee = _serialize_employee(cur, int(auth_code["user_id"]))
+    finally:
+        conn.close()
 
-        return jsonify(response_data), 200
+    is_valid = auth_code["used_at"] is None and auth_code["expires_at"] > datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    status_payload = {
+        "code": auth_code["code"],
+        "expires_at": auth_code["expires_at"],
+        "used": auth_code["used_at"] is not None,
+        "user_linked": auth_code["user_id"] is not None,
+        "is_valid": bool(is_valid),
+        "user": {
+            "id": auth_code["user_id"],
+            "telegram_id": auth_code["telegram_id"],
+            "name": auth_code["full_name"],
+        },
+        "is_employee": bool(employee),
+    }
 
-    except Exception as e:
-        current_app.logger.error(f"Error in auth.me: {str(e)}")
-        return jsonify({'success': False, 'error': 'Что-то пошло не так'}), 500
-    
-@bp.route('/update_profile', methods=['POST'])
-def update_profile():
+    if employee:
+        status_payload["employee"] = employee
+
+    return {"success": True, "status": status_payload}
+
+
+@router.api_route("/me", methods=["GET", "POST"])
+def me(
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
+):
+    token = _extract_session_token(authorization)
+    user = _get_user_with_session(token)
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Недействительная сессия")
+
+    conn = get_db_connection()
     try:
-        # Получаем токен из заголовка Authorization (приоритет) или из тела запроса (для обратной совместимости)
-        auth_header = request.headers.get('Authorization')
-        session_token = auth_header if auth_header else None
-        
-        if not request.is_json:
-            return jsonify({
-                'success': False,
-                'error': 'Неверный формат запроса'
-            }), 400
-        
-        data = request.get_json()
-        if not data:
-            return jsonify({
-                'success': False,
-                'error': 'Отсутствуют данные'
-            }), 400
-        
-        if not session_token:
-            session_token = data.get('session_token')
-        
-        if not session_token or not isinstance(session_token, str):
-            return jsonify({
-                'success': False,
-                'error': 'Недействительная сессия'
-            }), 401
-        
-        name = data.get('name')
-        phone = data.get('phone')
-        
-        if not name or not isinstance(name, str) or len(name.strip()) < 2:
-            return jsonify({
-                'success': False,
-                'error': 'Имя должно содержать минимум 2 символа'
-            }), 400
-        
-        if not phone or not isinstance(phone, str):
-            return jsonify({
-                'success': False,
-                'error': 'Некорректный номер телефона'
-            }), 400
-        
-        sanitized_name = re.sub(r'[^\w\sа-яА-ЯёЁ\-\.]', '', name.strip())[:100]
-        phone_digits = re.sub(r'\D', '', phone)
-        
-        if len(phone_digits) < 10:
-            return jsonify({
-                'success': False,
-                'error': 'Некорректный номер телефона'
-            }), 400
-        
-        formatted_phone = f"+7{phone_digits[-10:]}"
-        
-        user = get_user_by_session_token(session_token)
-        if not user:
-            return jsonify({
-                'success': False,
-                'error': 'Пользователь не найден'
-            }), 404
-        
-        user.name = sanitized_name
-        user.phone = formatted_phone
-        user.updated_at = datetime.utcnow()
-        
-        db.session.commit()
-        
-        avatar_base64 = None
-        if user.avatar:
-            try:
-                avatar_base64 = base64.b64encode(user.avatar).decode('utf-8')
-            except Exception:
-                pass
-        
-        return jsonify({
-            'success': True,
-            'message': 'Профиль успешно обновлен',
-            'user': {
-                'id': user.id,
-                'telegram_id': user.telegram_id,
-                'name': user.name,
-                'phone': user.phone,
-                'avatar': avatar_base64
-            }
-        }), 200
-        
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Error in update_profile: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Внутренняя ошибка сервера'
-        }), 500
+        employee = _serialize_employee(conn.cursor(), int(user["id"]))
+    finally:
+        conn.close()
 
-@bp.route('/avatar', methods=['POST'])
-def upload_avatar():
-    """загрузка/изменение аватарки пользователя"""
-    try:
-        # Получаем токен из заголовка Authorization
-        auth_header = request.headers.get('Authorization')
-        if not auth_header:
-            return jsonify({
-                'success': False,
-                'error': 'Токен сессии не предоставлен'
-            }), 401
-        
-        user = get_user_by_session_token(auth_header)
-        if not user:
-            return jsonify({
-                'success': False,
-                'error': 'Недействительная сессия'
-            }), 401
-        
-        # Проверяем наличие файла в запросе
-        if 'avatar' not in request.files:
-            return jsonify({
-                'success': False,
-                'error': 'Файл аватарки не предоставлен'
-            }), 400
-        
-        file = request.files['avatar']
-        if file.filename == '':
-            return jsonify({
-                'success': False,
-                'error': 'Файл не выбран'
-            }), 400
-        
-        # Проверяем формат файла
-        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
-        if not ('.' in file.filename and 
-                file.filename.rsplit('.', 1)[1].lower() in allowed_extensions):
-            return jsonify({
-                'success': False,
-                'error': 'Неподдерживаемый формат изображения'
-            }), 400
-        
-        # Читаем данные файла
-        image_data = file.read()
-        
-        # Проверяем размер файла (максимум 10MB)
-        if len(image_data) > 10 * 1024 * 1024:
-            return jsonify({
-                'success': False,
-                'error': 'Размер файла превышает 10MB'
-            }), 400
-        
-        # Сжимаем изображение
-        try:
-            compressed_image = compress_image(image_data)
-        except Exception as e:
-            current_app.logger.error(f"Error compressing avatar: {str(e)}")
-            return jsonify({
-                'success': False,
-                'error': 'Ошибка обработки изображения'
-            }), 400
-        
-        # Сохраняем в БД
-        user.avatar = compressed_image
-        user.updated_at = datetime.utcnow()
-        db.session.commit()
-        
-        # Возвращаем base64 для удобства
-        avatar_base64 = base64.b64encode(compressed_image).decode('utf-8')
-        
-        return jsonify({
-            'success': True,
-            'message': 'Аватарка успешно загружена',
-            'avatar': avatar_base64
-        }), 200
-        
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Error in upload_avatar: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Внутренняя ошибка сервера'
-        }), 500
+    response = {
+        "success": True,
+        "message": "OK",
+        "user": {
+            "id": user["id"],
+            "telegram_id": user["telegram_id"],
+            "name": user["full_name"],
+            "phone": user["phone"],
+            "session_token": user["session_token"],
+            "avatar_url": user["avatar_url"],
+        },
+        "is_employee": bool(employee),
+    }
+    if employee:
+        response["employee"] = employee
+    return response
 
-@bp.route('/avatar', methods=['GET'])
-def get_avatar():
-    """получение аватарки пользователя"""
+
+@router.post("/update_profile")
+def update_profile(
+    payload: UpdateProfileRequest,
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
+):
+    token = _extract_session_token(authorization)
+    user = _get_user_with_session(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Пользователь не найден")
+
+    clean_name = clean_text(payload.name, max_len=100)
+    if len(clean_name) < 2:
+        raise HTTPException(status_code=400, detail="Имя должно содержать минимум 2 символа")
+
+    formatted_phone = _normalize_phone(payload.phone)
+
+    conn = get_db_connection()
     try:
-        # Получаем токен из заголовка Authorization
-        auth_header = request.headers.get('Authorization')
-        if not auth_header:
-            return jsonify({
-                'success': False,
-                'error': 'Токен сессии не предоставлен'
-            }), 401
-        
-        user = get_user_by_session_token(auth_header)
-        if not user:
-            return jsonify({
-                'success': False,
-                'error': 'Недействительная сессия'
-            }), 401
-        
-        if not user.avatar:
-            return jsonify({
-                'success': False,
-                'error': 'Аватарка не найдена'
-            }), 404
-        
-        # Возвращаем base64
-        avatar_base64 = base64.b64encode(user.avatar).decode('utf-8')
-        
-        return jsonify({
-            'success': True,
-            'avatar': avatar_base64
-        }), 200
-        
-    except Exception as e:
-        current_app.logger.error(f"Error in get_avatar: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Внутренняя ошибка сервера'
-        }), 500
+        conn.execute(
+            """
+            UPDATE users
+            SET full_name = ?,
+                phone = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (clean_name, formatted_phone, user["id"]),
+        )
+        conn.commit()
+
+        updated = conn.execute(
+            "SELECT id, telegram_id, full_name, phone, avatar_url FROM users WHERE id = ?",
+            (user["id"],),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "message": "Профиль успешно обновлен",
+        "user": {
+            "id": updated["id"],
+            "telegram_id": updated["telegram_id"],
+            "name": updated["full_name"],
+            "phone": updated["phone"],
+            "avatar_url": updated["avatar_url"],
+        },
+    }
+
+
+@router.post("/avatar")
+async def upload_avatar(
+    avatar: UploadFile = File(...),
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
+):
+    token = _extract_session_token(authorization)
+    user = _get_user_with_session(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Недействительная сессия")
+
+    suffix = Path(avatar.filename or "").suffix.lower()
+    if suffix not in ALLOWED_AVATAR_EXTS:
+        raise HTTPException(status_code=400, detail="Неподдерживаемый формат изображения")
+
+    content = await avatar.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Файл аватарки не предоставлен")
+    if len(content) > MAX_AVATAR_SIZE_BYTES:
+        raise HTTPException(status_code=400, detail="Размер файла превышает 10MB")
+
+    avatar_dir = BASE_DIR / "img" / "avatars"
+    avatar_dir.mkdir(parents=True, exist_ok=True)
+
+    filename = f"{uuid.uuid4().hex}{suffix}"
+    file_path = avatar_dir / filename
+    file_path.write_bytes(content)
+
+    rel_avatar_url = f"img/avatars/{filename}"
+
+    conn = get_db_connection()
+    try:
+        conn.execute(
+            """
+            UPDATE users
+            SET avatar_url = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (rel_avatar_url, user["id"]),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "message": "Аватарка успешно загружена",
+        "avatar_url": rel_avatar_url,
+    }
+
+
+@router.get("/avatar")
+def get_avatar(user=Depends(get_current_user)):
+    avatar_url = user["avatar_url"]
+    if not avatar_url:
+        raise HTTPException(status_code=404, detail="Аватарка не найдена")
+
+    payload = {"success": True, "avatar_url": avatar_url}
+
+    file_path = BASE_DIR / avatar_url
+    if file_path.exists() and file_path.is_file() and file_path.stat().st_size <= MAX_AVATAR_SIZE_BYTES:
+        payload["avatar"] = base64.b64encode(file_path.read_bytes()).decode("utf-8")
+
+    return payload

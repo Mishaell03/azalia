@@ -1,617 +1,587 @@
-from flask import Blueprint, request, jsonify, current_app
-from app import db
-from app.models import User, PaymentLink, Order, CartItem, PotPlant, PotPrice, PotColor, PotSize, PotMaterial, OrderItem
-from datetime import datetime, timedelta
+from __future__ import annotations
+
 import uuid
-import os
-from dotenv import load_dotenv
-from yookassa import Configuration, Payment
+from datetime import datetime
+from typing import Optional
 
-# Загружаем переменные окружения из .env
-load_dotenv()
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, ConfigDict, Field
 
-bp = Blueprint('payments', __name__, url_prefix='/api/payments')
+from app.config import get_settings
+from app.db import get_db_connection
+from app.routes.utils import clean_text, get_current_user
 
-# ---------- Инициализация Yookassa (единая функция) ----------
-def init_yookassa():
-    """Инициализация клиента Yookassa. Возвращает True если успешно."""
-    shop_id = os.environ.get('YOOKASSA_SHOP_ID')
-    api_key = os.environ.get('YOOKASSA_API_KEY')
-    if not shop_id or not api_key:
-        current_app.logger.warning("Yookassa credentials not configured")
-        return False
-    try:
-        Configuration.account_id = shop_id
-        Configuration.secret_key = api_key
-        current_app.logger.info("Yookassa configured")
-        return True
-    except Exception as e:
-        current_app.logger.error(f"Failed to configure Yookassa: {str(e)}")
-        return False
+router = APIRouter(prefix="/api/payments", tags=["payments"])
 
-# ---------- Помощники ----------
-def get_user_by_session(session_token):
-    """получить пользователя по session_token"""
-    if not session_token:
-        return None
-    clean_token = session_token.strip('"\' ')
-    user = User.query.filter_by(session_token=clean_token).first()
-    if user and user.token_expires_at and user.token_expires_at < datetime.utcnow():
-        return None
-    return user
 
-def validate_cart_items(cart_items):
+class GeneratePaymentLinkRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    address: Optional[str] = Field(default=None, min_length=5, max_length=500)
+    payment_method: str = Field(default="card", max_length=32)
+    selected_item_ids: list[int] = Field(default_factory=list, max_length=200)
+    order_type: str = Field(default="delivery", max_length=16)
+    store_id: Optional[int] = Field(default=None, ge=1)
+    comment: Optional[str] = Field(default=None, max_length=500)
+
+
+class PaymentCallbackRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    object: dict
+
+
+def _generate_order_number(cur) -> str:
+    for _ in range(10):
+        candidate = f"ORD-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+        exists = cur.execute(
+            "SELECT id FROM orders WHERE order_number = ?",
+            (candidate,),
+        ).fetchone()
+        if not exists:
+            return candidate
+    raise HTTPException(status_code=500, detail="Failed to generate order number")
+
+
+def _resolve_payment_method(cur, payment_method_code: str) -> int:
+    row = cur.execute(
+        """
+        SELECT id
+        FROM payment_methods
+        WHERE code = ? AND is_active = 1
+        LIMIT 1
+        """,
+        (payment_method_code,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=400, detail="Invalid payment method")
+    return int(row["id"])
+
+
+def _get_cart_items_for_checkout(cur, user_id: int, selected_item_ids: list[int]):
+    sql = """
+        SELECT
+            ci.*,
+            p.name AS product_name,
+            p.description AS product_description,
+            p.base_price,
+            p.cost_price,
+            p.is_active,
+            p.deleted_at,
+            COALESCE(SUM(i.quantity_available), 0) AS available_qty
+        FROM cart_items ci
+        JOIN products p ON p.id = ci.product_id
+        LEFT JOIN inventory i ON i.product_id = p.id
+        WHERE ci.user_id = ?
     """
-    Валидация товаров в корзине:
-    - Проверяет наличие товара в БД
-    - Проверяет цены
-    - Проверяет доступное количество
-    Возвращает (is_valid, error_message, total_price, validated_items)
-    """
+    params: list[object] = [user_id]
+
+    if selected_item_ids:
+        placeholders = ",".join(["?"] * len(selected_item_ids))
+        sql += f" AND ci.id IN ({placeholders})"
+        params.extend(selected_item_ids)
+
+    sql += " GROUP BY ci.id ORDER BY ci.created_at ASC"
+
+    rows = cur.execute(sql, tuple(params)).fetchall()
+    return rows
+
+
+def _validate_cart_items(cur, cart_items):
     if not cart_items:
-        return False, 'Корзина пуста', 0.0, []
+        raise HTTPException(status_code=400, detail="Корзина пуста")
 
     total_price = 0.0
-    validated_items = []
+    validated = []
 
     for item in cart_items:
-        plant = PotPlant.query.get(item.plant_id)
-        if not plant:
-            return False, f'Растение ID {item.plant_id} не найдено', 0.0, []
+        if not bool(item["is_active"]) or item["deleted_at"] is not None:
+            raise HTTPException(
+                status_code=400,
+                detail=f'Товар "{item["product_name"]}" больше не доступен',
+            )
 
-        if not plant.in_stock or plant.stock_quantity <= 0:
-            return False, f'Растение "{plant.name}" больше не в наличии', 0.0, []
+        available_qty = int(item["available_qty"])
+        if int(item["quantity"]) > available_qty:
+            raise HTTPException(
+                status_code=400,
+                detail=f'Недостаточно "{item["product_name"]}" в наличии. Доступно: {available_qty}',
+            )
 
-        if item.quantity > plant.stock_quantity:
-            return False, f'Недостаточно "{plant.name}" в наличии. Доступно: {plant.stock_quantity}, запрошено: {item.quantity}', 0.0, []
+        current_product_price = float(item["base_price"])
+        if float(item["product_unit_price"]) != current_product_price:
+            raise HTTPException(
+                status_code=400,
+                detail=f'Цена товара "{item["product_name"]}" изменилась. Обновите корзину.',
+            )
 
-        # сравниваем цены как строки/числа - предположим что оба NUMERIC
-        if float(item.plant_unit_price) != float(plant.base_price):
-            return False, f'Цена растения "{plant.name}" изменилась. Пожалуйста, обновите корзину', 0.0, []
+        current_pot_price = 0.0
+        if item["pot_size_id"] is not None and item["pot_material_id"] is not None:
+            pot = cur.execute(
+                """
+                SELECT price
+                FROM pot_prices
+                WHERE size_id = ? AND material_id = ?
+                LIMIT 1
+                """,
+                (item["pot_size_id"], item["pot_material_id"]),
+            ).fetchone()
+            if not pot:
+                raise HTTPException(status_code=400, detail="Выбранный горшок недоступен")
+            current_pot_price = float(pot["price"])
+            if float(item["pot_unit_price"]) != current_pot_price:
+                raise HTTPException(status_code=400, detail="Цена горшка изменилась. Обновите корзину.")
+        elif float(item["pot_unit_price"]) != 0.0:
+            raise HTTPException(status_code=400, detail="Некорректные данные о горшке")
 
-        pot_price = 0.0
-        if item.pot_size_id and item.pot_material_id:
-            pot_price_obj = PotPrice.query.filter_by(
-                material_id=item.pot_material_id,
-                size_id=item.pot_size_id
-            ).first()
-            if not pot_price_obj:
-                return False, 'Выбранный горшок больше не доступен', 0.0, []
-            if float(item.pot_unit_price) != float(pot_price_obj.price):
-                return False, 'Цена горшка изменилась. Пожалуйста, обновите корзину', 0.0, []
-            pot_price = float(pot_price_obj.price)
-        else:
-            if float(item.pot_unit_price) != 0.0:
-                return False, 'Некорректные данные о горшке', 0.0, []
-
-        item_total = (float(item.plant_unit_price) + float(item.pot_unit_price)) * int(item.quantity)
+        item_total = (current_product_price + current_pot_price) * int(item["quantity"])
         total_price += item_total
-        
-        validated_items.append({
-            'cart_item': item,
-            'plant': plant,
-            'pot_price_obj': pot_price_obj if item.pot_size_id and item.pot_material_id else None,
-            'item_total': item_total
-        })
+        validated.append((item, round(item_total, 2)))
 
-    return True, None, round(total_price, 2), validated_items
+    return round(total_price, 2), validated
 
-def sync_payment_link_with_yookassa(payment_link):
-    """
-    Попытка синхронизировать статус payment_link с Yookassa.
-    Возвращает обновлённый payment_link (или None при ошибке).
-    """
-    if not payment_link or not payment_link.payment_system_id:
-        return payment_link
 
-    if not init_yookassa():
-        current_app.logger.warning("Yookassa not initialized for sync")
-        return payment_link
-
-    try:
-        payment = Payment.find_one(str(payment_link.payment_system_id))
-    except Exception as e:
-        current_app.logger.error(f"Yookassa: failed to find payment {payment_link.payment_system_id}: {e}")
-        return payment_link
-
-    # возможные статусы Yookassa: 'succeeded', 'canceled', 'pending', 'waiting_for_capture', 'refunded', 'expired' и т.д.
-    y_status = getattr(payment, 'status', None)
-    if y_status == 'succeeded' and payment_link.status != 'paid':
-        payment_link.status = 'paid'
-        payment_link.payment_confirmed_at = datetime.utcnow()
-        if payment_link.order_id:
-            order = Order.query.get(payment_link.order_id)
-            if order:
-                order.status = 'processing'
-                order.is_paid = True
-                # Обновляем количество товаров на складе и удаляем купленные товары из корзины
-                remove_purchased_items_from_cart(order.id, order.user_id)
-    elif y_status == 'canceled' and payment_link.status != 'cancelled':
-        payment_link.status = 'cancelled'
-        if payment_link.order_id:
-            order = Order.query.get(payment_link.order_id)
-            if order and order.status != 'delivered':
-                order.status = 'cancelled'
-    elif y_status == 'expired' and payment_link.status != 'expired':
-        payment_link.status = 'expired'
-    # другие правила можно добавить при необходимости
-
-    try:
-        db.session.commit()
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Failed to commit sync changes: {e}")
-
-    return payment_link
-
-def remove_purchased_items_from_cart(order_id, user_id):
-    """
-    Удаляет из корзины пользователя только те товары (по ID), которые были в заказе.
-    Также обновляет количество товаров на складе.
-    """
-    try:
-        order_items = OrderItem.query.filter_by(order_id=order_id).all()
-        
-        # Собираем ID товаров из корзины, которые соответствуют позициям в заказе
-        cart_items_to_remove = []
-        
-        for order_item in order_items:
-            # Находим товар в корзине по plant_id и параметрам
-            cart_items = CartItem.query.filter_by(
-                user_id=user_id,
-                plant_id=order_item.plant_id,
-                quantity=order_item.quantity,
-                plant_unit_price=order_item.plant_unit_price,
-                pot_unit_price=order_item.pot_unit_price
-            ).all()
-            
-            for cart_item in cart_items:
-                # Проверяем параметры горшка
-                pot_match = True
-                if cart_item.pot_color_id:
-                    pot_color = PotColor.query.get(cart_item.pot_color_id)
-                    if not pot_color or pot_color.name != order_item.pot_color:
-                        pot_match = False
-                elif order_item.pot_color:
-                    pot_match = False
-                    
-                if cart_item.pot_size_id:
-                    pot_size = PotSize.query.get(cart_item.pot_size_id)
-                    if not pot_size or pot_size.code != order_item.pot_size:
-                        pot_match = False
-                elif order_item.pot_size:
-                    pot_match = False
-                    
-                if cart_item.pot_material_id:
-                    pot_material = PotMaterial.query.get(cart_item.pot_material_id)
-                    if not pot_material or pot_material.name != order_item.pot_material:
-                        pot_match = False
-                elif order_item.pot_material:
-                    pot_match = False
-                
-                if pot_match:
-                    # Добавляем ID товара в список на удаление
-                    cart_items_to_remove.append(cart_item.id)
-                    # Обновляем количество на складе
-                    plant = PotPlant.query.get(order_item.plant_id)
-                    if plant and plant.stock_quantity >= order_item.quantity:
-                        plant.stock_quantity -= order_item.quantity
-                        if plant.stock_quantity <= 0:
-                            plant.in_stock = False
-                    break
-        
-        # Удаляем товары по ID
-        if cart_items_to_remove:
-            CartItem.query.filter(CartItem.id.in_(cart_items_to_remove)).delete()
-        
-        db.session.commit()
-        current_app.logger.info(f"Removed {len(cart_items_to_remove)} items from cart for order {order_id}")
-        
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Error removing purchased items from cart: {str(e)}")
-
-def format_payment_link_response(payment_link):
-    """Сформировать словарь-ответ для payment_link (без зависимости от модели .to_dict())."""
-    if not payment_link:
+def _format_payment_row(row):
+    if not row:
         return None
+
+    created_raw = row["created_at"]
+    try:
+        created_at = datetime.strptime(created_raw, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        created_at = datetime.fromisoformat(created_raw)
+    expires_at = created_at.replace(microsecond=0)
+    expires_at = expires_at.timestamp() + 24 * 3600
+
     return {
-        'id': payment_link.id,
-        'user_id': payment_link.user_id,
-        'order_id': payment_link.order_id,
-        'amount': float(payment_link.amount) if payment_link.amount is not None else None,
-        'payment_url': payment_link.payment_url,
-        'status': payment_link.status,
-        'payment_system_id': payment_link.payment_system_id,
-        'created_at': payment_link.created_at.isoformat() if payment_link.created_at else None,
-        'expires_at': payment_link.expires_at.isoformat() if payment_link.expires_at else None,
-        'payment_confirmed_at': payment_link.payment_confirmed_at.isoformat() if payment_link.payment_confirmed_at else None,
+        "id": row["id"],
+        "order_id": row["order_id"],
+        "user_id": row["user_id"],
+        "amount": float(row["amount"]),
+        "status": row["status"],
+        "payment_method_id": row["payment_method_id"],
+        "external_payment_id": row["external_payment_id"],
+        "created_at": row["created_at"],
+        "paid_at": row["paid_at"],
+        "failed_at": row["failed_at"],
+        "expires_at": datetime.utcfromtimestamp(expires_at).strftime("%Y-%m-%d %H:%M:%S"),
     }
 
-# ---------- Эндпоинты ----------
-@bp.route('/generate-link', methods=['POST'])
-def generate_payment_link():
-    try:
-        # --- Получаем токен с фронта ---
-        session_token = request.headers.get('X-Session-Id') or request.headers.get('Authorization')
-        if not session_token:
-            return jsonify({'success': False, 'error': 'Session token required'}), 401
 
-        user = get_user_by_session(session_token)
-        if not user:
-            return jsonify({'success': False, 'error': 'Invalid or expired session ID'}), 401
+def _sync_payment_and_order(cur, payment_row, new_status: str):
+    payment_id = payment_row["id"]
+    order_id = payment_row["order_id"]
 
-        # --- Получаем данные запроса ---
-        data = request.get_json() or {}
-        address = (data.get('address') or '').strip()
-        payment_method = data.get('payment_method', 'card')
-        selected_item_ids = data.get('selected_item_ids', [])
-
-        if not address or len(address) < 5 or len(address) > 500:
-            return jsonify({'success': False, 'error': 'Address must be between 5 and 500 characters'}), 400
-        if payment_method not in ['cash', 'card']:
-            return jsonify({'success': False, 'error': 'Invalid payment method'}), 400
-
-        # --- Получаем только выбранные товары из корзины ---
-        if selected_item_ids:
-            cart_items = CartItem.query.filter_by(user_id=user.id).filter(
-                CartItem.id.in_(selected_item_ids)
-            ).all()
-        else:
-            cart_items = CartItem.query.filter_by(user_id=user.id).all()
-
-        is_valid, error_message, total_price, validated_items = validate_cart_items(cart_items)
-        if not is_valid:
-            return jsonify({'success': False, 'error': error_message}), 400
-
-        # --- Создаём заказ ---
-        order = Order(
-            user_id=user.id,
-            address=address,
-            total_price=total_price,
-            payment_method=payment_method,
-            status='new',
-            order_date=datetime.utcnow()
+    if new_status == "paid":
+        cur.execute(
+            """
+            UPDATE payments
+            SET status = 'paid',
+                paid_at = CURRENT_TIMESTAMP,
+                failed_at = NULL
+            WHERE id = ?
+            """,
+            (payment_id,),
         )
-        db.session.add(order)
-        db.session.flush()  # order.id теперь доступен
+        cur.execute(
+            """
+            UPDATE orders
+            SET payment_status = 'paid',
+                status = CASE WHEN status = 'awaiting_payment' THEN 'processing' ELSE status END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (order_id,),
+        )
 
-        # --- Создаём OrderItems ---
-        for item_data in validated_items:
-            ci = item_data['cart_item']
-            order_item = OrderItem(
-                order_id=order.id,
-                plant_id=ci.plant_id,
-                quantity=ci.quantity,
-                plant_unit_price=ci.plant_unit_price,
-                pot_color=None,
-                pot_size=None,
-                pot_material=None,
-                pot_unit_price=ci.pot_unit_price,
-                total_price=ci.total_price
+        # Удаляем оплаченные товары из корзины и резервируем остатки.
+        order_items = cur.execute(
+            """
+            SELECT product_id, quantity, pot_size_id, pot_material_id, pot_color_id
+            FROM order_items
+            WHERE order_id = ?
+            """,
+            (order_id,),
+        ).fetchall()
+
+        user_id = payment_row["user_id"]
+        for oi in order_items:
+            cart_item = cur.execute(
+                """
+                SELECT id, quantity
+                FROM cart_items
+                WHERE user_id = ?
+                  AND product_id = ?
+                  AND IFNULL(pot_size_id, 0) = IFNULL(?, 0)
+                  AND IFNULL(pot_material_id, 0) = IFNULL(?, 0)
+                  AND IFNULL(pot_color_id, 0) = IFNULL(?, 0)
+                ORDER BY id ASC
+                LIMIT 1
+                """,
+                (
+                    user_id,
+                    oi["product_id"],
+                    oi["pot_size_id"],
+                    oi["pot_material_id"],
+                    oi["pot_color_id"],
+                ),
+            ).fetchone()
+
+            if cart_item:
+                cart_qty = int(cart_item["quantity"])
+                if cart_qty <= int(oi["quantity"]):
+                    cur.execute("DELETE FROM cart_items WHERE id = ?", (cart_item["id"],))
+                else:
+                    new_qty = cart_qty - int(oi["quantity"])
+                    cur.execute(
+                        """
+                        UPDATE cart_items
+                        SET quantity = ?,
+                            total_price = ROUND((product_unit_price + pot_unit_price) * ?, 2)
+                        WHERE id = ?
+                        """,
+                        (new_qty, new_qty, cart_item["id"]),
+                    )
+
+                cur.execute(
+                    """
+                    UPDATE inventory
+                    SET quantity_reserved = CASE
+                        WHEN quantity_reserved >= ? THEN quantity_reserved - ?
+                        ELSE 0
+                    END,
+                    quantity_available = CASE
+                        WHEN quantity_available >= ? THEN quantity_available - ?
+                        ELSE 0
+                    END
+                    WHERE product_id = ?
+                    """,
+                    (
+                        oi["quantity"],
+                        oi["quantity"],
+                        oi["quantity"],
+                        oi["quantity"],
+                        oi["product_id"],
+                    ),
+                )
+
+    elif new_status == "failed":
+        cur.execute(
+            """
+            UPDATE payments
+            SET status = 'failed',
+                failed_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (payment_id,),
+        )
+        cur.execute(
+            """
+            UPDATE orders
+            SET payment_status = 'failed',
+                status = CASE
+                    WHEN status IN ('new', 'awaiting_payment', 'processing') THEN 'cancelled'
+                    ELSE status
+                END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (order_id,),
+        )
+
+
+@router.post("/generate-link", status_code=status.HTTP_201_CREATED)
+def generate_payment_link(payload: GeneratePaymentLinkRequest, user=Depends(get_current_user)):
+    settings = get_settings()
+
+    payment_method_code = clean_text(payload.payment_method, max_len=32).lower()
+    order_type = clean_text(payload.order_type, max_len=16).lower()
+    if order_type not in {"delivery", "pickup"}:
+        raise HTTPException(status_code=400, detail="Invalid order_type")
+
+    address = clean_text(payload.address, max_len=500) if payload.address else None
+    if order_type == "delivery" and (not address or len(address) < 5):
+        raise HTTPException(status_code=400, detail="Address must be between 5 and 500 characters")
+
+    comment = clean_text(payload.comment, max_len=500) if payload.comment else None
+
+    selected_ids = sorted(set(payload.selected_item_ids))
+
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+
+        store_id = payload.store_id or 1
+        store = cur.execute("SELECT id FROM stores WHERE id = ? AND is_active = 1", (store_id,)).fetchone()
+        if not store:
+            raise HTTPException(status_code=400, detail="Store not found or inactive")
+
+        payment_method_id = _resolve_payment_method(cur, payment_method_code)
+
+        cart_items = _get_cart_items_for_checkout(cur, int(user["id"]), selected_ids)
+        total_price, validated_items = _validate_cart_items(cur, cart_items)
+
+        order_number = _generate_order_number(cur)
+        cur.execute(
+            """
+            INSERT INTO orders (
+                user_id, company_id, store_id, order_number, order_type,
+                address_id, address_snapshot, comment,
+                subtotal, delivery_fee, discount_amount, total_price,
+                payment_status, status, assigned_employee_id
             )
-            if ci.pot_color_id:
-                pot_color = PotColor.query.get(ci.pot_color_id)
-                if pot_color:
-                    order_item.pot_color = pot_color.name
-            if ci.pot_size_id:
-                pot_size = PotSize.query.get(ci.pot_size_id)
-                if pot_size:
-                    order_item.pot_size = pot_size.code
-            if ci.pot_material_id:
-                pot_material = PotMaterial.query.get(ci.pot_material_id)
-                if pot_material:
-                    order_item.pot_material = pot_material.name
-            db.session.add(order_item)
-
-        # --- Инициализация Yookassa ---
-        if not init_yookassa():
-            db.session.rollback()
-            return jsonify({'success': False, 'error': 'Payment gateway not configured'}), 500
-
-        # --- Создаём платёж ---
-        try:
-            amount_str = "{:.2f}".format(float(total_price))
-            payment = Payment.create({
-                "amount": {"value": amount_str, "currency": "RUB"},
-                "confirmation": {
-                    "type": "redirect",
-                    "return_url": f"{os.environ.get('API_BASE_URL', 'http://localhost:5000')}/api/payments/callback"
-                },
-                "capture": True,
-                "description": f"Заказ растений. ID заказа: #{order.id}, товаров: {len(cart_items)}",
-                "metadata": {"order_id": order.id, "user_id": user.id, "items_count": len(cart_items)}
-            }, uuid.uuid4())
-            payment_url = payment.confirmation.confirmation_url
-            payment_system_id = str(payment.id)
-            current_app.logger.info(f"Payment created. Order ID: {order.id}, Payment ID: {payment_system_id}")
-            current_app.logger.info(f"Payment URL: {payment_url}")
-        except Exception as e:
-            db.session.rollback()
-            current_app.logger.error(f"Payment gateway error: {str(e)}")
-            return jsonify({'success': False, 'error': f'Payment gateway error: {str(e)}'}), 500
-
-        # --- Создаём PaymentLink ---
-        expires_at = datetime.utcnow() + timedelta(hours=24)
-        payment_link = PaymentLink(
-            user_id=user.id,
-            order_id=order.id,
-            amount=total_price,
-            payment_url=payment_url,
-            status='pending',
-            expires_at=expires_at,
-            payment_system_id=payment_system_id
+            VALUES (?, NULL, ?, ?, ?, NULL, ?, ?, ?, 0, 0, ?, 'pending', 'awaiting_payment', NULL)
+            """,
+            (
+                user["id"],
+                store_id,
+                order_number,
+                order_type,
+                address,
+                comment,
+                total_price,
+                total_price,
+            ),
         )
-        db.session.add(payment_link)
-        db.session.flush()  # payment_link.id теперь доступен
+        order_id = cur.lastrowid
 
-        # --- НЕ ОЧИЩАЕМ КОРЗИНУ - она будет очищена только после успешной оплаты ---
-        db.session.commit()
+        items_for_response = []
+        for item, item_total in validated_items:
+            cur.execute(
+                """
+                INSERT INTO order_items (
+                    order_id, product_id,
+                    product_name_snapshot, product_description_snapshot,
+                    quantity, product_unit_price, product_cost_price,
+                    pot_size_id, pot_material_id, pot_color_id,
+                    pot_unit_price, discount_amount, total_price
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+                """,
+                (
+                    order_id,
+                    item["product_id"],
+                    item["product_name"],
+                    item["product_description"],
+                    item["quantity"],
+                    item["product_unit_price"],
+                    item["cost_price"],
+                    item["pot_size_id"],
+                    item["pot_material_id"],
+                    item["pot_color_id"],
+                    item["pot_unit_price"],
+                    item_total,
+                ),
+            )
 
-        # --- Формируем товары для ответа ---
-        items_list = []
-        for item_data in validated_items:
-            ci = item_data['cart_item']
-            plant = item_data['plant']
-            items_list.append({
-                'cart_item_id': ci.id,  # Сохраняем ID элемента корзины для возможной последующей идентификации
-                'plant_id': ci.plant_id,
-                'plant_name': plant.name if plant else 'Unknown',
-                'quantity': ci.quantity,
-                'plant_price': float(ci.plant_unit_price),
-                'pot_price': float(ci.pot_unit_price),
-                'item_total': float(ci.total_price)
-            })
+            items_for_response.append(
+                {
+                    "cart_item_id": item["id"],
+                    "product_id": item["product_id"],
+                    "plant_id": item["product_id"],
+                    "plant_name": item["product_name"],
+                    "quantity": int(item["quantity"]),
+                    "plant_price": float(item["product_unit_price"]),
+                    "pot_price": float(item["pot_unit_price"]),
+                    "item_total": float(item_total),
+                }
+            )
 
-        # --- Возвращаем корректный JSON ---
-        return jsonify({
-            'success': True,
-            'data': {
-                'payment_link_id': int(payment_link.id),
-                'order_id': int(order.id),
-                'payment_url': payment_link.payment_url,
-                'amount': float(total_price),
-                'currency': 'RUB',
-                'expires_at': payment_link.expires_at.isoformat(),
-                'items_count': len(cart_items),
-                'items': items_list,
-                'address': address,
-                'payment_method': payment_method,
-                'message': 'Оплатите заказ по ссылке выше. После успешной оплаты товары будут удалены из корзины.'
-            }
-        }), 201
+        external_payment_id = f"pay_{uuid.uuid4().hex}"
+        cur.execute(
+            """
+            INSERT INTO payments (
+                order_id, user_id, payment_method_id, amount, status,
+                external_payment_id, paid_at, failed_at
+            )
+            VALUES (?, ?, ?, ?, 'pending', ?, NULL, NULL)
+            """,
+            (order_id, user["id"], payment_method_id, total_price, external_payment_id),
+        )
+        payment_id = cur.lastrowid
 
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Error generating payment link: {str(e)}")
-        return jsonify({'success': False, 'error': 'Internal server error', 'debug': str(e) if current_app.debug else None}), 500
+        conn.commit()
+    finally:
+        conn.close()
 
-@bp.route('/link/<int:link_id>', methods=['GET'])
-def get_payment_link(link_id):
+    payment_url = f"{settings.API_BASE_URL}/payments/status/{external_payment_id}"
+
+    return {
+        "success": True,
+        "data": {
+            "payment_link_id": int(payment_id),
+            "order_id": int(order_id),
+            "payment_url": payment_url,
+            "amount": float(total_price),
+            "currency": "RUB",
+            "items_count": len(items_for_response),
+            "items": items_for_response,
+            "address": address,
+            "payment_method": payment_method_code,
+            "message": "Оплатите заказ по ссылке выше. После успешной оплаты товары будут удалены из корзины.",
+        },
+    }
+
+
+@router.get("/link/{link_id}")
+def get_payment_link(link_id: int, user=Depends(get_current_user)):
+    conn = get_db_connection()
     try:
-        session_id = request.headers.get('X-Session-Id') or request.headers.get('Authorization')
-        
-        if not session_id:
-            return jsonify({'success': False, 'error': 'Session token required'}), 401
-        
-        user = get_user_by_session(session_id)
-        if not user:
-            return jsonify({'success': False, 'error': 'Invalid or expired session ID'}), 401
+        row = conn.execute(
+            "SELECT * FROM payments WHERE id = ? LIMIT 1",
+            (link_id,),
+        ).fetchone()
+    finally:
+        conn.close()
 
-        payment_link = PaymentLink.query.get(link_id)
-        if not payment_link:
-            return jsonify({'success': False, 'error': 'Payment link not found'}), 404
-        if payment_link.user_id != user.id:
-            return jsonify({'success': False, 'error': 'Access denied'}), 403
+    if not row:
+        raise HTTPException(status_code=404, detail="Payment link not found")
+    if int(row["user_id"]) != int(user["id"]):
+        raise HTTPException(status_code=403, detail="Access denied")
 
-        # автоматическое помечание expired если просрочена
-        if payment_link.expires_at and payment_link.expires_at < datetime.utcnow() and payment_link.status == 'pending':
-            payment_link.status = 'expired'
-            db.session.commit()
+    return {"success": True, "data": _format_payment_row(row)}
 
-        return jsonify({'success': True, 'data': format_payment_link_response(payment_link)}), 200
 
-    except Exception as e:
-        current_app.logger.error(f"Error getting payment link: {str(e)}")
-        return jsonify({'success': False, 'error': 'Internal server error'}), 500
-
-@bp.route('/link/<int:link_id>/cancel', methods=['POST'])
-def cancel_payment_link(link_id):
+@router.post("/link/{link_id}/cancel")
+def cancel_payment_link(link_id: int, user=Depends(get_current_user)):
+    conn = get_db_connection()
     try:
-        session_id = request.headers.get('X-Session-Id') or request.headers.get('Authorization')
-        
-        if not session_id:
-            return jsonify({'success': False, 'error': 'Session token required'}), 401
-        
-        user = get_user_by_session(session_id)
-        if not user:
-            return jsonify({'success': False, 'error': 'Invalid or expired session ID'}), 401
+        cur = conn.cursor()
+        row = cur.execute(
+            "SELECT * FROM payments WHERE id = ? LIMIT 1",
+            (link_id,),
+        ).fetchone()
 
-        payment_link = PaymentLink.query.get(link_id)
-        if not payment_link:
-            return jsonify({'success': False, 'error': 'Payment link not found'}), 404
-        if payment_link.user_id != user.id:
-            return jsonify({'success': False, 'error': 'Access denied'}), 403
-        if payment_link.status in ['paid', 'expired', 'cancelled']:
-            return jsonify({'success': False, 'error': f'Cannot cancel payment link with status: {payment_link.status}'}), 400
+        if not row:
+            raise HTTPException(status_code=404, detail="Payment link not found")
+        if int(row["user_id"]) != int(user["id"]):
+            raise HTTPException(status_code=403, detail="Access denied")
+        if row["status"] in {"paid", "refunded", "failed"}:
+            raise HTTPException(status_code=400, detail=f"Cannot cancel payment link with status: {row['status']}")
 
-        payment_link.status = 'cancelled'
-        if payment_link.order_id:
-            order = Order.query.get(payment_link.order_id)
-            if order and order.status in ['new', 'processing']:
-                order.status = 'cancelled'
-        db.session.commit()
-        return jsonify({'success': True, 'message': 'Payment link cancelled successfully'}), 200
+        _sync_payment_and_order(cur, row, "failed")
+        conn.commit()
+    finally:
+        conn.close()
 
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Error cancelling payment link: {str(e)}")
-        return jsonify({'success': False, 'error': 'Internal server error'}), 500
+    return {"success": True, "message": "Payment link cancelled successfully"}
 
-# ---------- Webhook от Yookassa ----------
-@bp.route('/callback', methods=['POST'])
-def payment_callback():
+
+@router.post("/callback")
+def payment_callback(payload: PaymentCallbackRequest):
+    payment_data = payload.object or {}
+    external_payment_id = clean_text(payment_data.get("id"), max_len=128)
+    incoming_status = clean_text(payment_data.get("status"), max_len=32).lower()
+
+    if not external_payment_id or incoming_status not in {"succeeded", "paid", "canceled", "cancelled", "failed", "expired", "pending"}:
+        raise HTTPException(status_code=400, detail="Invalid callback payload")
+
+    mapped_status = "pending"
+    if incoming_status in {"succeeded", "paid"}:
+        mapped_status = "paid"
+    elif incoming_status in {"canceled", "cancelled", "failed", "expired"}:
+        mapped_status = "failed"
+
+    conn = get_db_connection()
     try:
-        init_yookassa()
-        data = request.get_json()
-        if not data or 'object' not in data:
-            return jsonify({'success': False}), 400
+        cur = conn.cursor()
+        payment = cur.execute(
+            "SELECT * FROM payments WHERE external_payment_id = ? LIMIT 1",
+            (external_payment_id,),
+        ).fetchone()
 
-        payment_data = data.get('object', {})
-        payment_id = payment_data.get('id')
-        status = payment_data.get('status')
+        if not payment:
+            raise HTTPException(status_code=404, detail="Payment not found")
 
-        payment_link = PaymentLink.query.filter_by(payment_system_id=payment_id).first()
-        if not payment_link:
-            current_app.logger.warning(f"Payment link not found for payment_id: {payment_id}")
-            return jsonify({'success': False}), 404
+        if mapped_status == "paid" and payment["status"] != "paid":
+            _sync_payment_and_order(cur, payment, "paid")
+        elif mapped_status == "failed" and payment["status"] not in {"failed", "paid"}:
+            _sync_payment_and_order(cur, payment, "failed")
 
-        if status == 'succeeded':
-            payment_link.status = 'paid'
-            payment_link.payment_confirmed_at = datetime.utcnow()
-            if payment_link.order_id:
-                order = Order.query.get(payment_link.order_id)
-                if order:
-                    order.status = 'processing'
-                    order.is_paid = True
-                    # Удаляем только оплаченные товары из корзины
-                    remove_purchased_items_from_cart(order.id, order.user_id)
-            current_app.logger.info(f"Payment {payment_id} confirmed and cart items removed")
-        elif status == 'canceled':
-            payment_link.status = 'cancelled'
-            if payment_link.order_id:
-                order = Order.query.get(payment_link.order_id)
-                if order and order.status != 'delivered':
-                    order.status = 'cancelled'
-            current_app.logger.info(f"Payment {payment_id} cancelled")
-        elif status == 'expired':
-            payment_link.status = 'expired'
-            current_app.logger.info(f"Payment {payment_id} expired")
+        conn.commit()
+    finally:
+        conn.close()
 
-        db.session.commit()
-        return jsonify({'success': True}), 200
+    return {"success": True}
 
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Error processing payment callback: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
 
-# ---------- Внутренняя проверка статуса по payment_id ----------
-@bp.route('/status/<payment_id>', methods=['GET'])
-def check_payment_status(payment_id):
-    """
-    Проверка статуса платежа по payment_id (без авторизации).
-    Используется WebView для проверки успешности платежа.
-    """
+@router.get("/status/{payment_id}")
+def check_payment_status(payment_id: str):
+    clean_payment_id = clean_text(payment_id, max_len=128)
+    if not clean_payment_id:
+        raise HTTPException(status_code=400, detail="Invalid payment id")
+
+    conn = get_db_connection()
     try:
-        if not init_yookassa():
-            current_app.logger.warning("Yookassa not initialized for status check")
-        try:
-            payment = Payment.find_one(str(payment_id))
-        except Exception as e:
-            current_app.logger.error(f"Yookassa find_one error: {e}")
-            payment = None
+        row = conn.execute(
+            "SELECT * FROM payments WHERE external_payment_id = ? LIMIT 1",
+            (clean_payment_id,),
+        ).fetchone()
+    finally:
+        conn.close()
 
-        payment_link = PaymentLink.query.filter_by(payment_system_id=str(payment_id)).first()
-        if not payment_link:
-            return jsonify({'success': False, 'error': 'Payment not found'}), 404
+    if not row:
+        raise HTTPException(status_code=404, detail="Payment not found")
 
-        if payment:
-            # sync local link with received Yookassa payment status
-            sync_payment_link_with_yookassa(payment_link)
+    return {
+        "success": True,
+        "data": {
+            "payment_id": clean_payment_id,
+            "status": row["status"],
+            "amount": float(row["amount"]),
+            "confirmed_at": row["paid_at"],
+        },
+    }
 
-        current_app.logger.info(f"Payment status check for {payment_id}: status={payment_link.status}, yookassa_status={getattr(payment, 'status', None) if payment else 'N/A'}")
 
-        return jsonify({
-            'success': True,
-            'data': {
-                'payment_id': payment_id,
-                'status': payment_link.status,
-                'yookassa_status': getattr(payment, 'status', None) if payment else None,
-                'amount': float(payment_link.amount),
-                'confirmed_at': payment_link.payment_confirmed_at.isoformat() if payment_link.payment_confirmed_at else None
-            }
-        }), 200
-
-    except Exception as e:
-        current_app.logger.error(f"Error checking payment status: {str(e)}")
-        return jsonify({'success': False, 'error': 'Payment gateway error'}), 500
-
-# ---------- Пользовательские эндпоинты для проверки статуса ----------
-@bp.route('/status/link/<int:link_id>', methods=['GET'])
-def user_check_payment_link_status(link_id):
-    """
-    Пользовательская проверка статуса ссылки (требует X-Session-Id).
-    Синхронизирует статус с Yookassa при наличии payment_system_id.
-    """
+@router.get("/status/link/{link_id}")
+def user_check_payment_link_status(link_id: int, user=Depends(get_current_user)):
+    conn = get_db_connection()
     try:
-        session_id = request.headers.get('X-Session-Id') or request.headers.get('Authorization')
-        
-        if not session_id:
-            return jsonify({'success': False, 'error': 'Session token required'}), 401
-        
-        user = get_user_by_session(session_id)
-        if not user:
-            return jsonify({'success': False, 'error': 'Invalid or expired session ID'}), 401
+        row = conn.execute(
+            "SELECT * FROM payments WHERE id = ? LIMIT 1",
+            (link_id,),
+        ).fetchone()
+    finally:
+        conn.close()
 
-        payment_link = PaymentLink.query.get(link_id)
-        if not payment_link:
-            return jsonify({'success': False, 'error': 'Payment link not found'}), 404
-        if payment_link.user_id != user.id:
-            return jsonify({'success': False, 'error': 'Access denied'}), 403
+    if not row:
+        raise HTTPException(status_code=404, detail="Payment link not found")
+    if int(row["user_id"]) != int(user["id"]):
+        raise HTTPException(status_code=403, detail="Access denied")
 
-        # проверка на истечение
-        if payment_link.expires_at and payment_link.expires_at < datetime.utcnow() and payment_link.status == 'pending':
-            payment_link.status = 'expired'
-            db.session.commit()
-            return jsonify({'success': True, 'data': format_payment_link_response(payment_link)}), 200
+    return {"success": True, "data": _format_payment_row(row)}
 
-        # синхронизируем с Yookassa если есть id платежной системы
-        if payment_link.payment_system_id:
-            sync_payment_link_with_yookassa(payment_link)
 
-        return jsonify({'success': True, 'data': format_payment_link_response(payment_link)}), 200
-
-    except Exception as e:
-        current_app.logger.error(f"Error in user_check_payment_link_status: {e}")
-        return jsonify({'success': False, 'error': 'Internal server error'}), 500
-
-@bp.route('/status/order/<int:order_id>', methods=['GET'])
-def user_check_order_status(order_id):
-    """
-    Пользовательская проверка статуса заказа (требует X-Session-Id).
-    Возвращает статус заказа и связанную ссылку на оплату (если есть).
-    """
+@router.get("/status/order/{order_id}")
+def user_check_order_status(order_id: int, user=Depends(get_current_user)):
+    conn = get_db_connection()
     try:
-        session_id = request.headers.get('X-Session-Id') or request.headers.get('Authorization')
-        
-        if not session_id:
-            return jsonify({'success': False, 'error': 'Session token required'}), 401
-        
-        user = get_user_by_session(session_id)
-        if not user:
-            return jsonify({'success': False, 'error': 'Invalid or expired session ID'}), 401
-
-        order = Order.query.get(order_id)
+        cur = conn.cursor()
+        order = cur.execute(
+            "SELECT * FROM orders WHERE id = ? LIMIT 1",
+            (order_id,),
+        ).fetchone()
         if not order:
-            return jsonify({'success': False, 'error': 'Order not found'}), 404
-        if order.user_id != user.id:
-            return jsonify({'success': False, 'error': 'Access denied'}), 403
+            raise HTTPException(status_code=404, detail="Order not found")
+        if int(order["user_id"]) != int(user["id"]):
+            raise HTTPException(status_code=403, detail="Access denied")
 
-        # Найдём связанную ссылку на оплату (если есть)
-        payment_link = PaymentLink.query.filter_by(order_id=order.id).first()
-        if payment_link and payment_link.payment_system_id:
-            sync_payment_link_with_yookassa(payment_link)
+        payment = cur.execute(
+            "SELECT * FROM payments WHERE order_id = ? ORDER BY id DESC LIMIT 1",
+            (order_id,),
+        ).fetchone()
+    finally:
+        conn.close()
 
-        resp = {
-            'order_id': order.id,
-            'order_status': order.status,
-            'is_paid': bool(order.is_paid),
-            'total_price': float(order.total_price),
-            'payment_link': format_payment_link_response(payment_link) if payment_link else None
-        }
-        return jsonify({'success': True, 'data': resp}), 200
-
-    except Exception as e:
-        current_app.logger.error(f"Error in user_check_order_status: {e}")
-        return jsonify({'success': False, 'error': 'Internal server error'}), 500
+    return {
+        "success": True,
+        "data": {
+            "order_id": order["id"],
+            "order_number": order["order_number"],
+            "order_status": order["status"],
+            "payment_status": order["payment_status"],
+            "total_price": float(order["total_price"]),
+            "payment_link": _format_payment_row(payment) if payment else None,
+        },
+    }

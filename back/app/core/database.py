@@ -1,21 +1,27 @@
 import os
 import sqlite3
 from pathlib import Path
+from dotenv import load_dotenv
 from typing import Optional
 
+# загружаем .env из корня
+BASE_DIR = Path(__file__).resolve().parents[2]
+load_dotenv(BASE_DIR / ".env")
 
-DB_NAME = "flower_shop.db"
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///flower_shop.db")
 
 
-def get_connection(db_name: str = DB_NAME) -> sqlite3.Connection:
-    """
-    Создает подключение к SQLite и включает базовые настройки.
-    База создается рядом с этим файлом.
-    """
-    base_dir = Path(__file__).resolve().parent if "__file__" in globals() else Path(os.getcwd())
-    db_path = base_dir / db_name
+def _get_db_path(url: str) -> Path:
+    if url.startswith("sqlite:///"):
+        return BASE_DIR / url.replace("sqlite:///", "")
+    return BASE_DIR / url
 
-    conn = sqlite3.connect(db_path)
+
+DB_PATH = _get_db_path(DATABASE_URL)
+
+
+def get_connection() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
 
     conn.execute("PRAGMA foreign_keys = ON")

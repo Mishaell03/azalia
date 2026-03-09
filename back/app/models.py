@@ -1,30 +1,39 @@
 from __future__ import annotations
 
+import os
 import sqlite3
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Optional, Any, Iterable
+from dataclasses import dataclass, field
+
+from dotenv import load_dotenv
 
 
+# корень проекта
+BASE_DIR = Path(__file__).resolve().parents[1]
 
-# ПОДКЛЮЧЕНИЕ К БД
+# загружаем .env
+load_dotenv(BASE_DIR / ".env")
 
-
-try:
-    from database.init import get_connection
-except Exception:
-    DB_PATH = Path(__file__).resolve().parents[1] / "database" / "flower_shop.db"
-
-    def get_connection() -> sqlite3.Connection:
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON")
-        return conn
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///flower_shop.db")
 
 
+def _extract_sqlite_path(url: str) -> str:
+    if url.startswith("sqlite:///"):
+        return url.replace("sqlite:///", "", 1)
+    return url
+
+
+DB_PATH = BASE_DIR / _extract_sqlite_path(DATABASE_URL)
+
+
+def get_connection() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
 
 # DATACLASS-МОДЕЛИ
-
 
 @dataclass(slots=True)
 class Store:

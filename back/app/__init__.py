@@ -1,58 +1,66 @@
-from flask import Flask, send_from_directory
-from flask_sqlalchemy import SQLAlchemy
-from flask_cors import CORS
-import os
+from __future__ import annotations
 
-db = SQLAlchemy()
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
-def create_app():
-    app = Flask(__name__)
-    
-    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key')
-    
-    base_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
-    db_path = os.path.join(base_dir, 'flower_shop.db')
-    database_url = os.environ.get('DATABASE_URL')
-    if database_url:
-        if '://' not in database_url:
-            database_url = f'sqlite:///{database_url}'
-        if database_url.startswith('sqlite:///') and 'timeout=' not in database_url:
-            separator = '&' if '?' in database_url else '?'
-            database_url = f'{database_url}{separator}timeout=30'
-        app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-    else:
-        app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}?timeout=30'
-    
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-        'connect_args': {
-            'timeout': 30,
-            'check_same_thread': False,
-        },
-        'pool_pre_ping': True,
-        'pool_recycle': 3600,
-    }
-    
-    db.init_app(app)
-    CORS(app)
-    
-    @app.route('/api/img/<path:filename>')
-    def serve_image(filename):
-        img_dir = os.path.join(base_dir, 'img')
-        return send_from_directory(img_dir, filename)
-    
-    from app.routes.plants import bp as plants_bp
-    from app.routes.categories import bp as categories_bp
-    from app.routes.employees import bp as employees_bp
-    from app.routes.auth import bp as auth_bp
-    from app.routes.cart import bp as cart_bp
-    from app.routes.payments import bp as payments_bp
-    
-    app.register_blueprint(plants_bp)
-    app.register_blueprint(categories_bp)
-    app.register_blueprint(employees_bp)
-    app.register_blueprint(auth_bp)
-    app.register_blueprint(cart_bp)
-    app.register_blueprint(payments_bp)
-    
+from app.config import BASE_DIR, get_settings
+from app.core.database import create_database, validate_schema
+from app.routes.auth import router as auth_router
+from app.routes.cart import router as cart_router
+from app.routes.categories import router as categories_router
+from app.routes.employees import router as employees_router
+from app.routes.payments import router as payments_router
+from app.routes.plants import router as plants_router
+
+
+def create_app() -> FastAPI:
+    settings = get_settings()
+
+    app = FastAPI(title="Flower Shop API", debug=settings.DEBUG)
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data:;"
+        return response
+
+    @app.on_event("startup")
+    async def startup_init() -> None:
+        create_database()
+        validate_schema()
+
+    @app.exception_handler(Exception)
+    async def internal_error_handler(_: Request, exc: Exception):
+        if settings.DEBUG:
+            return JSONResponse(status_code=500, content={"success": False, "error": str(exc)})
+        return JSONResponse(status_code=500, content={"success": False, "error": "Internal server error"})
+
+    img_dir = BASE_DIR / "img"
+    img_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/img", StaticFiles(directory=img_dir), name="img")
+
+    app.include_router(plants_router)
+    app.include_router(categories_router)
+    app.include_router(employees_router)
+    app.include_router(auth_router)
+    app.include_router(cart_router)
+    app.include_router(payments_router)
+
+    @app.get("/")
+    async def root():
+        return {"message": "Flower Shop API running"}
+
     return app

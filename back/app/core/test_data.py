@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from init import get_connection
+from database import get_connection
 
 
 def seed_reference_data(cur) -> None:
@@ -1032,4 +1032,4 @@ def seed_database() -> None:
 
 if __name__ == "__main__":
     seed_database()
-    print("👍🏻 Тестовые данные успешно добавлены")
+    print("👍 Тестовые данные успешно добавлены")
