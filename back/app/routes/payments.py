@@ -290,8 +290,9 @@ def _sync_payment_and_order(cur, payment_row, new_status: str):
         )
 
 
-@router.post("/generate-link", status_code=status.HTTP_201_CREATED)
+@router.post("/generate-link", status_code=status.HTTP_201_CREATED, summary="Generate Payment Link")
 def generate_payment_link(payload: GeneratePaymentLinkRequest, user=Depends(get_current_user)):
+    """Создает заказ и платеж, возвращает ссылку/идентификатор для оплаты."""
     settings = get_settings()
 
     payment_method_code = clean_text(payload.payment_method, max_len=32).lower()
@@ -423,8 +424,9 @@ def generate_payment_link(payload: GeneratePaymentLinkRequest, user=Depends(get_
     }
 
 
-@router.get("/link/{link_id}")
+@router.get("/link/{link_id}", summary="Get Payment Link")
 def get_payment_link(link_id: int, user=Depends(get_current_user)):
+    """Возвращает информацию о платеже по его внутреннему идентификатору."""
     conn = get_db_connection()
     try:
         row = conn.execute(
@@ -442,8 +444,9 @@ def get_payment_link(link_id: int, user=Depends(get_current_user)):
     return {"success": True, "data": _format_payment_row(row)}
 
 
-@router.post("/link/{link_id}/cancel")
+@router.post("/link/{link_id}/cancel", summary="Cancel Payment Link")
 def cancel_payment_link(link_id: int, user=Depends(get_current_user)):
+    """Отменяет ожидающий платеж и переводит заказ в отмененный/failed статус."""
     conn = get_db_connection()
     try:
         cur = conn.cursor()
@@ -467,8 +470,9 @@ def cancel_payment_link(link_id: int, user=Depends(get_current_user)):
     return {"success": True, "message": "Payment link cancelled successfully"}
 
 
-@router.post("/callback")
+@router.post("/callback", summary="Payment Callback")
 def payment_callback(payload: PaymentCallbackRequest):
+    """Webhook для обновления статуса платежа от внешней системы."""
     payment_data = payload.object or {}
     external_payment_id = clean_text(payment_data.get("id"), max_len=128)
     incoming_status = clean_text(payment_data.get("status"), max_len=32).lower()
@@ -505,8 +509,9 @@ def payment_callback(payload: PaymentCallbackRequest):
     return {"success": True}
 
 
-@router.get("/status/{payment_id}")
+@router.get("/status/{payment_id}", summary="Check Payment Status")
 def check_payment_status(payment_id: str):
+    """Публичная проверка статуса платежа по external_payment_id."""
     clean_payment_id = clean_text(payment_id, max_len=128)
     if not clean_payment_id:
         raise HTTPException(status_code=400, detail="Invalid payment id")
@@ -534,8 +539,9 @@ def check_payment_status(payment_id: str):
     }
 
 
-@router.get("/status/link/{link_id}")
+@router.get("/status/link/{link_id}", summary="Check Payment Link Status")
 def user_check_payment_link_status(link_id: int, user=Depends(get_current_user)):
+    """Проверка статуса платежа владельцем по id записи payments."""
     conn = get_db_connection()
     try:
         row = conn.execute(
@@ -553,8 +559,9 @@ def user_check_payment_link_status(link_id: int, user=Depends(get_current_user))
     return {"success": True, "data": _format_payment_row(row)}
 
 
-@router.get("/status/order/{order_id}")
+@router.get("/status/order/{order_id}", summary="Check Order Payment Status")
 def user_check_order_status(order_id: int, user=Depends(get_current_user)):
+    """Возвращает статус заказа и связанного с ним платежа."""
     conn = get_db_connection()
     try:
         cur = conn.cursor()

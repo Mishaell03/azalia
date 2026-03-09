@@ -98,8 +98,9 @@ def _extract_session_token(
     return token
 
 
-@router.post("/validate_token")
+@router.post("/validate_token", summary="Validate Session Token")
 def validate_token(payload: ValidateTokenRequest):
+    """Проверяет, активен ли переданный session token."""
     is_valid = is_valid_session_token(payload.token)
     return {"success": True, "is_valid": is_valid}
 
@@ -135,8 +136,9 @@ def _get_user_with_session(token: str):
     return row
 
 
-@router.post("/verify")
+@router.post("/verify", summary="Verify Auth Code")
 def verify_code(payload: VerifyCodeRequest):
+    """Подтверждает код авторизации и создает пользовательскую сессию."""
     code = clean_text(payload.code, max_len=8)
     if not CODE_PATTERN.fullmatch(code):
         raise HTTPException(status_code=400, detail="Что-то пошло не так")
@@ -232,8 +234,9 @@ def verify_code(payload: VerifyCodeRequest):
     return response
 
 
-@router.get("/check_status/{code}")
+@router.get("/check_status/{code}", summary="Check Auth Code Status")
 def check_code_status(code: str):
+    """Возвращает статус кода входа: использован/истек/валиден."""
     clean_code = clean_text(code, max_len=8)
     if not CODE_PATTERN.fullmatch(clean_code):
         raise HTTPException(status_code=400, detail="Что-то пошло не так")
@@ -281,10 +284,11 @@ def check_code_status(code: str):
     return {"success": True, "status": status_payload}
 
 
-@router.api_route("/me", methods=["GET", "POST"])
+@router.api_route("/me", methods=["GET", "POST"], summary="Get Current User")
 def me(
     authorization: Optional[str] = Header(default=None, alias="Authorization"),
 ):
+    """Возвращает профиль текущего пользователя по токену в Authorization."""
     token = _extract_session_token(authorization)
     user = _get_user_with_session(token)
 
@@ -315,11 +319,12 @@ def me(
     return response
 
 
-@router.post("/update_profile")
+@router.post("/update_profile", summary="Update User Profile")
 def update_profile(
     payload: UpdateProfileRequest,
     authorization: Optional[str] = Header(default=None, alias="Authorization"),
 ):
+    """Обновляет имя и телефон текущего пользователя."""
     token = _extract_session_token(authorization)
     user = _get_user_with_session(token)
     if not user:
@@ -365,11 +370,12 @@ def update_profile(
     }
 
 
-@router.post("/avatar")
+@router.post("/avatar", summary="Upload User Avatar")
 async def upload_avatar(
     avatar: UploadFile = File(...),
     authorization: Optional[str] = Header(default=None, alias="Authorization"),
 ):
+    """Загружает/обновляет аватар пользователя."""
     token = _extract_session_token(authorization)
     user = _get_user_with_session(token)
     if not user:
@@ -416,8 +422,9 @@ async def upload_avatar(
     }
 
 
-@router.get("/avatar")
+@router.get("/avatar", summary="Get User Avatar")
 def get_avatar(user=Depends(get_current_user)):
+    """Возвращает ссылку на аватар и, при возможности, base64-представление."""
     avatar_url = user["avatar_url"]
     if not avatar_url:
         raise HTTPException(status_code=404, detail="Аватарка не найдена")

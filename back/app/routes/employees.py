@@ -104,12 +104,13 @@ def _employee_to_dict(row):
     }
 
 
-@router.get("/users")
+@router.get("/users", summary="Get Users (Non-employees)")
 def list_users(
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=20, ge=1, le=100),
     user=Depends(get_current_user),
 ):
+    """Возвращает список пользователей, которые не назначены сотрудниками."""
     require_admin(user)
     offset = (page - 1) * per_page
 
@@ -173,8 +174,9 @@ def list_users(
     }
 
 
-@router.get("/debug/whoami")
+@router.get("/debug/whoami", summary="Debug Current User")
 def debug_whoami(user=Depends(get_current_user)):
+    """Отладочный endpoint: показывает текущего пользователя и его роль."""
     return {
         "success": True,
         "user": {
@@ -191,8 +193,9 @@ def debug_whoami(user=Depends(get_current_user)):
     }
 
 
-@router.get("/employees")
+@router.get("/employees", summary="Get Employees")
 def get_employees(user=Depends(get_current_user)):
+    """Возвращает список сотрудников с подробной информацией."""
     require_admin(user)
 
     conn = get_db_connection()
@@ -230,8 +233,9 @@ def get_employees(user=Depends(get_current_user)):
     return {"success": True, "data": [_employee_to_dict(row) for row in rows]}
 
 
-@router.get("/employees/{employee_id}")
+@router.get("/employees/{employee_id}", summary="Get Employee By Id")
 def get_employee(employee_id: int, user=Depends(get_current_user)):
+    """Возвращает карточку конкретного сотрудника."""
     require_admin(user)
 
     conn = get_db_connection()
@@ -246,8 +250,9 @@ def get_employee(employee_id: int, user=Depends(get_current_user)):
     return {"success": True, "data": _employee_to_dict(row)}
 
 
-@router.post("/employees/assign", status_code=status.HTTP_201_CREATED)
+@router.post("/employees/assign", status_code=status.HTTP_201_CREATED, summary="Assign Employee")
 def assign_employee(payload: AssignEmployeeRequest, user=Depends(get_current_user)):
+    """Назначает пользователя сотрудником или обновляет существующего сотрудника."""
     require_admin(user)
 
     if payload.user_id is None and payload.telegram_id is None:
@@ -349,8 +354,9 @@ def assign_employee(payload: AssignEmployeeRequest, user=Depends(get_current_use
     }
 
 
-@router.post("/employees/deactivate")
+@router.post("/employees/deactivate", summary="Deactivate Or Update Employee")
 def deactivate_employee(payload: DeactivateEmployeeRequest, user=Depends(get_current_user)):
+    """Деактивирует сотрудника или обновляет его параметры."""
     require_admin(user)
 
     if payload.user_id is None and payload.telegram_id is None:

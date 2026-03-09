@@ -157,8 +157,9 @@ def _cart_item_to_dict(cur, row):
     }
 
 
-@router.get("/items")
+@router.get("/items", summary="Get Cart Items")
 def get_cart_items(user=Depends(get_current_user)):
+    """Возвращает товары корзины текущего пользователя и итоговую сумму."""
     conn = get_db_connection()
     try:
         cur = conn.cursor()
@@ -192,8 +193,9 @@ def get_cart_items(user=Depends(get_current_user)):
     }
 
 
-@router.post("/items", status_code=status.HTTP_201_CREATED)
+@router.post("/items", status_code=status.HTTP_201_CREATED, summary="Add Item To Cart")
 def add_to_cart(payload: CartAddRequest, response: Response, user=Depends(get_current_user)):
+    """Добавляет товар в корзину или увеличивает количество существующей позиции."""
     product_id = payload.product_id or payload.plant_id
 
     conn = get_db_connection()
@@ -294,8 +296,9 @@ def add_to_cart(payload: CartAddRequest, response: Response, user=Depends(get_cu
     }
 
 
-@router.put("/items/{item_id}")
+@router.put("/items/{item_id}", summary="Update Cart Item")
 def update_cart_item(item_id: int, payload: CartUpdateRequest, user=Depends(get_current_user)):
+    """Обновляет количество позиции корзины. Количество 0 удаляет позицию."""
     conn = get_db_connection()
     try:
         cur = conn.cursor()
@@ -333,8 +336,9 @@ def update_cart_item(item_id: int, payload: CartUpdateRequest, user=Depends(get_
     return {"success": True, "message": "Cart updated", "data": item_data}
 
 
-@router.delete("/items/{item_id}")
+@router.delete("/items/{item_id}", summary="Delete Cart Item")
 def remove_from_cart(item_id: int, user=Depends(get_current_user)):
+    """Удаляет конкретный товар из корзины."""
     conn = get_db_connection()
     try:
         cur = conn.cursor()
@@ -353,8 +357,9 @@ def remove_from_cart(item_id: int, user=Depends(get_current_user)):
     return {"success": True, "message": "Item removed from cart"}
 
 
-@router.delete("/clear")
+@router.delete("/clear", summary="Clear Cart")
 def clear_cart(user=Depends(get_current_user)):
+    """Очищает всю корзину текущего пользователя."""
     conn = get_db_connection()
     try:
         conn.execute("DELETE FROM cart_items WHERE user_id = ?", (user["id"],))
@@ -364,8 +369,9 @@ def clear_cart(user=Depends(get_current_user)):
     return {"success": True, "message": "Cart cleared"}
 
 
-@router.get("/wishlist")
+@router.get("/wishlist", summary="Get Wishlist")
 def get_wishlist(user=Depends(get_current_user)):
+    """Возвращает список избранных товаров пользователя."""
     conn = get_db_connection()
     try:
         rows = conn.execute(
@@ -397,8 +403,9 @@ def get_wishlist(user=Depends(get_current_user)):
     return {"success": True, "data": {"items": items, "count": len(items)}}
 
 
-@router.post("/wishlist", status_code=status.HTTP_201_CREATED)
+@router.post("/wishlist", status_code=status.HTTP_201_CREATED, summary="Add Item To Wishlist")
 def add_to_wishlist(payload: WishlistRequest, user=Depends(get_current_user)):
+    """Добавляет товар в избранное."""
     product_id = payload.product_id or payload.plant_id
 
     conn = get_db_connection()
@@ -429,8 +436,9 @@ def add_to_wishlist(payload: WishlistRequest, user=Depends(get_current_user)):
     }
 
 
-@router.delete("/wishlist/{plant_id}")
+@router.delete("/wishlist/{plant_id}", summary="Delete Wishlist Item")
 def remove_from_wishlist(plant_id: int, user=Depends(get_current_user)):
+    """Удаляет товар из избранного."""
     conn = get_db_connection()
     try:
         cur = conn.cursor()
@@ -449,8 +457,9 @@ def remove_from_wishlist(plant_id: int, user=Depends(get_current_user)):
     return {"success": True, "message": "Item removed from wishlist"}
 
 
-@router.get("/wishlist/check/{plant_id}")
+@router.get("/wishlist/check/{plant_id}", summary="Check Wishlist Item")
 def check_wishlist(plant_id: int, user=Depends(get_current_user)):
+    """Проверяет, есть ли товар в избранном."""
     conn = get_db_connection()
     try:
         exists = conn.execute(
@@ -463,13 +472,14 @@ def check_wishlist(plant_id: int, user=Depends(get_current_user)):
     return {"success": True, "data": {"in_wishlist": exists is not None}}
 
 
-@router.get("/pot/price")
+@router.get("/pot/price", summary="Get Pot Price")
 def get_pot_price(
     material: Optional[str] = Query(default=None, max_length=50),
     size: Optional[str] = Query(default=None, max_length=50),
     material_id: Optional[int] = Query(default=None, ge=1),
     size_id: Optional[int] = Query(default=None, ge=1),
 ):
+    """Возвращает цену горшка по размеру и материалу."""
     conn = get_db_connection()
     try:
         cur = conn.cursor()

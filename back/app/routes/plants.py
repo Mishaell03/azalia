@@ -171,7 +171,7 @@ def _validate_refs(cur, payload: ProductCreateRequest | ProductUpdateRequest) ->
             )
 
 
-@router.get("/")
+@router.get("/", summary="Get Plants")
 def get_plants(
     category_id: Optional[int] = Query(default=None, ge=1),
     plant_type_id: Optional[int] = Query(default=None, ge=1),
@@ -189,6 +189,7 @@ def get_plants(
     offset: Optional[int] = Query(default=None, ge=0),
     include_inactive: bool = Query(default=False),
 ):
+    """Возвращает список растений с фильтрами, сортировкой и пагинацией."""
     if min_price is not None and max_price is not None and min_price > max_price:
         raise HTTPException(status_code=400, detail="min_price cannot exceed max_price")
     if min_rating is not None and max_rating is not None and min_rating > max_rating:
@@ -286,8 +287,9 @@ def get_plants(
     }
 
 
-@router.get("/categories")
+@router.get("/categories", summary="Get Plant Categories")
 def get_categories_for_products():
+    """Возвращает категории для раздела каталога растений."""
     conn = get_db_connection()
     try:
         rows = conn.execute(
@@ -310,8 +312,9 @@ def get_categories_for_products():
     }
 
 
-@router.get("/filters")
+@router.get("/filters", summary="Get Plant Filters")
 def get_filters():
+    """Возвращает справочники и диапазоны фильтров для каталога."""
     conn = get_db_connection()
     try:
         cur = conn.cursor()
@@ -350,8 +353,9 @@ def get_filters():
     }
 
 
-@router.get("/{plant_id}")
+@router.get("/{plant_id}", summary="Get Plant By Id")
 def get_plant(plant_id: int = Path(..., ge=1)):
+    """Возвращает детальную информацию по одному растению."""
     conn = get_db_connection()
     try:
         cur = conn.cursor()
@@ -374,8 +378,9 @@ def get_plant(plant_id: int = Path(..., ge=1)):
     return {"success": True, "data": data}
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED, summary="Create Plant")
 def create_plant(payload: ProductCreateRequest):
+    """Создает новое растение в каталоге."""
     conn = get_db_connection()
     try:
         cur = conn.cursor()
@@ -425,8 +430,9 @@ def create_plant(payload: ProductCreateRequest):
     return {"success": True, "message": "Plant created successfully", "id": product_id}
 
 
-@router.put("/{plant_id}")
+@router.put("/{plant_id}", summary="Update Plant")
 def update_plant(plant_id: int, payload: ProductUpdateRequest):
+    """Обновляет поля растения."""
     updates = payload.model_dump(exclude_unset=True)
     if not updates:
         raise HTTPException(status_code=400, detail="No data provided")
@@ -488,8 +494,9 @@ def update_plant(plant_id: int, payload: ProductUpdateRequest):
     return {"success": True, "message": "Plant updated successfully"}
 
 
-@router.delete("/{plant_id}")
+@router.delete("/{plant_id}", summary="Archive Plant")
 def delete_plant(plant_id: int):
+    """Архивирует растение (мягкое удаление)."""
     conn = get_db_connection()
     try:
         cur = conn.cursor()
@@ -514,8 +521,9 @@ def delete_plant(plant_id: int):
     return {"success": True, "message": "Plant archived successfully"}
 
 
-@router.post("/{plant_id}/image")
+@router.post("/{plant_id}/image", summary="Upload Plant Image")
 async def upload_plant_image(plant_id: int, image: UploadFile = File(...)):
+    """Загружает изображение растения и добавляет запись в product_images."""
     filename = image.filename or ""
     suffix = Path(filename).suffix.lower()
     if suffix not in ALLOWED_IMAGE_EXTS:
@@ -559,8 +567,9 @@ async def upload_plant_image(plant_id: int, image: UploadFile = File(...)):
     return {"success": True, "message": "Image uploaded", "image_url": rel_path}
 
 
-@router.delete("/{plant_id}/image")
+@router.delete("/{plant_id}/image", summary="Delete Plant Image")
 def delete_plant_image(plant_id: int):
+    """Удаляет основное изображение растения и деактивирует связанные фото."""
     conn = get_db_connection()
     try:
         cur = conn.cursor()

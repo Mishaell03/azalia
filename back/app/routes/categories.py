@@ -51,8 +51,9 @@ def _build_tree(rows, parent_id=None):
     return result
 
 
-@router.get("/")
+@router.get("/", summary="Get Categories")
 def get_categories(only_parents: bool = Query(default=False)):
+    """Возвращает дерево категорий или только корневые категории."""
     conn = get_db_connection()
     try:
         rows = conn.execute(
@@ -79,8 +80,9 @@ def get_categories(only_parents: bool = Query(default=False)):
     return {"success": True, "data": data, "count": len(rows)}
 
 
-@router.get("/stats")
+@router.get("/stats", summary="Get Categories Stats")
 def get_categories_stats():
+    """Статистика по категориям: количество товаров в каждой категории."""
     conn = get_db_connection()
     try:
         stats = conn.execute(
@@ -112,8 +114,9 @@ def get_categories_stats():
     }
 
 
-@router.get("/{category_id}")
+@router.get("/{category_id}", summary="Get Category By Id")
 def get_category(category_id: int):
+    """Детальная информация по категории, включая подкатегории и число товаров."""
     conn = get_db_connection()
     try:
         cur = conn.cursor()
@@ -173,8 +176,9 @@ def get_category(category_id: int):
     }
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED, summary="Create Category")
 def create_category(payload: CategoryCreateRequest):
+    """Создает новую категорию."""
     name = _clean_text(payload.name, 100)
     if not name:
         raise HTTPException(status_code=400, detail="Invalid category name")
@@ -214,8 +218,9 @@ def create_category(payload: CategoryCreateRequest):
     }
 
 
-@router.put("/{category_id}")
+@router.put("/{category_id}", summary="Update Category")
 def update_category(category_id: int, payload: CategoryUpdateRequest):
+    """Обновляет существующую категорию."""
     updates = payload.model_dump(exclude_unset=True)
     if not updates:
         raise HTTPException(status_code=400, detail="No data provided")
@@ -266,8 +271,9 @@ def update_category(category_id: int, payload: CategoryUpdateRequest):
     return {"success": True, "message": "Category updated successfully"}
 
 
-@router.delete("/{category_id}")
+@router.delete("/{category_id}", summary="Delete Category")
 def delete_category(category_id: int):
+    """Удаляет категорию, если в ней нет товаров и подкатегорий."""
     conn = get_db_connection()
     try:
         cur = conn.cursor()
@@ -304,12 +310,13 @@ def delete_category(category_id: int):
     return {"success": True, "message": "Category deleted successfully"}
 
 
-@router.get("/{category_id}/plants")
+@router.get("/{category_id}/plants", summary="Get Category Plants")
 def get_category_plants(
     category_id: int,
     in_stock: Optional[bool] = Query(default=None),
     plant_type_id: Optional[int] = Query(default=None, ge=1),
 ):
+    """Возвращает список товаров выбранной категории."""
     conn = get_db_connection()
     try:
         cur = conn.cursor()

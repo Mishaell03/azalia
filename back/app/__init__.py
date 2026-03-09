@@ -18,7 +18,23 @@ from app.routes.plants import router as plants_router
 def create_app() -> FastAPI:
     settings = get_settings()
 
-    app = FastAPI(title="Flower Shop API", debug=settings.DEBUG)
+    app = FastAPI(
+        title="Flower Shop API",
+        description=(
+            "API для магазина растений: авторизация, каталог, корзина, "
+            "сотрудники и платежи."
+        ),
+        version="1.0.0",
+        debug=settings.DEBUG,
+        openapi_tags=[
+            {"name": "auth", "description": "Авторизация и профиль пользователя"},
+            {"name": "plants", "description": "Каталог растений и изображения"},
+            {"name": "categories", "description": "Категории каталога"},
+            {"name": "cart", "description": "Корзина и избранное"},
+            {"name": "employees", "description": "Пользователи и сотрудники"},
+            {"name": "payments", "description": "Оплата и статусы заказов"},
+        ],
+    )
 
     app.add_middleware(
         CORSMiddleware,
@@ -34,7 +50,16 @@ def create_app() -> FastAPI:
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data:;"
+        path = request.url.path
+        if path.startswith("/docs") or path.startswith("/redoc") or path.startswith("/openapi.json"):
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self' https://cdn.jsdelivr.net https://fastapi.tiangolo.com; "
+                "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "img-src 'self' data: https://fastapi.tiangolo.com;"
+            )
+        else:
+            response.headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data:;"
         return response
 
     @app.on_event("startup")
@@ -61,6 +86,7 @@ def create_app() -> FastAPI:
 
     @app.get("/")
     async def root():
+        """Проверка, что API запущено."""
         return {"message": "Flower Shop API running"}
 
     return app

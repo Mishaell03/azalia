@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta
 from database import get_connection
 
-
 def seed_reference_data(cur) -> None:
     """
     Заполняет справочники.
