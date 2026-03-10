@@ -1,8 +1,11 @@
-import 'package:azalia/components/colors.dart';
-import 'package:azalia/components/text_styles.dart';
+import 'dart:async';
+
 import 'package:azalia/backend/apiClient.dart';
 import 'package:azalia/backend/api_config.dart';
+import 'package:azalia/components/colors.dart';
+import 'package:azalia/components/text_styles.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 class PaymentWebViewPage extends StatefulWidget {
@@ -19,17 +22,25 @@ class PaymentWebViewPage extends StatefulWidget {
   State<PaymentWebViewPage> createState() => _PaymentWebViewPage();
 }
 
-class _PaymentWebViewPage extends State<PaymentWebViewPage> {
+class _PaymentWebViewPage extends State<PaymentWebViewPage>
+    with WidgetsBindingObserver {
+  static const Duration _webViewFallbackTimeout = Duration(seconds: 8);
+
   final ApiClient _api = ApiClient();
   late final WebViewController _controller;
+
+  Timer? _fallbackTimer;
   bool _loading = true;
   String _error = '';
   bool _paymentCompleted = false;
   bool _isCheckingStatus = false;
+  bool _isLaunchingExternal = false;
+  bool _externalBrowserOpened = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     debugPrint('PaymentWebViewPage: инициализация с URL: ${widget.paymentUrl}');
 
     _controller = WebViewController()
@@ -38,13 +49,17 @@ class _PaymentWebViewPage extends State<PaymentWebViewPage> {
         NavigationDelegate(
           onPageStarted: (String url) {
             debugPrint('PaymentWebViewPage: onPageStarted: $url');
+            if (!mounted) return;
             setState(() {
               _loading = true;
               _error = '';
             });
+            _scheduleFallbackTimer();
           },
           onPageFinished: (String url) {
             debugPrint('PaymentWebViewPage: onPageFinished: $url');
+            _fallbackTimer?.cancel();
+
             final uri = Uri.tryParse(url);
             final status =
                 uri?.queryParameters['payment_status'] ??
@@ -53,6 +68,8 @@ class _PaymentWebViewPage extends State<PaymentWebViewPage> {
               Navigator.pop(context, true);
               return;
             }
+
+            if (!mounted) return;
             setState(() {
               _loading = false;
             });
@@ -61,35 +78,134 @@ class _PaymentWebViewPage extends State<PaymentWebViewPage> {
             debugPrint(
               'PaymentWebViewPage: WebResourceError: ${error.description}',
             );
-            setState(() {
-              _error = 'Ошибка загрузки: ${error.description}';
-              _loading = false;
-            });
+            _showWebViewError(
+              'Не удалось открыть оплату',
+            );
           },
           onNavigationRequest: (NavigationRequest request) {
             debugPrint(
               'PaymentWebViewPage: onNavigationRequest: ${request.url}',
             );
-            // Разрешаем все навигации внутри Yookassa
             return NavigationDecision.navigate;
           },
         ),
       );
 
+    _loadPaymentUrl();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _fallbackTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        _externalBrowserOpened &&
+        !_paymentCompleted) {
+      _checkPaymentStatus(silent: true);
+    }
+  }
+
+  void _loadPaymentUrl() {
     try {
       debugPrint('PaymentWebViewPage: загружаем URL...');
+      _scheduleFallbackTimer();
       _controller.loadRequest(Uri.parse(widget.paymentUrl));
       debugPrint('PaymentWebViewPage: loadRequest выполнен');
     } catch (e) {
       debugPrint('PaymentWebViewPage: ошибка при loadRequest: $e');
-      setState(() {
-        _error = 'Ошибка: $e';
-        _loading = false;
-      });
+      _showWebViewError(
+        'Не удалось подготовить страницу оплаты',
+      );
     }
   }
 
-  Future<void> _checkPaymentStatus() async {
+  void _scheduleFallbackTimer() {
+    _fallbackTimer?.cancel();
+    _fallbackTimer = Timer(_webViewFallbackTimeout, () {
+      if (!_loading || _paymentCompleted || _externalBrowserOpened) {
+        return;
+      }
+      _showWebViewError(
+        'Страница оплаты не открылась',
+      );
+    });
+  }
+
+  void _showWebViewError(String message) {
+    _fallbackTimer?.cancel();
+
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _error = '$message\n\nПопробуйте оплатить через браузер';
+    });
+  }
+
+  Future<void> _openInBrowser({bool showErrorSnackBar = true}) async {
+    if (_isLaunchingExternal) return;
+
+    final uri = Uri.tryParse(widget.paymentUrl);
+    if (uri == null) {
+      if (showErrorSnackBar) {
+        _showSnackBar('Ссылка на оплату некорректна', isError: true);
+      }
+      return;
+    }
+
+    setState(() {
+      _isLaunchingExternal = true;
+    });
+
+    try {
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!mounted) return;
+
+      if (launched) {
+        _externalBrowserOpened = true;
+        _showSnackBar('Оплата открыта в браузере');
+      } else if (showErrorSnackBar) {
+        _showSnackBar('Не удалось открыть браузер', isError: true);
+      }
+    } catch (e) {
+      if (mounted && showErrorSnackBar) {
+        _showSnackBar('Не удалось открыть браузер', isError: true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLaunchingExternal = false;
+        });
+      }
+    }
+  }
+
+  void _showSnackBar(String message, {bool isError = false}) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: AppColors.white,
+        content: Text(
+          message,
+          style: AppText.medium_14.copyWith(
+            color: isError ? AppColors.error : AppColors.brown,
+          ),
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _checkPaymentStatus({bool silent = false}) async {
     if (_isCheckingStatus) return;
 
     setState(() {
@@ -108,28 +224,149 @@ class _PaymentWebViewPage extends State<PaymentWebViewPage> {
       debugPrint('PaymentWebViewPage: статус платежа: $status');
 
       if (status == 'paid' || status == 'succeeded') {
-        debugPrint('PaymentWebViewPage: оплата подтверждена! закрываем');
         setState(() {
           _paymentCompleted = true;
           _isCheckingStatus = false;
         });
-
-        if (mounted) {
-          Navigator.pop(context, true);
-        }
-      } else {
-        setState(() {
-          _error = 'Платёж не завершён. Статус: ${status ?? 'unknown'}';
-          _isCheckingStatus = false;
-        });
+        Navigator.pop(context, true);
+        return;
       }
+
+      setState(() {
+        _isCheckingStatus = false;
+        if (!silent) {
+          _error = 'Платёж не завершён. Статус: ${status ?? 'unknown'}';
+        }
+      });
     } catch (e) {
       debugPrint('PaymentWebViewPage: ошибка при проверке статуса: $e');
+      if (!mounted) return;
       setState(() {
-        _error = 'Ошибка: $e';
         _isCheckingStatus = false;
+        if (!silent) {
+          _error = 'Ошибка: $e';
+        }
       });
     }
+  }
+
+  Widget _buildErrorView() {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        child: Column(
+          children: [
+            SizedBox(
+              height: 320,
+              child: Image.asset('assets/images/error.png'),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _error,
+              textAlign: TextAlign.center,
+              style: AppText.medium_16.copyWith(color: AppColors.black),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _isLaunchingExternal ? null : _openInBrowser,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  backgroundColor: AppColors.brown,
+                ),
+                child: _isLaunchingExternal
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            AppColors.white,
+                          ),
+                        ),
+                      )
+                    : Text(
+                        'Открыть в браузере',
+                        style: AppText.semibold_18.copyWith(
+                          color: AppColors.white,
+                        ),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _isCheckingStatus ? null : () => _checkPaymentStatus(),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  backgroundColor: AppColors.white,
+                  foregroundColor: AppColors.brown,
+                  side: const BorderSide(
+                    color: AppColors.brown,
+                    width: 1.5,
+                  ),
+                ),
+                icon: _isCheckingStatus
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            AppColors.brown,
+                          ),
+                        ),
+                      )
+                    : const Icon(Icons.check_circle_outline),
+                label: Text(
+                  _isCheckingStatus ? 'Проверка...' : 'Проверить оплату',
+                  style: AppText.semibold_18.copyWith(
+                    color: AppColors.brown,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () {
+                  setState(() {
+                    _error = '';
+                    _loading = true;
+                  });
+                  _loadPaymentUrl();
+                },
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  side: const BorderSide(
+                    color: AppColors.brown,
+                    width: 1.5,
+                  ),
+                ),
+                child: Text(
+                  'Повторить попытку',
+                  style: AppText.semibold_18.copyWith(
+                    color: AppColors.brown,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -139,62 +376,14 @@ class _PaymentWebViewPage extends State<PaymentWebViewPage> {
         title: const Text('Оплата'),
         leading: IconButton(
           onPressed: () {
-            debugPrint('PaymentWebViewPage: пользователь нажал закрыть');
+            debugPrint('PaymentWebViewPage: закрыть');
             Navigator.pop(context, false);
           },
           icon: const Icon(Icons.close),
         ),
       ),
       body: _error.isNotEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    height: 500,
-                    child: Image.asset('assets/images/error.png'),
-                  ),
-                  const SizedBox(height: 16),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                    child: Text(
-                      _error,
-                      textAlign: TextAlign.center,
-                      style: AppText.medium_16,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Padding(
-                    padding: EdgeInsetsGeometry.symmetric(horizontal: 30),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton(
-                        onPressed: () {
-                          setState(() {
-                            _error = '';
-                            _loading = true;
-                          });
-                          _controller.loadRequest(Uri.parse(widget.paymentUrl));
-                        },
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                          side: BorderSide(color: AppColors.brown, width: 1.5),
-                        ),
-                        child: Text(
-                          'Повторить попытку',
-                          style: AppText.semibold_18.copyWith(
-                            color: AppColors.brown,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            )
+          ? _buildErrorView()
           : Stack(
               children: [
                 WebViewWidget(controller: _controller),
@@ -203,7 +392,11 @@ class _PaymentWebViewPage extends State<PaymentWebViewPage> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        CircularProgressIndicator(),
+                        CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            AppColors.brown,
+                          ),
+                        ),
                         SizedBox(height: 16),
                         Text(
                           'Загрузка платёжной страницы...',
@@ -212,7 +405,6 @@ class _PaymentWebViewPage extends State<PaymentWebViewPage> {
                       ],
                     ),
                   ),
-                // Кнопка проверки статуса в низу
                 if (!_loading && !_paymentCompleted)
                   Positioned(
                     bottom: 0,
@@ -225,35 +417,59 @@ class _PaymentWebViewPage extends State<PaymentWebViewPage> {
                         vertical: 10,
                       ),
                       child: SafeArea(
-                        child: SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: _isCheckingStatus
-                                ? null
-                                : _checkPaymentStatus,
-                            icon: _isCheckingStatus
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.check_circle_sharp, size: 25,),
-                            label: Text(
-                              _isCheckingStatus
-                                  ? 'Проверка...'
-                                  : 'Проверить статус платежа',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_externalBrowserOpened) ...[
+                              Text(
+                                'Если оплата открыта в браузере, после возврата статус проверится автоматически.',
+                                textAlign: TextAlign.center,
+                                style: AppText.medium_12.copyWith(
+                                  color: AppColors.grey,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                            ],
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: _isCheckingStatus
+                                    ? null
+                                    : () => _checkPaymentStatus(),
+                                icon: _isCheckingStatus
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                            AppColors.white,
+                                          ),
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.check_circle_sharp,
+                                        size: 25,
+                                      ),
+                                label: Text(
+                                  _isCheckingStatus
+                                      ? 'Проверка...'
+                                      : 'Проверить статус платежа',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.brown,
+                                  foregroundColor: AppColors.white,
+                                  textStyle: AppText.medium_16,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 15,
+                                  ),
+                                ),
+                              ),
                             ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.brown,
-                              foregroundColor: AppColors.white,
-                              textStyle: AppText.medium_16,
-                              padding: const EdgeInsets.symmetric(vertical: 15),
-                            ),
-                          ),
+                          ],
                         ),
                       ),
                     ),

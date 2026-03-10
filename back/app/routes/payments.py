@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import base64
 import json
+import random
 import uuid
 from datetime import datetime
 from typing import Optional
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -36,9 +37,16 @@ class PaymentCallbackRequest(BaseModel):
     object: dict
 
 
+class UpdateOrderAddressRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    address: str = Field(min_length=5, max_length=500)
+
+
 def _generate_order_number(cur) -> str:
-    for _ in range(10):
-        candidate = f"ORD-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+    for _ in range(20):
+        # YYYYMMDD + 6 случайных цифр
+        candidate = f"{datetime.utcnow().strftime('%Y%m%d')}{random.randint(0, 999999):06d}"
         exists = cur.execute(
             "SELECT id FROM orders WHERE order_number = ?",
             (candidate,),
@@ -170,6 +178,186 @@ def _format_payment_row(row):
         "paid_at": row["paid_at"],
         "failed_at": row["failed_at"],
         "expires_at": datetime.utcfromtimestamp(expires_at).strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+
+def _format_order_summary_row(row):
+    return {
+        "order_id": int(row["id"]),
+        "order_number": row["order_number"],
+        "status": row["status"],
+        "payment_status": row["payment_status"],
+        "order_type": row["order_type"],
+        "total_price": float(row["total_price"]),
+        "items_count": int(row["items_count"] or 0),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def _get_latest_payment_for_order(cur, order_id: int):
+    return cur.execute(
+        """
+        SELECT
+            p.*,
+            pm.code AS payment_method_code,
+            pm.name AS payment_method_name
+        FROM payments p
+        LEFT JOIN payment_methods pm ON pm.id = p.payment_method_id
+        WHERE p.order_id = ?
+        ORDER BY p.id DESC
+        LIMIT 1
+        """,
+        (order_id,),
+    ).fetchone()
+
+
+def _get_order_refunds(cur, payment_id: int) -> list[dict]:
+    refunds = cur.execute(
+        """
+        SELECT
+            r.id,
+            r.amount,
+            r.reason,
+            r.status,
+            r.processed_at,
+            r.created_at
+        FROM refunds r
+        WHERE r.payment_id = ?
+        ORDER BY r.created_at DESC, r.id DESC
+        """,
+        (payment_id,),
+    ).fetchall()
+    return [
+        {
+            "id": int(refund["id"]),
+            "amount": float(refund["amount"]),
+            "reason": refund["reason"],
+            "status": refund["status"],
+            "processed_at": refund["processed_at"],
+            "created_at": refund["created_at"],
+        }
+        for refund in refunds
+    ]
+
+
+def _get_order_status_history(cur, order_id: int) -> list[dict]:
+    rows = cur.execute(
+        """
+        SELECT
+            osh.id,
+            osh.old_status,
+            osh.new_status,
+            osh.created_at,
+            e.id AS employee_id,
+            u.full_name AS employee_name
+        FROM order_status_history osh
+        LEFT JOIN employees e ON e.id = osh.changed_by_employee_id
+        LEFT JOIN users u ON u.id = e.user_id
+        WHERE osh.order_id = ?
+        ORDER BY osh.created_at ASC, osh.id ASC
+        """,
+        (order_id,),
+    ).fetchall()
+    return [
+        {
+            "id": int(row["id"]),
+            "old_status": row["old_status"],
+            "new_status": row["new_status"],
+            "changed_at": row["created_at"],
+            "changed_by": {
+                "employee_id": int(row["employee_id"]) if row["employee_id"] is not None else None,
+                "employee_name": row["employee_name"],
+            },
+        }
+        for row in rows
+    ]
+
+
+def _get_order_items_details(cur, order_id: int) -> list[dict]:
+    rows = cur.execute(
+        """
+        SELECT
+            oi.*,
+            ps.name AS pot_size_name,
+            pm.name AS pot_material_name,
+            pc.name AS pot_color_name,
+            p.image_url AS current_image_url
+        FROM order_items oi
+        LEFT JOIN pot_sizes ps ON ps.id = oi.pot_size_id
+        LEFT JOIN pot_materials pm ON pm.id = oi.pot_material_id
+        LEFT JOIN pot_colors pc ON pc.id = oi.pot_color_id
+        LEFT JOIN products p ON p.id = oi.product_id
+        WHERE oi.order_id = ?
+        ORDER BY oi.id ASC
+        """,
+        (order_id,),
+    ).fetchall()
+    return [
+        {
+            "id": int(row["id"]),
+            "product_id": int(row["product_id"]) if row["product_id"] is not None else None,
+            "plant_id": int(row["product_id"]) if row["product_id"] is not None else None,
+            "name": row["product_name_snapshot"],
+            "description": row["product_description_snapshot"],
+            "quantity": int(row["quantity"]),
+            "returned_quantity": int(row["returned_quantity"]),
+            "product_unit_price": float(row["product_unit_price"]),
+            "pot_unit_price": float(row["pot_unit_price"]),
+            "discount_amount": float(row["discount_amount"]),
+            "total_price": float(row["total_price"]),
+            "image_url": row["current_image_url"],
+            "pot": {
+                "size_id": int(row["pot_size_id"]) if row["pot_size_id"] is not None else None,
+                "size_code": row["pot_size_name"],
+                "size_name": row["pot_size_name"],
+                "material_id": int(row["pot_material_id"]) if row["pot_material_id"] is not None else None,
+                "material_name": row["pot_material_name"],
+                "color_id": int(row["pot_color_id"]) if row["pot_color_id"] is not None else None,
+                "color_name": row["pot_color_name"],
+            },
+            "created_at": row["created_at"],
+        }
+        for row in rows
+    ]
+
+
+def _format_order_detail(cur, order_row, payment_row):
+    payment_data = None
+    refunds: list[dict] = []
+    if payment_row:
+        payment_data = _format_payment_row(payment_row)
+        payment_data["payment_method_code"] = payment_row["payment_method_code"]
+        payment_data["payment_method_name"] = payment_row["payment_method_name"]
+        refunds = _get_order_refunds(cur, int(payment_row["id"]))
+
+    items = _get_order_items_details(cur, int(order_row["id"]))
+    history = _get_order_status_history(cur, int(order_row["id"]))
+
+    return {
+        "order_id": int(order_row["id"]),
+        "order_number": order_row["order_number"],
+        "status": order_row["status"],
+        "payment_status": order_row["payment_status"],
+        "order_type": order_row["order_type"],
+        "store_id": int(order_row["store_id"]),
+        "address": order_row["address_snapshot"],
+        "comment": order_row["comment"],
+        "subtotal": float(order_row["subtotal"]),
+        "delivery_fee": float(order_row["delivery_fee"]),
+        "discount_amount": float(order_row["discount_amount"]),
+        "total_price": float(order_row["total_price"]),
+        "assigned_employee_id": (
+            int(order_row["assigned_employee_id"])
+            if order_row["assigned_employee_id"] is not None
+            else None
+        ),
+        "created_at": order_row["created_at"],
+        "updated_at": order_row["updated_at"],
+        "items": items,
+        "payment": payment_data,
+        "refunds": refunds,
+        "status_history": history,
     }
 
 
@@ -384,7 +572,11 @@ def _refresh_payment_status(cur, settings, payment_row) -> str:
     if not _yookassa_enabled(settings) or not external_payment_id:
         return payment_row["status"]
 
-    remote_payment = _fetch_yookassa_payment(settings, str(external_payment_id))
+    try:
+        remote_payment = _fetch_yookassa_payment(settings, str(external_payment_id))
+    except HTTPException:
+        return payment_row["status"]
+
     mapped_status = _map_yookassa_status(remote_payment.get("status"))
 
     if mapped_status == "paid" and payment_row["status"] != "paid":
@@ -786,6 +978,167 @@ def user_check_payment_link_status(link_id: int, user=Depends(get_current_user))
         raise HTTPException(status_code=403, detail="Access denied")
 
     return {"success": True, "data": _format_payment_row(row)}
+
+
+@router.get("/orders", summary="Get User Orders")
+def get_user_orders(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    include_payment: bool = Query(default=False),
+    user=Depends(get_current_user),
+):
+    """Краткий список заказов текущего пользователя по session token."""
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        total_row = cur.execute(
+            "SELECT COUNT(*) AS total FROM orders WHERE user_id = ?",
+            (int(user["id"]),),
+        ).fetchone()
+        total_orders = int(total_row["total"]) if total_row else 0
+
+        if total_orders == 0:
+            return {
+                "success": True,
+                "data": {
+                    "items": [],
+                    "pagination": {
+                        "limit": limit,
+                        "offset": offset,
+                        "count": 0,
+                        "total": 0,
+                    },
+                },
+            }
+
+        rows = cur.execute(
+            """
+            SELECT
+                o.*,
+                COUNT(oi.id) AS items_count
+            FROM orders o
+            LEFT JOIN order_items oi ON oi.order_id = o.id
+            WHERE o.user_id = ?
+            GROUP BY o.id
+            ORDER BY o.created_at DESC, o.id DESC
+            LIMIT ? OFFSET ?
+            """,
+            (int(user["id"]), limit, offset),
+        ).fetchall()
+
+        orders = []
+        for row in rows:
+            order_data = _format_order_summary_row(row)
+            if include_payment:
+                payment = _get_latest_payment_for_order(cur, int(row["id"]))
+                order_data["payment"] = _format_payment_row(payment) if payment else None
+            else:
+                order_data["payment"] = {
+                    "status": row["payment_status"],
+                    "amount": float(row["total_price"]),
+                }
+            orders.append(order_data)
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "data": {
+            "items": orders,
+            "pagination": {
+                "limit": limit,
+                "offset": offset,
+                "count": len(orders),
+                "total": total_orders,
+            },
+        },
+    }
+
+
+@router.get("/orders/{order_id}", summary="Get User Order Details")
+def get_user_order_details(order_id: int, user=Depends(get_current_user)):
+    """Детальная информация по заказу текущего пользователя."""
+    settings = get_settings()
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        order = cur.execute(
+            """
+            SELECT *
+            FROM orders
+            WHERE id = ? AND user_id = ?
+            LIMIT 1
+            """,
+            (order_id, int(user["id"])),
+        ).fetchone()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        payment = _get_latest_payment_for_order(cur, order_id)
+        if payment:
+            _refresh_payment_status(cur, settings, payment)
+            payment = _get_latest_payment_for_order(cur, order_id)
+
+        payload = _format_order_detail(cur, order, payment)
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {"success": True, "data": payload}
+
+
+@router.put("/orders/{order_id}/address", summary="Update User Order Address")
+def update_user_order_address(
+    order_id: int,
+    payload: UpdateOrderAddressRequest,
+    user=Depends(get_current_user),
+):
+    """Обновляет адрес доставки для заказа текущего пользователя."""
+    address = clean_text(payload.address, max_len=500)
+    if len(address) < 5:
+        raise HTTPException(status_code=400, detail="Address must be between 5 and 500 characters")
+
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        order = cur.execute(
+            """
+            SELECT *
+            FROM orders
+            WHERE id = ? AND user_id = ?
+            LIMIT 1
+            """,
+            (order_id, int(user["id"])),
+        ).fetchone()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        if order["order_type"] != "delivery":
+            raise HTTPException(status_code=400, detail="Address is available only for delivery orders")
+
+        if order["status"] in {"cancelled", "completed", "delivered"}:
+            raise HTTPException(status_code=400, detail="Order address can no longer be updated")
+
+        cur.execute(
+            """
+            UPDATE orders
+            SET address_snapshot = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (address, order_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "data": {
+            "order_id": order_id,
+            "address": address,
+        },
+    }
 
 
 @router.get("/status/order/{order_id}", summary="Check Order Payment Status")

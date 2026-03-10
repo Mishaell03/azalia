@@ -18,6 +18,10 @@ class ApiConfig {
   static String paymentCancel(int linkId) => '$baseURL/payments/link/$linkId/cancel';
   static String paymentLinkStatus(int linkId) => '$baseURL/payments/status/link/$linkId';
   static String orderStatus(int orderId) => '$baseURL/payments/status/order/$orderId';
+  static String orders({int limit = 20, int offset = 0}) =>
+      '$baseURL/payments/orders?limit=$limit&offset=$offset';
+  static String orderDetails(int orderId) => '$baseURL/payments/orders/$orderId';
+  static String orderAddress(int orderId) => '$baseURL/payments/orders/$orderId/address';
 
   // auth
   static const String authVerify = '$baseURL/auth/verify';

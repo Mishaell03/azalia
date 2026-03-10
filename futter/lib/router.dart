@@ -8,8 +8,11 @@ import 'package:azalia/pages/admin/widgets/products/cards/procurement.dart';
 import 'package:azalia/pages/admin/widgets/products/cards/warehouse.dart';
 import 'package:azalia/pages/payment/payment_webview.dart';
 import 'package:azalia/pages/payment/paymentpage.dart';
+import 'package:azalia/pages/profile/orders/order_details_page.dart';
+import 'package:azalia/pages/profile/orders/order_history_page.dart';
 import 'package:azalia/pages/start/startpage.dart';
 import 'package:azalia/pages/wishlist/wishlistpage.dart';
+import 'package:azalia/components/colors.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
 
@@ -44,6 +47,34 @@ class AppRouter {
         path: '/profile',
         name: 'profile',
         builder: (context, state) => const ProfilePage(),
+        routes: [
+          GoRoute(
+            path: 'orders',
+            name: 'profileOrders',
+            builder: (context, state) => const OrderHistoryPage(),
+          ),
+          GoRoute(
+            path: 'orders/:orderId',
+            name: 'profileOrderDetails',
+            builder: (context, state) {
+              final orderId = int.tryParse(
+                state.pathParameters['orderId'] ?? '',
+              );
+              if (orderId == null) {
+                return Scaffold(
+                  backgroundColor: AppColors.white,
+                  appBar: AppBar(
+                    backgroundColor: AppColors.white,
+                    foregroundColor: AppColors.black,
+                    title: const Text('Ошибка'),
+                  ),
+                  body: const Center(child: Text('Некорректный номер заказа')),
+                );
+              }
+              return OrderDetailsPage(orderId: orderId);
+            },
+          ),
+        ],
       ),
       GoRoute(
         path: '/love',
@@ -78,7 +109,7 @@ class AppRouter {
         path: '/payment/webview',
         name: 'payment_webview',
         builder: (context, state) {
-          final args = state.extra as PaymentRouteArgs;
+          final args = state.extra as PaymentWebViewArgs;
           return PaymentWebViewPage(
             paymentUrl: args.paymentUrl,
             paymentLinkId: args.paymentLinkId,
@@ -134,22 +165,28 @@ class AppRouter {
 }
 
 class PaymentRouteArgs {
-  final int paymentLinkId;
-  final int orderId;
-  final String paymentUrl;
   final double totalPrice;
   final String? address;
   final String paymentMethod;
+  final List<int> selectedItemIds;
   final List<PaymentItemArgs> items;
 
   PaymentRouteArgs({
-    required this.paymentLinkId,
-    required this.orderId,
-    required this.paymentUrl,
     required this.totalPrice,
     this.address,
     required this.paymentMethod,
+    required this.selectedItemIds,
     required this.items,
+  });
+}
+
+class PaymentWebViewArgs {
+  final int paymentLinkId;
+  final String paymentUrl;
+
+  PaymentWebViewArgs({
+    required this.paymentLinkId,
+    required this.paymentUrl,
   });
 }
 

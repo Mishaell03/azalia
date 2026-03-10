@@ -1,4 +1,3 @@
-import 'package:azalia/backend/controllers/payment_coordinator.dart';
 import 'package:azalia/components/widgets/data_pages.dart';
 import 'package:azalia/pages/cart/widgets/unauthorized.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +12,7 @@ import 'package:azalia/pages/cart/widgets/cards.dart';
 import 'package:azalia/pages/cart/widgets/out_of_stock.dart';
 import 'package:azalia/pages/cart/widgets/header.dart';
 import 'package:azalia/backend/models/cart.dart';
+import 'package:azalia/router.dart';
 import 'package:go_router/go_router.dart';
 
 class CartPage extends StatefulWidget {
@@ -277,47 +277,39 @@ class _CartPageState extends State<CartPage> {
     }
 
     try {
-      debugPrint('_proceedToCheckout: Оформление заказа');
-      
-      if (!context.mounted) {
-        debugPrint('_proceedToCheckout: контекст не смонтирован');
-        return;
-      }
-      
-      final coordinator = PaymentCoordinator(context);
-      debugPrint('_proceedToCheckout: создан PaymentCoordinator');
-      
-      // Передаем список выбранных товаров
-      final selectedItemIds = _selectedItemIds.toList();
-      
-      await coordinator.startPaymentFlow(
-        address: 'Гарабурды 16 дом 8', // позже экран ввода
-        paymentMethod: 'card',
-        selectedItemIds: selectedItemIds,
-      );
+      if (!context.mounted) return;
 
-      debugPrint('_proceedToCheckout: после startPaymentFlow');
-      
-      // После успешной оплаты
-      if (mounted) {
-        await _loadCart();
-      }
+      final selectedItemIds = _selectedItemIds.toList();
+      final paymentItems = selectedItems
+          .map(
+            (item) => PaymentItemArgs(
+              plantName: item.plant.name,
+              quantity: item.quantity,
+              plantPrice: item.plantUnitPrice,
+              potPrice: item.potUnitPrice,
+              itemTotal: item.totalPrice,
+            ),
+          )
+          .toList();
+
+      context.pushNamed(
+        'payment',
+        extra: PaymentRouteArgs(
+          totalPrice: _totalPrice,
+          address: null,
+          paymentMethod: 'card',
+          selectedItemIds: selectedItemIds,
+          items: paymentItems,
+        ),
+      );
     } catch (e, stack) {
       debugPrint('_proceedToCheckout error: $e');
       debugPrint('Stack: $stack');
       if (mounted) {
-        String errorMessage = e.toString().replaceAll('Exception: ', '').replaceAll('ApiException(status: 0, message: ', '').replaceAll(')', '');
-        
-        // проблема с подключением -> чекнуть впн или интернет
-        if (errorMessage.contains('Не удалось подключиться') || 
-            errorMessage.contains('Timeout') ||
-            errorMessage.contains('connection') ||
-            errorMessage.contains('Ошибка сети')) {
-          errorMessage += '\n\nПожалуйста, проверьте:\n'
-              '• Подключение к интернету\n'
-              '• Отключен ли VPN';
-        }
-        
+        final errorMessage = e.toString()
+            .replaceAll('Exception: ', '')
+            .replaceAll('ApiException(status: 0, message: ', '')
+            .replaceAll(')', '');
         _showSnackBar(errorMessage, isError: true);
       }
     }
@@ -379,8 +371,7 @@ class _CartPageState extends State<CartPage> {
                 onQuantityChanged: _onQuantityChanged,
                 onSelectionChanged: _onSelectionChanged,
               ),
-            )
-            .toList(),
+            ),
 
         if (_outOfStockItems.isNotEmpty) ...[
           _buildOutOfStockSection(),
@@ -388,8 +379,7 @@ class _CartPageState extends State<CartPage> {
               .map(
                 (item) =>
                     OutOfStockCard(item: item, onRemove: _removeOutOfStockItem),
-              )
-              .toList(),
+              ),
         ],
       ],
     );

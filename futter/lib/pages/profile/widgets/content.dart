@@ -14,6 +14,7 @@ class AppProfileContent extends StatelessWidget {
   final String formattedPhone;
   final VoidCallback onLogout;
   final VoidCallback onSettings;
+  final VoidCallback onOrderHistory;
   final VoidCallback onHelp;
   final VoidCallback onAbout;
 
@@ -26,6 +27,7 @@ class AppProfileContent extends StatelessWidget {
     required this.formattedPhone,
     required this.onLogout,
     required this.onSettings,
+    required this.onOrderHistory,
     required this.onHelp,
     required this.onAbout,
   });
@@ -127,6 +129,12 @@ class AppProfileContent extends StatelessWidget {
                     },
                   ),
                 ],
+                _buildDivider(),
+                AppProfileSetting(
+                  icon: Icons.history_rounded,
+                  title: 'История заказов',
+                  onTap: onOrderHistory,
+                ),
                 _buildDivider(),
                 AppProfileSetting(
                   icon: Icons.settings,

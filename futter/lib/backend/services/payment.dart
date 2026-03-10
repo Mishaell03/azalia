@@ -80,4 +80,18 @@ class PaymentService {
 
     return OrderStatusResponse.fromJson(data);
   }
+
+  Future<String> updateOrderAddress(int orderId, String address) async {
+    final response = await _api.put(
+      ApiConfig.orderAddress(orderId),
+      body: {'address': address},
+    );
+
+    final data = response['data'] as Map<String, dynamic>?;
+    if (data == null) {
+      throw ApiException('Order address update data is missing');
+    }
+
+    return data['address']?.toString() ?? address;
+  }
 }

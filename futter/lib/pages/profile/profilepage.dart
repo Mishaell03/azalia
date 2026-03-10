@@ -77,15 +77,18 @@ class _ProfilePageState extends State<ProfilePage> {
     String formatted = '';
     if (cleaned.isNotEmpty) {
       formatted = '+7';
-      if (cleaned.length > 1)
+      if (cleaned.length > 1) {
         formatted +=
-        ' (${cleaned.substring(1, cleaned.length > 4 ? 4 : cleaned.length)}';
-      if (cleaned.length > 4)
+            ' (${cleaned.substring(1, cleaned.length > 4 ? 4 : cleaned.length)}';
+      }
+      if (cleaned.length > 4) {
         formatted +=
-        ') ${cleaned.substring(4, cleaned.length > 7 ? 7 : cleaned.length)}';
-      if (cleaned.length > 7)
+            ') ${cleaned.substring(4, cleaned.length > 7 ? 7 : cleaned.length)}';
+      }
+      if (cleaned.length > 7) {
         formatted +=
-        '-${cleaned.substring(7, cleaned.length > 9 ? 9 : cleaned.length)}';
+            '-${cleaned.substring(7, cleaned.length > 9 ? 9 : cleaned.length)}';
+      }
       if (cleaned.length > 9) formatted += '-${cleaned.substring(9)}';
     }
     return formatted;
@@ -171,9 +174,10 @@ class _ProfilePageState extends State<ProfilePage> {
         _nameController.text = updatedUser.name;
         _phoneController.text = _formatPhoneNumber(updatedUser.phone);
 
-        // Очищаем выбранный файл после успешной загрузки
+        // читска файла после успешной загрузки
         _selectedImageFile = null;
 
+        if (!mounted) return;
         showDialog(
           context: context,
           builder: (context) =>
@@ -261,9 +265,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 onPressed: () async {
                   Navigator.of(context).pop();
                   await _sessionService.clearSession();
-                  if (mounted) {
-                    context.go('/auth');
-                  }
+                  if (!context.mounted) return;
+                  context.go('/auth');
                 },
                 child: Text(
                   'Выйти',
@@ -439,6 +442,7 @@ class _ProfilePageState extends State<ProfilePage> {
               formattedName: _nameController.text,
               formattedPhone: _phoneController.text,
               onLogout: _logout,
+              onOrderHistory: () => context.push('/profile/orders'),
               onSettings: () => _showSettings(context),
               onHelp: () => _showHelp(context),
               onAbout: () => _showAbout(context),
