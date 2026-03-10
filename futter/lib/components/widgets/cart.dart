@@ -4,6 +4,7 @@ import 'package:azalia/components/colors.dart';
 import 'package:azalia/components/text_styles.dart';
 import 'package:azalia/backend/models/plant.dart';
 import 'package:azalia/backend/services/wishlist.dart';
+import 'package:azalia/backend/services/session.dart';
 import 'package:azalia/pages/error/app_errors.dart';
 
 class CartButton extends StatefulWidget {
@@ -34,12 +35,15 @@ class _CartButtonState extends State<CartButton> {
   bool _isInCart = false;
   bool _isLoading = false;
   late CartWishlistService _service;
+  final SessionService _sessionService = SessionService();
 
   @override
   void initState() {
     super.initState();
     _service = CartWishlistService(plant: widget.plant);
-    _loadInitialState();
+    if (_sessionService.hasActiveSession) {
+      _loadInitialState();
+    }
   }
 
   void _loadInitialState() async {
@@ -149,7 +153,8 @@ class _CartButtonState extends State<CartButton> {
   @override
   Widget build(BuildContext context) {
     final activeColor = widget.activeColor ?? AppColors.brown;
-    final inactiveColor = widget.inactiveColor ?? AppColors.white_dark.withOpacity(0.6);
+    final inactiveColor =
+        widget.inactiveColor ?? AppColors.white_dark.withValues(alpha: 0.6);
 
     return GestureDetector(
       onTap: _toggleCart,
@@ -158,7 +163,9 @@ class _CartButtonState extends State<CartButton> {
         height: widget.size,
         decoration: widget.showBackground
             ? BoxDecoration(
-                color: _isInCart ? activeColor.withOpacity(0.8) : inactiveColor,
+                color: _isInCart
+                    ? activeColor.withValues(alpha: 0.8)
+                    : inactiveColor,
                 borderRadius: BorderRadius.circular(8),
               )
             : null,

@@ -4,6 +4,7 @@ import 'package:azalia/components/colors.dart';
 import 'package:azalia/components/text_styles.dart';
 import 'package:azalia/backend/models/plant.dart';
 import 'package:azalia/backend/services/wishlist.dart';
+import 'package:azalia/backend/services/session.dart';
 import 'package:azalia/pages/error/app_errors.dart';
 
 class FavoriteButton extends StatefulWidget {
@@ -32,12 +33,15 @@ class _FavoriteButtonState extends State<FavoriteButton> {
   bool _isFavorite = false;
   bool _isLoading = false;
   late CartWishlistService _service;
+  final SessionService _sessionService = SessionService();
 
   @override
   void initState() {
     super.initState();
     _service = CartWishlistService(plant: widget.plant);
-    _loadInitialState();
+    if (_sessionService.hasActiveSession) {
+      _loadInitialState();
+    }
   }
 
   void _loadInitialState() async {
@@ -114,7 +118,8 @@ class _FavoriteButtonState extends State<FavoriteButton> {
   @override
   Widget build(BuildContext context) {
     final activeColor = widget.activeColor ?? AppColors.brown;
-    final inactiveColor = widget.inactiveColor ?? AppColors.white.withOpacity(0.9);
+    final inactiveColor =
+        widget.inactiveColor ?? AppColors.white.withValues(alpha: 0.9);
 
     return GestureDetector(
       onTap: _toggleFavorite,
@@ -127,7 +132,7 @@ class _FavoriteButtonState extends State<FavoriteButton> {
           border: Border.all(color: AppColors.white),
           boxShadow: [
             BoxShadow(
-              color: AppColors.black.withOpacity(0.1),
+              color: AppColors.black.withValues(alpha: 0.1),
               blurRadius: 4,
               offset: const Offset(0, 1),
             ),

@@ -72,6 +72,27 @@ class WishlistService {
         .inWishlist;
   }
 
+  static Future<Set<int>> getWishlistPlantIds() async {
+    final response = await _api.get(ApiConfig.wishlist);
+    if (response['success'] != true) {
+      throw Exception(
+        response['error'] ?? 'Не удалось загрузить список желаний',
+      );
+    }
+
+    final data = response['data'] as Map<String, dynamic>? ?? const {};
+    final items = data['items'] as List? ?? const [];
+
+    return items
+        .map((item) {
+          final raw = item as Map<String, dynamic>;
+          final plantId = raw['plant_id'] ?? raw['product_id'];
+          return plantId is num ? plantId.toInt() : null;
+        })
+        .whereType<int>()
+        .toSet();
+  }
+
   static Future<WishlistItem> _hydrateWishlistItem(WishlistItem item) async {
     try {
       final plant = await PlantService.getPlantById(item.plantId);
@@ -87,11 +108,84 @@ class CartWishlistService {
   final Plant plant;
   final SessionService _sessionService = SessionService();
 
+  static String? _cachedSessionToken;
+  static Set<int>? _wishlistPlantIds;
+  static Set<int>? _cartPlantIds;
+  static Future<Set<int>>? _wishlistPlantIdsFuture;
+  static Future<Set<int>>? _cartPlantIdsFuture;
+
   CartWishlistService({required this.plant});
 
   /// Проверить, авторизован ли пользователь
   Future<bool> isUserLoggedIn() async {
-    return _sessionService.isLoggedIn && _sessionService.isTokenValid;
+    return _sessionService.hasActiveSession;
+  }
+
+  static void invalidateCache() {
+    _cachedSessionToken = null;
+    _wishlistPlantIds = null;
+    _cartPlantIds = null;
+    _wishlistPlantIdsFuture = null;
+    _cartPlantIdsFuture = null;
+  }
+
+  void _syncCacheWithSession() {
+    final token = _sessionService.sessionToken;
+    if (!_sessionService.hasActiveSession || token == null || token.isEmpty) {
+      invalidateCache();
+      return;
+    }
+
+    if (_cachedSessionToken != token) {
+      invalidateCache();
+      _cachedSessionToken = token;
+    }
+  }
+
+  Future<Set<int>> _getWishlistPlantIds() async {
+    _syncCacheWithSession();
+    if (!_sessionService.hasActiveSession) {
+      return const <int>{};
+    }
+    if (_wishlistPlantIds != null) {
+      return _wishlistPlantIds!;
+    }
+
+    _wishlistPlantIdsFuture ??= WishlistService.getWishlistPlantIds();
+    try {
+      _wishlistPlantIds = await _wishlistPlantIdsFuture!;
+      return _wishlistPlantIds!;
+    } catch (e) {
+      if (e.toString().contains('Unauthorized')) {
+        invalidateCache();
+      }
+      rethrow;
+    } finally {
+      _wishlistPlantIdsFuture = null;
+    }
+  }
+
+  Future<Set<int>> _getCartPlantIds() async {
+    _syncCacheWithSession();
+    if (!_sessionService.hasActiveSession) {
+      return const <int>{};
+    }
+    if (_cartPlantIds != null) {
+      return _cartPlantIds!;
+    }
+
+    _cartPlantIdsFuture ??= CartService.getCartPlantIds();
+    try {
+      _cartPlantIds = await _cartPlantIdsFuture!;
+      return _cartPlantIds!;
+    } catch (e) {
+      if (e.toString().contains('Unauthorized')) {
+        invalidateCache();
+      }
+      rethrow;
+    } finally {
+      _cartPlantIdsFuture = null;
+    }
   }
 
   // === ИЗБРАННОЕ ===
@@ -108,14 +202,17 @@ class CartWishlistService {
       if (currentlyInWishlist) {
         // debugPrint('CartWishlistService: Удаление из избранного');
         await WishlistService.removeFromWishlist(plant.id);
+        _wishlistPlantIds?.remove(plant.id);
       } else {
         // debugPrint('CartWishlistService: Добавление в избранное');
         await WishlistService.addToWishlist(plant.id);
+        (_wishlistPlantIds ??= <int>{}).add(plant.id);
       }
     } catch (e) {
       debugPrint('CartWishlistService: Ошибка избранного - $e');
       if (e.toString().contains('не авторизован') || 
           e.toString().contains('Unauthorized')) {
+        invalidateCache();
         throw Exception('не авторизован');
       } else if (e.toString().contains('Wishlist item not found')) {
         debugPrint('CartWishlistService: Элемент уже удален из избранного');
@@ -135,9 +232,8 @@ class CartWishlistService {
         return false;
       }
 
-      final result = await WishlistService.checkWishlist(plant.id);
-      // debugPrint('CartWishlistService: Статус избранного - $result');
-      return result;
+      final wishlistIds = await _getWishlistPlantIds();
+      return wishlistIds.contains(plant.id);
     } catch (e) {
       // debugPrint('CartWishlistService: Ошибка проверки избранного - $e');
       return false;
@@ -171,11 +267,13 @@ class CartWishlistService {
       );
 
       await CartService.addToCart(request);
+      (_cartPlantIds ??= <int>{}).add(plant.id);
       // debugPrint('CartWishlistService: Успешно добавлено в корзину');
     } catch (e) {
       debugPrint('CartWishlistService: Ошибка добавления в корзину - $e');
       if (e.toString().contains('не авторизован') || 
           e.toString().contains('Unauthorized')) {
+        invalidateCache();
         throw Exception('не авторизован');
       } else {
         throw Exception('ошибка добавления в корзину');
@@ -197,10 +295,8 @@ class CartWishlistService {
         return false;
       }
 
-      final cart = await CartService.getCart();
-      final isInCart = cart.items.any((item) => item.plantId == plant.id);
-      // debugPrint('CartWishlistService: Статус корзины - $isInCart');
-      return isInCart;
+      final cartIds = await _getCartPlantIds();
+      return cartIds.contains(plant.id);
     } catch (e) {
       // debugPrint('CartWishlistService: Ошибка проверки корзины - $e');
       return false;
@@ -211,6 +307,8 @@ class CartWishlistService {
   Future<void> removeFromCart(int cartItemId) async {
     try {
       await CartService.removeFromCart(cartItemId);
+      _cartPlantIds = null;
+      _cartPlantIdsFuture = null;
       debugPrint('CartWishlistService: Удалено из корзины');
     } catch (e) {
       debugPrint('CartWishlistService: Ошибка удаления из корзины - $e');
@@ -222,6 +320,8 @@ class CartWishlistService {
   Future<void> updateCartQuantity(int cartItemId, int quantity) async {
     try {
       await CartService.updateCartItem(cartItemId, quantity);
+      _cartPlantIds = null;
+      _cartPlantIdsFuture = null;
       debugPrint('CartWishlistService: Обновлено количество');
     } catch (e) {
       debugPrint('CartWishlistService: Ошибка обновления количества - $e');
@@ -259,12 +359,15 @@ class CartWishlistService {
           // Продолжаем удаление остальных записей даже если одна не удалилась
         }
       }
+
+      _cartPlantIds?.remove(plant.id);
       
       debugPrint('CartWishlistService: Все записи товара удалены из корзины');
     } catch (e) {
       debugPrint('CartWishlistService: Ошибка удаления всех записей из корзины - $e');
       if (e.toString().contains('не авторизован') || 
           e.toString().contains('Unauthorized')) {
+        invalidateCache();
         throw Exception('не авторизован');
       } else {
         throw Exception('ошибка удаления из корзины');

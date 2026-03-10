@@ -26,6 +26,11 @@ class SessionService {
   bool get isLoggedIn => _currentUser != null && _sessionToken != null;
   bool get isEmployee => _isEmployee;
   Position? get currentPosition => _currentPosition;
+  bool get hasActiveSession =>
+      _currentUser != null &&
+      _sessionToken != null &&
+      _sessionToken!.isNotEmpty &&
+      isTokenValid;
   bool get isTokenValid =>
       _tokenExpiresAt != null && _tokenExpiresAt!.isAfter(DateTime.now());
 
@@ -113,7 +118,7 @@ class SessionService {
   }
 
   Map<String, String> getAuthHeaders() {
-    if (!isLoggedIn || !isTokenValid) {
+    if (!hasActiveSession) {
       return {};
     }
 

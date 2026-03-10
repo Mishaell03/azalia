@@ -22,6 +22,25 @@ class CartService {
     return CartResponse(items: hydratedItems, summary: cart.summary);
   }
 
+  static Future<Set<int>> getCartPlantIds() async {
+    final response = await _api.get(ApiConfig.cartItems);
+    if (response['success'] != true) {
+      throw Exception(response['error'] ?? 'Ошибка загрузки корзины');
+    }
+
+    final data = response['data'] as Map<String, dynamic>? ?? const {};
+    final items = data['items'] as List? ?? const [];
+
+    return items
+        .map((item) {
+          final raw = item as Map<String, dynamic>;
+          final plantId = raw['plant_id'] ?? raw['product_id'];
+          return plantId is num ? plantId.toInt() : null;
+        })
+        .whereType<int>()
+        .toSet();
+  }
+
   /// Добавить товар в корзину
   static Future<CartItem> addToCart(AddToCartRequest request) async {
     final response = await _api.post(
