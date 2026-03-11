@@ -128,8 +128,8 @@ class AppProfileContent extends StatelessWidget {
                       context.go('/admin');
                     },
                   ),
+                  _buildDivider(),
                 ],
-                _buildDivider(),
                 AppProfileSetting(
                   icon: Icons.history_rounded,
                   title: 'История заказов',

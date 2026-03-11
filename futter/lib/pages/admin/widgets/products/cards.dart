@@ -24,7 +24,7 @@ class AdminProductsCards extends StatelessWidget {
     {
       "name": "Товары в доставке",
       "pic": Icons.local_shipping_outlined,
-      "heading": "Поступление на склад",
+      "heading": "Поступление товаров",
       "description": "Новая партия растений в пути от поставщика. Ожидается пополнение ассортимента.",
       "route": "delivery"
     },
@@ -34,6 +34,13 @@ class AdminProductsCards extends StatelessWidget {
       "heading": "Текущие заказы",
       "description": "Активные заявки от клиентов, которые требуют сборки, упаковки или подготовки к выдаче.",
       "route": "orders"
+    },
+    {
+      "name": "Прием поставок",
+      "pic": Icons.conveyor_belt,
+      "heading": "Поступления на склад",
+      "description": "Регистрация и проверка поступивших товаров от поставщиков.",
+      "route": "receipts"
     },
   ];
 

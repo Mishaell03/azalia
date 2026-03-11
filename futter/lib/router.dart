@@ -5,6 +5,7 @@ import 'package:azalia/pages/admin/pages/user.dart';
 import 'package:azalia/pages/admin/widgets/products/cards/delivery.dart';
 import 'package:azalia/pages/admin/widgets/products/cards/orders.dart';
 import 'package:azalia/pages/admin/widgets/products/cards/procurement.dart';
+import 'package:azalia/pages/admin/widgets/products/cards/receipts.dart';
 import 'package:azalia/pages/admin/widgets/products/cards/warehouse.dart';
 import 'package:azalia/pages/payment/payment_webview.dart';
 import 'package:azalia/pages/payment/paymentpage.dart';
@@ -144,6 +145,10 @@ class AppRouter {
                 path: 'orders',
                 name: 'adminProductsOrders',
                 builder: (context, state) => const AdminProductsCartOrders(),
+              ),GoRoute(
+                path: 'receipts',
+                name: 'adminProductsReceipts',
+                builder: (context, state) => const AdminProductsCartReceipts(),
               ),
             ],
           ),

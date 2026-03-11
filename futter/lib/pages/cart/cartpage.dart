@@ -477,7 +477,7 @@ class _CartPageState extends State<CartPage> {
             const SizedBox(height: 8),
             Text(
               'Выберите товары для оформления',
-              style: AppText.medium_14.copyWith(color: AppColors.error),
+              style: AppText.medium_14.copyWith(color: AppColors.brown),
             ),
           ],
           if (_outOfStockItems.isNotEmpty) ...[
