@@ -603,7 +603,6 @@ def seed_products(cur) -> None:
         ],
     )
 
-
 def seed_user_content(cur) -> None:
     """
     Избранное, корзина, календарь, свои растения и уход.
@@ -733,7 +732,6 @@ def seed_user_content(cur) -> None:
         ],
     )
 
-
 def seed_employees_inventory_and_purchases(cur) -> None:
     """
     Сотрудники, склад, движения, закупки, приемка.
@@ -850,7 +848,6 @@ def seed_employees_inventory_and_purchases(cur) -> None:
             (2, 6, 0, 0, None),
         ],
     )
-
 
 def seed_orders_and_payments(cur) -> None:
     """
