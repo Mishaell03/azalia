@@ -251,6 +251,155 @@ class Employee {
   }
 }
 
+class AdminUserOrderSummary {
+  final int id;
+  final String orderNumber;
+  final String orderType;
+  final String storeName;
+  final double subtotal;
+  final double deliveryFee;
+  final double discountAmount;
+  final String status;
+  final String paymentStatus;
+  final double totalPrice;
+  final String createdAt;
+  final String updatedAt;
+
+  const AdminUserOrderSummary({
+    required this.id,
+    required this.orderNumber,
+    required this.orderType,
+    required this.storeName,
+    required this.subtotal,
+    required this.deliveryFee,
+    required this.discountAmount,
+    required this.status,
+    required this.paymentStatus,
+    required this.totalPrice,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory AdminUserOrderSummary.fromJson(Map<String, dynamic> json) {
+    return AdminUserOrderSummary(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      orderNumber: json['order_number']?.toString() ?? '',
+      orderType: json['order_type']?.toString() ?? '',
+      storeName: json['store_name']?.toString() ?? '',
+      subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0,
+      deliveryFee: (json['delivery_fee'] as num?)?.toDouble() ?? 0,
+      discountAmount: (json['discount_amount'] as num?)?.toDouble() ?? 0,
+      status: json['status']?.toString() ?? '',
+      paymentStatus: json['payment_status']?.toString() ?? '',
+      totalPrice: (json['total_price'] as num?)?.toDouble() ?? 0,
+      createdAt: json['created_at']?.toString() ?? '',
+      updatedAt: json['updated_at']?.toString() ?? '',
+    );
+  }
+}
+
+class AdminEmployeeState {
+  final int id;
+  final int positionId;
+  final int storeId;
+  final double salary;
+  final bool isActive;
+  final String positionTitle;
+  final String storeName;
+
+  const AdminEmployeeState({
+    required this.id,
+    required this.positionId,
+    required this.storeId,
+    required this.salary,
+    required this.isActive,
+    required this.positionTitle,
+    required this.storeName,
+  });
+
+  factory AdminEmployeeState.fromJson(Map<String, dynamic> json) {
+    return AdminEmployeeState(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      positionId: (json['position_id'] as num?)?.toInt() ?? 0,
+      storeId: (json['store_id'] as num?)?.toInt() ?? 0,
+      salary: (json['salary'] as num?)?.toDouble() ?? 0,
+      isActive: json['is_active'] == true,
+      positionTitle: json['position_title']?.toString() ?? '',
+      storeName: json['store_name']?.toString() ?? '',
+    );
+  }
+}
+
+class AdminOptionItem {
+  final int id;
+  final String title;
+
+  const AdminOptionItem({
+    required this.id,
+    required this.title,
+  });
+}
+
+class AdminUserDetails {
+  final int id;
+  final String name;
+  final String status;
+  final bool isAdmin;
+  final AdminEmployeeState? employee;
+  final List<AdminOptionItem> positions;
+  final List<AdminOptionItem> stores;
+  final List<AdminUserOrderSummary> orders;
+
+  const AdminUserDetails({
+    required this.id,
+    required this.name,
+    required this.status,
+    required this.isAdmin,
+    required this.employee,
+    required this.positions,
+    required this.stores,
+    required this.orders,
+  });
+
+  factory AdminUserDetails.fromApiResponse(Map<String, dynamic> response) {
+    final data = response['data'] as Map<String, dynamic>? ?? const {};
+    final options = response['options'] as Map<String, dynamic>? ?? const {};
+    final positionRows = options['positions'] as List? ?? const [];
+    final storeRows = options['stores'] as List? ?? const [];
+
+    return AdminUserDetails(
+      id: (data['id'] as num?)?.toInt() ?? 0,
+      name: data['name']?.toString() ?? '',
+      status: data['status']?.toString() ?? '',
+      isAdmin: data['is_admin'] == true,
+      employee: data['employee'] is Map<String, dynamic>
+          ? AdminEmployeeState.fromJson(data['employee'] as Map<String, dynamic>)
+          : null,
+      positions: positionRows
+          .whereType<Map<String, dynamic>>()
+          .map(
+            (row) => AdminOptionItem(
+              id: (row['id'] as num?)?.toInt() ?? 0,
+              title: row['title']?.toString() ?? 'Позиция',
+            ),
+          )
+          .toList(),
+      stores: storeRows
+          .whereType<Map<String, dynamic>>()
+          .map(
+            (row) => AdminOptionItem(
+              id: (row['id'] as num?)?.toInt() ?? 0,
+              title: row['name']?.toString() ?? 'Магазин',
+            ),
+          )
+          .toList(),
+      orders: (data['orders'] as List? ?? const [])
+          .map((item) => AdminUserOrderSummary.fromJson(item))
+          .toList(),
+    );
+  }
+}
+
 DateTime? _tryParseDateTime(dynamic value) {
   if (value == null) {
     return null;

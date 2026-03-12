@@ -26,9 +26,27 @@ class DeviceService {
     return 'https://t.me/for_the_future_bot?start=$cleanDeviceId';
   }
 
+  static Future<String> generateTelegramSupport() async {
+    return 'https://t.me/for_the_future_bot';
+  }
+
   static Future<bool> launchTelegram() async {
     try {
       final url = await generateTelegramLink();
+      final uri = Uri.parse(url);
+      final result = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      return result;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<bool> launchTelegramSupport() async {
+    try {
+      final url = await generateTelegramSupport();
       final uri = Uri.parse(url);
       final result = await launchUrl(
         uri,

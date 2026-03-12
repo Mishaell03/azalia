@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import random
 import re
 import secrets
 import uuid
@@ -14,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.config import BASE_DIR
 from app.db import get_db_connection
 from app.routes.utils import (
+    BLOCKED_IMAGE_PATH,
     clean_text,
     get_current_user,
     is_valid_session_token,
@@ -27,6 +29,8 @@ CODE_PATTERN = re.compile(r"^\d{4,8}$")
 PHONE_DIGITS_PATTERN = re.compile(r"\d")
 ALLOWED_AVATAR_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 MAX_AVATAR_SIZE_BYTES = 10 * 1024 * 1024
+USER_AVATAR_DIR = BASE_DIR / "img" / "users"
+BLOCKED_AVATAR_DB_PATH = "img/users/blocked.png"
 
 
 class VerifyCodeRequest(BaseModel):
@@ -89,6 +93,62 @@ def _normalize_phone(phone: str) -> str:
     return "+7" + digits[-10:]
 
 
+def _available_user_avatars() -> list[str]:
+    if not USER_AVATAR_DIR.exists():
+        return []
+
+    avatars: list[str] = []
+    for path in USER_AVATAR_DIR.iterdir():
+        if not path.is_file():
+            continue
+        if path.name.lower() == "blocked.png":
+            continue
+        if path.suffix.lower() not in ALLOWED_AVATAR_EXTS:
+            continue
+        avatars.append(f"img/users/{path.name}")
+    return avatars
+
+
+def _avatar_exists(rel_path: Optional[str]) -> bool:
+    if not rel_path:
+        return False
+    return (BASE_DIR / rel_path.lstrip("/")).exists()
+
+
+def _ensure_user_avatar(cur, user_id: int, avatar_url: Optional[str]) -> Optional[str]:
+    current = (avatar_url or "").strip().lstrip("/")
+
+    if current:
+        if current == BLOCKED_AVATAR_DB_PATH:
+            current = ""
+        elif _avatar_exists(current):
+            return current
+        else:
+            current = ""
+
+    pool = _available_user_avatars()
+    if not pool:
+        return avatar_url
+
+    chosen = random.choice(pool)
+    cur.execute(
+        """
+        UPDATE users
+        SET avatar_url = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        (chosen, user_id),
+    )
+    return chosen
+
+
+def _avatar_for_response(status: Optional[str], avatar_url: Optional[str]) -> Optional[str]:
+    status_text = (status or "").lower()
+    if status_text in {"blocked", "deleted"}:
+        return BLOCKED_IMAGE_PATH
+    return avatar_url
+
+
 def _extract_session_token(
     authorization: Optional[str],
 ) -> str:
@@ -125,7 +185,6 @@ def _get_user_with_session(token: str):
             WHERE us.session_token = ?
               AND us.is_active = 1
               AND datetime(us.expires_at) > datetime('now')
-              AND u.status = 'active'
             LIMIT 1
             """,
             (token,),
@@ -159,7 +218,8 @@ def verify_code(payload: VerifyCodeRequest):
                 u.telegram_id,
                 u.full_name,
                 u.phone,
-                u.avatar_url
+                u.avatar_url,
+                u.status
             FROM auth_codes ac
             JOIN users u ON u.id = ac.user_id
             WHERE ac.code = ?
@@ -177,6 +237,23 @@ def verify_code(payload: VerifyCodeRequest):
         auth_code = cur.execute(sql, tuple(params)).fetchone()
         if not auth_code:
             raise HTTPException(status_code=404, detail="Что-то пошло не так")
+
+        account_status = (auth_code["status"] or "").lower()
+        if account_status in {"blocked", "deleted"}:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "message": "Account is blocked or deleted",
+                    "status": account_status,
+                    "image": BLOCKED_IMAGE_PATH,
+                },
+            )
+
+        ensured_avatar = _ensure_user_avatar(
+            cur,
+            int(auth_code["user_id"]),
+            auth_code["avatar_url"],
+        )
 
         session_token = secrets.token_urlsafe(48)
         expires_at = (datetime.utcnow() + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
@@ -222,7 +299,7 @@ def verify_code(payload: VerifyCodeRequest):
             "name": auth_code["full_name"],
             "phone": auth_code["phone"],
             "session_token": session_token,
-            "avatar_url": auth_code["avatar_url"],
+            "avatar_url": _avatar_for_response(auth_code["status"], ensured_avatar),
         },
         "message": "Authentication successful",
         "is_employee": bool(employee),
@@ -294,10 +371,23 @@ def me(
 
     if not user:
         raise HTTPException(status_code=401, detail="Недействительная сессия")
+    account_status = (user["status"] or "").lower()
+    if account_status in {"blocked", "deleted"}:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "message": "Account is blocked or deleted",
+                "status": account_status,
+                "image": BLOCKED_IMAGE_PATH,
+            },
+        )
 
     conn = get_db_connection()
     try:
-        employee = _serialize_employee(conn.cursor(), int(user["id"]))
+        cur = conn.cursor()
+        ensured_avatar = _ensure_user_avatar(cur, int(user["id"]), user["avatar_url"])
+        employee = _serialize_employee(cur, int(user["id"]))
+        conn.commit()
     finally:
         conn.close()
 
@@ -310,7 +400,7 @@ def me(
             "name": user["full_name"],
             "phone": user["phone"],
             "session_token": user["session_token"],
-            "avatar_url": user["avatar_url"],
+            "avatar_url": _avatar_for_response(user["status"], ensured_avatar),
         },
         "is_employee": bool(employee),
     }
@@ -425,13 +515,22 @@ async def upload_avatar(
 @router.get("/avatar", summary="Get User Avatar")
 def get_avatar(user=Depends(get_current_user)):
     """Возвращает ссылку на аватар и, при возможности, base64-представление."""
-    avatar_url = user["avatar_url"]
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        avatar_url = _ensure_user_avatar(cur, int(user["id"]), user["avatar_url"])
+        conn.commit()
+    finally:
+        conn.close()
+
     if not avatar_url:
         raise HTTPException(status_code=404, detail="Аватарка не найдена")
 
+    avatar_url = _avatar_for_response(user["status"], avatar_url)
+
     payload = {"success": True, "avatar_url": avatar_url}
 
-    file_path = BASE_DIR / avatar_url
+    file_path = BASE_DIR / avatar_url.lstrip("/")
     if file_path.exists() and file_path.is_file() and file_path.stat().st_size <= MAX_AVATAR_SIZE_BYTES:
         payload["avatar"] = base64.b64encode(file_path.read_bytes()).decode("utf-8")
 

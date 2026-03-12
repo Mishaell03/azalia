@@ -1,4 +1,5 @@
 import 'package:azalia/components/widgets/data_pages.dart';
+import 'package:azalia/components/widgets/account_blocked_notice.dart';
 import 'package:azalia/pages/cart/widgets/unauthorized.dart';
 import 'package:flutter/material.dart';
 import 'package:azalia/components/colors.dart';
@@ -11,6 +12,7 @@ import 'package:azalia/backend/services/selected_items_service.dart';
 import 'package:azalia/pages/cart/widgets/cards.dart';
 import 'package:azalia/pages/cart/widgets/out_of_stock.dart';
 import 'package:azalia/pages/cart/widgets/header.dart';
+import 'package:azalia/pages/error/app_errors.dart';
 import 'package:azalia/backend/models/cart.dart';
 import 'package:azalia/router.dart';
 import 'package:go_router/go_router.dart';
@@ -115,6 +117,16 @@ class _CartPageState extends State<CartPage> {
   }
 
   void _handleLoadError(dynamic e) {
+    final errorText = e.toString();
+    if (AppErrors.isForbiddenAccountError(errorText)) {
+      setState(() {
+        _error = AppErrors.accountBlockedMessage;
+        _isLoading = false;
+        _isUnauthorized = false;
+      });
+      return;
+    }
+
     if (e.toString().contains('401') ||
         e.toString().contains('authorized') ||
         e.toString().contains('session') ||
@@ -338,6 +350,9 @@ class _CartPageState extends State<CartPage> {
     }
 
     if (_error.isNotEmpty) {
+      if (_error == AppErrors.accountBlockedMessage) {
+        return const AccountBlockedNotice();
+      }
       return GenericErrorWidget(onRetry: _loadCart);
     }
 

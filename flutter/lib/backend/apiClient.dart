@@ -20,6 +20,18 @@ class UnauthorizedException extends ApiException {
   UnauthorizedException(String message) : super(message, 401);
 }
 
+/// Спец исключение для 403 (заблокирован/удален аккаунт)
+class ForbiddenAccountException extends ApiException {
+  final String? accountStatus;
+  final String? imagePath;
+
+  ForbiddenAccountException(
+    String message, {
+    this.accountStatus,
+    this.imagePath,
+  }) : super(message, 403);
+}
+
 /// Клиент для HTTP-запросов, автоматически подставляет заголовки авторизации
 class ApiClient {
   final SessionService _session = SessionService();
@@ -102,6 +114,28 @@ class ApiClient {
       rethrow;
     } catch (e) {
       debugPrint('ApiException put error: $e');
+      throw 'Ошибка сети';
+    }
+  }
+
+  /// PATCH (body nullable)
+  Future<Map<String, dynamic>> patch(
+    String url, {
+    Map<String, dynamic>? body,
+  }) async {
+    final uri = Uri.parse(url);
+    try {
+      final response = await http.patch(
+        uri,
+        headers: _headers,
+        body: body != null ? jsonEncode(body) : null,
+      );
+      _log('PATCH', uri, response, body: body);
+      return _handleResponse(response);
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      debugPrint('ApiException patch error: $e');
       throw 'Ошибка сети';
     }
   }
@@ -191,6 +225,33 @@ class ApiClient {
 
     if (status == 401) {
       throw UnauthorizedException(_extractErrorMessage(decoded) ?? 'Не авторизован');
+    }
+
+    if (status == 403) {
+      final detail = decoded['detail'];
+      String message = 'Аккаунт деактивирован или удален';
+      String? accountStatus;
+      String? imagePath;
+
+      if (detail is Map<String, dynamic>) {
+        final detailMessage = detail['message']?.toString();
+        if (detailMessage != null && detailMessage.isNotEmpty) {
+          message = detailMessage;
+        }
+        accountStatus = detail['status']?.toString();
+        imagePath = detail['image']?.toString();
+      } else {
+        final fallback = _extractErrorMessage(decoded);
+        if (fallback != null && fallback.isNotEmpty) {
+          message = fallback;
+        }
+      }
+
+      throw ForbiddenAccountException(
+        message,
+        accountStatus: accountStatus,
+        imagePath: imagePath,
+      );
     }
 
     if (status >= 400) {

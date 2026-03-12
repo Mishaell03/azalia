@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 USER_ID = 5
-DEVICE_ID = "1112EC7E-E1C4-4320-A0B3-C740F0E7427C"
+DEVICE_ID = "344D09E9-61FA-4922-820A-17FA62A3DCFD"
 CODE = "0000"
 
 BASE_DIR = Path(__file__).resolve().parents[1]

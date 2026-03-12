@@ -1,7 +1,7 @@
 import 'package:azalia/components/colors.dart';
+import 'package:azalia/components/widgets/account_blocked_notice.dart';
 import 'package:azalia/components/text_styles.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:azalia/backend/services/device_id.dart';
 import 'package:azalia/backend/services/auth.dart';
@@ -23,6 +23,7 @@ class _AuthPageState extends State<AuthPage> {
   String _errorText = '';
   bool _allFieldsFilled = false;
   bool _isLoading = false;
+  bool _isAccountBlocked = false;
 
   @override
   void initState() {
@@ -56,6 +57,7 @@ class _AuthPageState extends State<AuthPage> {
     if (_errorText.isNotEmpty) {
       setState(() {
         _errorText = '';
+        _isAccountBlocked = false;
       });
     }
 
@@ -94,6 +96,7 @@ class _AuthPageState extends State<AuthPage> {
     setState(() {
       _isLoading = true;
       _errorText = '';
+      _isAccountBlocked = false;
     });
 
     try {
@@ -107,9 +110,15 @@ class _AuthPageState extends State<AuthPage> {
         });
         _clearAllFields();
       }
-    } on AuthException {
+    } on AuthException catch (e) {
       setState(() {
-        _errorText = 'Неверный код авторизации';
+        if (e.statusCode == 403) {
+          _errorText =
+              'Аккаунт удален или деактивирован. Обратитесь в поддержку.';
+          _isAccountBlocked = true;
+        } else {
+          _errorText = 'Неверный код авторизации';
+        }
       });
       _clearAllFields();
     } catch (_) {
@@ -219,7 +228,7 @@ class _AuthPageState extends State<AuthPage> {
               },
               icon: Icon(Icons.close),
               style: IconButton.styleFrom(
-                backgroundColor: Colors.white.withOpacity(0.2),
+                backgroundColor: Colors.white.withValues(alpha: 0.2),
                 padding: const EdgeInsets.all(8),
               ),
             ),
@@ -228,7 +237,7 @@ class _AuthPageState extends State<AuthPage> {
             bottom: 0,
             left: 0,
             right: 0,
-            height: screenHeight * 0.7,
+            height: _isAccountBlocked ? screenHeight * 0.87 : screenHeight * 0.7,
             child: Container(
               decoration: BoxDecoration(
                 color: AppColors.white_transparent,
@@ -368,37 +377,42 @@ class _AuthPageState extends State<AuthPage> {
                         _errorText,
                         style: AppText.medium_14.copyWith(
                           color: AppColors.error,
-                        ),
+                          ),
                       ),
+                      if (_isAccountBlocked) ...[
+                        const SizedBox(height: 12),
+                        const AccountBlockedNotice(compact: true),
+                      ],
                     ],
 
                     const Spacer(),
 
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: ElevatedButton(
-                        onPressed: _allFieldsFilled && !_isLoading
-                            ? _verifyCode
-                            : null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.brown,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                    if(!_isAccountBlocked)
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: ElevatedButton(
+                          onPressed: _allFieldsFilled && !_isLoading
+                              ? _verifyCode
+                              : null,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.brown,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
-                        ),
-                        child: _isLoading
-                            ? const CircularProgressIndicator(
-                                color: Colors.white,
-                              )
-                            : Text(
-                                'Подтвердить',
-                                style: AppText.medium_20.copyWith(
-                                  color: AppColors.white,
+                          child: _isLoading
+                              ? const CircularProgressIndicator(
+                                  color: Colors.white,
+                                )
+                              : Text(
+                                  'Подтвердить',
+                                  style: AppText.medium_20.copyWith(
+                                    color: AppColors.white,
+                                  ),
                                 ),
-                              ),
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),

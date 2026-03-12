@@ -7,8 +7,10 @@ class ApiConfig {
   // admin employees
   static const String whoAmI = '$baseURL/debug/whoami';
   static const String users = '$baseURL/users';
+  static String updateUser(int id) => '$baseURL/users/$id';
   static const String employees = '$baseURL/employees';
   static String employee(int id) => '$baseURL/employees/$id';
+  static String updateAdmin(int userId) => '$baseURL/admins/$userId';
   static const String assignEmployee = '$baseURL/employees/assign';
   static String employeeDeactivate(int id) => '$baseURL/employees/$id/deactivate';
 

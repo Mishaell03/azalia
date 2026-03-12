@@ -1,10 +1,12 @@
 import 'package:azalia/backend/services/wishlist.dart';
 import 'package:azalia/components/widgets/data_pages.dart';
+import 'package:azalia/components/widgets/account_blocked_notice.dart';
 import 'package:flutter/material.dart';
 import 'package:azalia/components/colors.dart';
 import 'package:azalia/components/text_styles.dart';
 import 'package:azalia/components/widgets/footer.dart';
 import 'package:azalia/pages/error/loading_error.dart';
+import 'package:azalia/pages/error/app_errors.dart';
 import 'package:azalia/backend/models/plant.dart';
 import 'package:azalia/backend/services/session.dart';
 import 'package:azalia/pages/wishlist/widgets/cards.dart';
@@ -68,6 +70,15 @@ class _WishlistPageState extends State<WishlistPage> {
         _isLoading = false;
       });
     } catch (e) {
+      if (AppErrors.isForbiddenAccountError(e.toString())) {
+        setState(() {
+          _error = AppErrors.accountBlockedMessage;
+          _isLoading = false;
+          _isUnauthorized = false;
+        });
+        return;
+      }
+
       if (e.toString().contains('401') ||
           e.toString().contains('authorized') ||
           e.toString().contains('session') ||
@@ -152,6 +163,9 @@ class _WishlistPageState extends State<WishlistPage> {
     }
 
     if (_error.isNotEmpty) {
+      if (_error == AppErrors.accountBlockedMessage) {
+        return const AccountBlockedNotice();
+      }
       return GenericErrorWidget(onRetry: _loadWishlist);
     }
 

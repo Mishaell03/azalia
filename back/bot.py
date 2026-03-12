@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import logging
 import os
+import random
 import re
 import secrets
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional
+from pathlib import Path
 
 from dotenv import load_dotenv
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -29,6 +31,30 @@ logger = logging.getLogger(__name__)
 
 DEVICE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{1,255}$")
 REFRESH_CALLBACK_PATTERN = re.compile(r"^refresh:(\d{1,10})$")
+USER_AVATAR_DIR = Path(__file__).resolve().parent / "img" / "users"
+ALLOWED_AVATAR_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+
+
+def _available_user_avatars() -> list[str]:
+    if not USER_AVATAR_DIR.exists():
+        return []
+
+    avatars: list[str] = []
+    for path in USER_AVATAR_DIR.iterdir():
+        if not path.is_file():
+            continue
+        if path.name.lower() == "blocked.png":
+            continue
+        if path.suffix.lower() not in ALLOWED_AVATAR_EXTS:
+            continue
+        avatars.append(f"img/users/{path.name}")
+    return avatars
+
+
+def _avatar_exists(rel_path: Optional[str]) -> bool:
+    if not rel_path:
+        return False
+    return (Path(__file__).resolve().parent / rel_path.lstrip("/")).exists()
 
 
 class ValidationError(Exception):
@@ -141,14 +167,31 @@ class AuthRepository:
                 (telegram_id,),
             ).fetchone()
             if existing:
+                updates: list[str] = []
+                params: list[object] = []
                 if existing["full_name"] != full_name and full_name:
+                    updates.append("full_name = ?")
+                    params.append(full_name)
+
+                avatar_url = (existing["avatar_url"] or "").strip()
+                if avatar_url and not _avatar_exists(avatar_url):
+                    avatar_url = ""
+
+                if not avatar_url:
+                    pool = _available_user_avatars()
+                    if pool:
+                        updates.append("avatar_url = ?")
+                        params.append(random.choice(pool))
+
+                if updates:
                     conn.execute(
-                        """
+                        f"""
                         UPDATE users
-                        SET full_name = ?, updated_at = CURRENT_TIMESTAMP
+                        SET {", ".join(updates)},
+                            updated_at = CURRENT_TIMESTAMP
                         WHERE id = ?
                         """,
-                        (full_name, existing["id"]),
+                        (*params, existing["id"]),
                     )
                     conn.commit()
                     existing = conn.execute(
@@ -157,14 +200,19 @@ class AuthRepository:
                     ).fetchone()
                 return existing
 
+            avatar_url = None
+            pool = _available_user_avatars()
+            if pool:
+                avatar_url = random.choice(pool)
+
             conn.execute(
                 """
                 INSERT INTO users (
                     telegram_id, full_name, phone, avatar_url, status
                 )
-                VALUES (?, ?, ?, NULL, 'active')
+                VALUES (?, ?, ?, ?, 'active')
                 """,
-                (telegram_id, full_name, ""),
+                (telegram_id, full_name, "", avatar_url),
             )
             conn.commit()
             created = conn.execute(

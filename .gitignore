@@ -2,3 +2,4 @@
 .idea/
 .flutter-plugins-dependencies
 .vscode
+.DS_Store

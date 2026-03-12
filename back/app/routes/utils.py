@@ -12,6 +12,7 @@ from app.db import get_db_connection
 TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_\-]{8,256}$")
 DEVICE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{1,255}$")
 SAFE_TEXT_PATTERN = re.compile(r"[\x00-\x1F\x7F]")
+BLOCKED_IMAGE_PATH = "/img/users/blocked.png"
 
 
 def utc_now_str() -> str:
@@ -94,7 +95,6 @@ def get_current_user(
             WHERE us.session_token = ?
               AND us.is_active = 1
               AND datetime(us.expires_at) > datetime('now')
-              AND u.status = 'active'
             LIMIT 1
             """,
             (resolved,),
@@ -106,6 +106,17 @@ def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired session token",
+        )
+
+    status_text = (row["status"] or "").lower()
+    if status_text in {"blocked", "deleted"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "message": "Account is blocked or deleted",
+                "status": status_text,
+                "image": BLOCKED_IMAGE_PATH,
+            },
         )
 
     return row
