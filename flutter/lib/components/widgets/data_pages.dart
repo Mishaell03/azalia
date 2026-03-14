@@ -26,6 +26,7 @@ const List<HeaderItems> adminHeaderItems = [
 const List<HeaderItems> adminProductsHeaderItems = [
   HeaderItems(route: '/admin/products/procurement', title: "Админ-закупки", isButton: true),
   HeaderItems(route: '/admin/products/warehouse', title: "Админ-склад", isButton: true),
+  HeaderItems(route: '/admin/products/editor', title: "Админ-редактор", isButton: true),
   HeaderItems(route: '/admin/products/delivery', title: "Админ-поставки", isButton: true),
   HeaderItems(route: '/admin/products/orders', title: "Админ-заказы", isButton: true),
   HeaderItems(route: '/admin/products/receipts', title: "Админ-разгрузка", isButton: true),

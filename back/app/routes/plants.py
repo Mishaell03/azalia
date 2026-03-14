@@ -3,10 +3,10 @@ from __future__ import annotations
 import os
 import re
 import uuid
-from pathlib import Path
+from pathlib import Path as FsPath
 from typing import Any, Optional
 
-from fastapi import APIRouter, File, HTTPException, Path, Query, UploadFile, status
+from fastapi import APIRouter, File, HTTPException, Path as FastApiPath, Query, UploadFile, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.config import BASE_DIR
@@ -17,6 +17,7 @@ router = APIRouter(prefix="/api/plants", tags=["plants"])
 ALLOWED_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 MAX_IMAGE_SIZE_BYTES = 16 * 1024 * 1024
 SAFE_TEXT_RE = re.compile(r"[\x00-\x1F\x7F]")
+DEFAULT_PRODUCT_IMAGE_PATH = "img/none.png"
 
 
 class ProductCreateRequest(BaseModel):
@@ -77,6 +78,14 @@ def _clean_text(value: Optional[str], max_len: int = 255) -> Optional[str]:
 
 
 def _product_to_dict(row, images: list[dict[str, Any]]) -> dict[str, Any]:
+    is_active = bool(row["is_active"])
+    is_removed = (not is_active) or (row["deleted_at"] is not None)
+    raw_image = (row["image_url"] or "").strip() if row["image_url"] is not None else ""
+    resolved_image = raw_image or (
+        images[0]["image_url"]
+        if images and isinstance(images[0], dict) and images[0].get("image_url")
+        else DEFAULT_PRODUCT_IMAGE_PATH
+    )
     return {
         "id": row["id"],
         "sku": row["sku"],
@@ -96,10 +105,11 @@ def _product_to_dict(row, images: list[dict[str, Any]]) -> dict[str, Any]:
         "light_requirements": row["light_requirements"],
         "watering_notes": row["watering_notes"],
         "care_instructions": row["care_instructions"],
-        "image_url": row["image_url"],
+        "image_url": resolved_image,
         "rating": float(row["rating"]),
-        "is_active": bool(row["is_active"]),
+        "is_active": is_active,
         "deleted_at": row["deleted_at"],
+        "sale_status": "removed" if is_removed else "active",
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
         "inventory_available": int(row["inventory_available"] or 0),
@@ -354,7 +364,7 @@ def get_filters():
 
 
 @router.get("/{plant_id}", summary="Get Plant By Id")
-def get_plant(plant_id: int = Path(..., ge=1)):
+def get_plant(plant_id: int = FastApiPath(..., ge=1)):
     """Возвращает детальную информацию по одному растению."""
     conn = get_db_connection()
     try:
@@ -525,7 +535,7 @@ def delete_plant(plant_id: int):
 async def upload_plant_image(plant_id: int, image: UploadFile = File(...)):
     """Загружает изображение растения и добавляет запись в product_images."""
     filename = image.filename or ""
-    suffix = Path(filename).suffix.lower()
+    suffix = FsPath(filename).suffix.lower()
     if suffix not in ALLOWED_IMAGE_EXTS:
         raise HTTPException(status_code=400, detail="Unsupported file type")
 
@@ -535,14 +545,14 @@ async def upload_plant_image(plant_id: int, image: UploadFile = File(...)):
     if len(content) > MAX_IMAGE_SIZE_BYTES:
         raise HTTPException(status_code=400, detail="File too large")
 
-    img_dir = BASE_DIR / "img"
+    img_dir = BASE_DIR / "img" / "preview"
     img_dir.mkdir(parents=True, exist_ok=True)
 
     safe_name = f"{uuid.uuid4().hex}{suffix}"
     full_path = img_dir / safe_name
     full_path.write_bytes(content)
 
-    rel_path = f"img/{safe_name}"
+    rel_path = f"img/preview/{safe_name}"
 
     conn = get_db_connection()
     try:
@@ -588,7 +598,7 @@ def delete_plant_image(plant_id: int):
         conn.close()
 
     if image_url:
-        normalized = Path(image_url)
+        normalized = FsPath(image_url)
         if not normalized.is_absolute() and normalized.parts and normalized.parts[0] == "img":
             (BASE_DIR / normalized).unlink(missing_ok=True)
 

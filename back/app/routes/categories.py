@@ -10,6 +10,7 @@ from app.db import get_db_connection
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
 SAFE_TEXT_RE = re.compile(r"[\x00-\x1F\x7F]")
+DEFAULT_PRODUCT_IMAGE_PATH = "img/none.png"
 
 
 class CategoryCreateRequest(BaseModel):
@@ -378,7 +379,9 @@ def get_category_plants(
                     "description": row["description"],
                     "base_price": float(row["base_price"]),
                     "rating": float(row["rating"]),
-                    "image_url": row["image_url"],
+                    "image_url": (
+                        (row["image_url"] or "").strip() if row["image_url"] else DEFAULT_PRODUCT_IMAGE_PATH
+                    ),
                     "is_active": bool(row["is_active"]),
                     "inventory_available": int(row["inventory_available"]),
                 }

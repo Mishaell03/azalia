@@ -417,13 +417,17 @@ def _employee_with_details(cur, employee_id: int):
 
 def _employee_to_dict(row):
     is_active = bool(row["is_active"])
+    avatar_url = _avatar_for_status(row["status"], row["avatar_url"])
+    if not is_active:
+        avatar_url = BLOCKED_IMAGE_PATH
+
     return {
         "id": row["id"],
         "user_id": row["user_id"],
         "telegram_id": row["telegram_id"],
         "full_name": row["full_name"],
         "phone": row["phone"],
-        "avatar_url": _avatar_for_status(row["status"], row["avatar_url"]),
+        "avatar_url": avatar_url,
         "status": row["status"],
         "position_id": row["position_id"],
         "position_title": row["position_title"],

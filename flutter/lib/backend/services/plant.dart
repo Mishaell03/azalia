@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart' hide Category;
 import 'package:azalia/backend/apiClient.dart';
 import 'package:azalia/backend/api_config.dart';
@@ -19,6 +21,7 @@ class PlantService {
     int page = 1,
     int perPage = 10,
     String sortBy = 'name',
+    bool includeInactive = false,
   }) async {
     try {
       final params = <String, String>{};
@@ -38,6 +41,7 @@ class PlantService {
       params['page'] = page.toString();
       params['per_page'] = perPage.toString();
       params['sort_by'] = sortBy;
+      if (includeInactive) params['include_inactive'] = 'true';
 
       final url = Uri.parse(
         ApiConfig.plants,
@@ -123,6 +127,40 @@ class PlantService {
     } catch (e) {
       debugPrint('PlantService: Исключение - $e');
       throw Exception('Не удалось загрузить фильтры');
+    }
+  }
+
+  /// Обновление товара
+  static Future<void> updatePlant(
+    int id, {
+    required Map<String, dynamic> payload,
+  }) async {
+    try {
+      final response = await _api.put(ApiConfig.plantsId(id), body: payload);
+      if (response['success'] != true) {
+        throw Exception('Не удалось обновить товар');
+      }
+    } catch (e) {
+      debugPrint('PlantService: updatePlant исключение - $e');
+      throw Exception('Не удалось обновить товар');
+    }
+  }
+
+  /// Загрузка превью изображения товара
+  static Future<String> uploadPlantImage(int id, File imageFile) async {
+    try {
+      final response = await _api.postMultipart(
+        '${ApiConfig.plantsId(id)}/image',
+        file: imageFile,
+        fieldName: 'image',
+      );
+      if (response['success'] != true) {
+        throw Exception('Не удалось загрузить изображение');
+      }
+      return (response['image_url'] ?? '').toString();
+    } catch (e) {
+      debugPrint('PlantService: uploadPlantImage исключение - $e');
+      throw Exception('Не удалось загрузить изображение');
     }
   }
 }

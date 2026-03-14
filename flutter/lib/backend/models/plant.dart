@@ -12,10 +12,13 @@ class Plant {
   final int heightCm;
   final String? plantType;
   final String? recommendedPotSize;
+  final int? recommendedPotSizeId;
   final double? rating;
   final String? imageUrl;
   final int stockQuantity;
   final int? categoryId;
+  final bool isActive;
+  final String? deletedAt;
 
   Plant({
     required this.id,
@@ -29,10 +32,13 @@ class Plant {
     required this.heightCm,
     required this.plantType,
     required this.recommendedPotSize,
+    this.recommendedPotSizeId,
     this.rating,
     this.imageUrl,
     required this.stockQuantity,
     this.categoryId,
+    required this.isActive,
+    this.deletedAt,
   });
 
   factory Plant.fromJson(Map<String, dynamic> json) {
@@ -60,10 +66,16 @@ class Plant {
       recommendedPotSize:
           json['recommended_pot_size_name']?.toString() ??
           json['recommended_pot_size']?.toString(),
+      recommendedPotSizeId:
+          (json['recommended_pot_size_id'] as num?)?.toInt(),
       rating: (json['rating'] as num?)?.toDouble(),
       imageUrl: imageUrl,
       stockQuantity: stockQuantity,
       categoryId: (json['category_id'] as num?)?.toInt(),
+      isActive: json['is_active'] == null
+          ? true
+          : (json['is_active'] == true || json['is_active'] == 1),
+      deletedAt: json['deleted_at']?.toString(),
     );
   }
 
@@ -83,6 +95,48 @@ class Plant {
 
   String get fullImageUrl {
     return ApiConfig.imageUrl(imageUrl);
+  }
+
+  Plant copyWith({
+    int? id,
+    String? name,
+    String? description,
+    double? basePrice,
+    bool? inStock,
+    String? careInstructions,
+    String? lightRequirements,
+    String? wateringFrequency,
+    int? heightCm,
+    String? plantType,
+    String? recommendedPotSize,
+    int? recommendedPotSizeId,
+    double? rating,
+    String? imageUrl,
+    int? stockQuantity,
+    int? categoryId,
+    bool? isActive,
+    String? deletedAt,
+  }) {
+    return Plant(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      basePrice: basePrice ?? this.basePrice,
+      inStock: inStock ?? this.inStock,
+      careInstructions: careInstructions ?? this.careInstructions,
+      lightRequirements: lightRequirements ?? this.lightRequirements,
+      wateringFrequency: wateringFrequency ?? this.wateringFrequency,
+      heightCm: heightCm ?? this.heightCm,
+      plantType: plantType ?? this.plantType,
+      recommendedPotSize: recommendedPotSize ?? this.recommendedPotSize,
+      recommendedPotSizeId: recommendedPotSizeId ?? this.recommendedPotSizeId,
+      rating: rating ?? this.rating,
+      imageUrl: imageUrl ?? this.imageUrl,
+      stockQuantity: stockQuantity ?? this.stockQuantity,
+      categoryId: categoryId ?? this.categoryId,
+      isActive: isActive ?? this.isActive,
+      deletedAt: deletedAt ?? this.deletedAt,
+    );
   }
 }
 

@@ -1,20 +1,27 @@
 import 'dart:io';
+
 import 'package:azalia/components/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 class ImageEdit extends StatefulWidget {
   final String fullImageUrl;
+  final File? imageFile;
+  final ValueChanged<File> onImageSelected;
 
-  const ImageEdit({super.key, required this.fullImageUrl});
+  const ImageEdit({
+    super.key,
+    required this.fullImageUrl,
+    required this.imageFile,
+    required this.onImageSelected,
+  });
 
   @override
-  State<ImageEdit> createState() => _ImageEdit();
+  State<ImageEdit> createState() => _ImageEditState();
 }
 
-class _ImageEdit extends State<ImageEdit> {
+class _ImageEditState extends State<ImageEdit> {
   final ImagePicker _imagePicker = ImagePicker();
-  File? _currentImageFile;
 
   Future<void> _pickImage() async {
     try {
@@ -25,56 +32,54 @@ class _ImageEdit extends State<ImageEdit> {
         imageQuality: 85,
       );
       if (image != null && mounted) {
-        setState(() {
-          _currentImageFile = File(image.path);
-        });
+        widget.onImageSelected(File(image.path));
       }
-    } catch (e) {
-      _showErrorDialog('Ошибка при выборе изображения');
+    } catch (_) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Ошибка'),
+          content: const Text('Ошибка при выборе изображения'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Ок'),
+            ),
+          ],
+        ),
+      );
     }
-  }
-
-  void _showErrorDialog(String message) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Ошибка'),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Ок'),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final imageProvider = widget.imageFile != null
+        ? FileImage(widget.imageFile!)
+        : NetworkImage(widget.fullImageUrl) as ImageProvider;
+
     return Stack(
       children: [
         SizedBox(
           width: 113,
           height: 88,
           child: Image(
-            image: _currentImageFile != null
-                ? FileImage(_currentImageFile!)
-                : NetworkImage(widget.fullImageUrl) as ImageProvider,
+            image: imageProvider,
+            fit: BoxFit.cover,
           ),
         ),
         Positioned(
           bottom: 4,
           right: 4,
           child: InkWell(
-            onTap: () => _pickImage(),
+            onTap: _pickImage,
             child: Container(
               padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: AppColors.brown,
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.edit, color: AppColors.white, size: 17,),
+              child: const Icon(Icons.edit, color: AppColors.white, size: 17),
             ),
           ),
         ),

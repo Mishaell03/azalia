@@ -8,6 +8,13 @@ class AdminProductsCards extends StatelessWidget {
 
   static const List<Map<String, dynamic>> _carts = [
     {
+      "name": "Редактор товаров",
+      "pic": Icons.edit_note_outlined,
+      "heading": "Изменение карточек",
+      "description": "Изменение информации по товарам, управление статусом продаж и просмотр остатков в штуках.",
+      "route": "editor"
+    },
+    {
       "name": "Товары в закупках",
       "pic": Icons.add_shopping_cart,
       "heading": "Ожидают заказа",
@@ -17,8 +24,8 @@ class AdminProductsCards extends StatelessWidget {
     {
       "name": "Товары на складах",
       "pic": Icons.warehouse_outlined,
-      "heading": "Доступные растения",
-      "description": "Горшечные цветы в наличии на складе. Готовы к сборке для заказов или продаже в зале.",
+      "heading": "Складской раздел",
+      "description": "Складские операции и учет остатков по точкам хранения.",
       "route": "warehouse"
     },
     {
@@ -61,8 +68,15 @@ class AdminProductsCards extends StatelessWidget {
               child: Row(
                 children: [
                   Icon(cart['pic']),
-                  SizedBox(width: 10),
-                  Text(cart['name']!, style: AppText.bold_18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      cart['name']!,
+                      style: AppText.bold_18,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -81,7 +95,14 @@ class AdminProductsCards extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(cart['heading']!, style: AppText.medium_18),
+                          Expanded(
+                            child: Text(
+                              cart['heading']!,
+                              style: AppText.medium_18,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                           IconButton(
                             onPressed: () {
                               context.go('/admin/products/${cart['route']}');

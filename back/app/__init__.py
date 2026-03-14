@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
 
 from app.config import BASE_DIR, get_settings
 from app.core.database import create_database, validate_schema
@@ -75,7 +74,21 @@ def create_app() -> FastAPI:
 
     img_dir = BASE_DIR / "img"
     img_dir.mkdir(parents=True, exist_ok=True)
-    app.mount("/img", StaticFiles(directory=img_dir), name="img")
+    default_img_path = (img_dir / "none.png").resolve()
+    default_user_img_path = (img_dir / "users" / "user2.png").resolve()
+
+    @app.get("/img/{file_path:path}", include_in_schema=False)
+    async def get_image(file_path: str):
+        # Разрешаем отдавать только файлы внутри каталога img.
+        requested = (img_dir / file_path).resolve()
+        is_inside_img = str(requested).startswith(str(img_dir.resolve()))
+        if is_inside_img and requested.is_file():
+            target = requested
+        elif file_path.startswith("users/") and default_user_img_path.is_file():
+            target = default_user_img_path
+        else:
+            target = default_img_path
+        return FileResponse(target)
 
     app.include_router(plants_router)
     app.include_router(categories_router)
