@@ -3,10 +3,11 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.db import get_db_connection
+from app.routes.utils import get_current_user, require_admin
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
 SAFE_TEXT_RE = re.compile(r"[\x00-\x1F\x7F]")
@@ -82,8 +83,9 @@ def get_categories(only_parents: bool = Query(default=False)):
 
 
 @router.get("/stats", summary="Get Categories Stats")
-def get_categories_stats():
+def get_categories_stats(user=Depends(get_current_user)):
     """Статистика по категориям: количество товаров в каждой категории."""
+    require_admin(user)
     conn = get_db_connection()
     try:
         stats = conn.execute(
@@ -178,8 +180,9 @@ def get_category(category_id: int):
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, summary="Create Category")
-def create_category(payload: CategoryCreateRequest):
+def create_category(payload: CategoryCreateRequest, user=Depends(get_current_user)):
     """Создает новую категорию."""
+    require_admin(user)
     name = _clean_text(payload.name, 100)
     if not name:
         raise HTTPException(status_code=400, detail="Invalid category name")
@@ -220,8 +223,9 @@ def create_category(payload: CategoryCreateRequest):
 
 
 @router.put("/{category_id}", summary="Update Category")
-def update_category(category_id: int, payload: CategoryUpdateRequest):
+def update_category(category_id: int, payload: CategoryUpdateRequest, user=Depends(get_current_user)):
     """Обновляет существующую категорию."""
+    require_admin(user)
     updates = payload.model_dump(exclude_unset=True)
     if not updates:
         raise HTTPException(status_code=400, detail="No data provided")
@@ -273,8 +277,9 @@ def update_category(category_id: int, payload: CategoryUpdateRequest):
 
 
 @router.delete("/{category_id}", summary="Delete Category")
-def delete_category(category_id: int):
+def delete_category(category_id: int, user=Depends(get_current_user)):
     """Удаляет категорию, если в ней нет товаров и подкатегорий."""
+    require_admin(user)
     conn = get_db_connection()
     try:
         cur = conn.cursor()

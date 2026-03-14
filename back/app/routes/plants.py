@@ -6,11 +6,12 @@ import uuid
 from pathlib import Path as FsPath
 from typing import Any, Optional
 
-from fastapi import APIRouter, File, HTTPException, Path as FastApiPath, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Path as FastApiPath, Query, UploadFile, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.config import BASE_DIR
 from app.db import get_db_connection
+from app.routes.utils import get_current_user, require_admin
 
 router = APIRouter(prefix="/api/plants", tags=["plants"])
 
@@ -198,6 +199,7 @@ def get_plants(
     limit: Optional[int] = Query(default=None, ge=1, le=500),
     offset: Optional[int] = Query(default=None, ge=0),
     include_inactive: bool = Query(default=False),
+    token: Optional[str] = Header(default=None, alias="Authorization"),
 ):
     """Возвращает список растений с фильтрами, сортировкой и пагинацией."""
     if min_price is not None and max_price is not None and min_price > max_price:
@@ -225,7 +227,10 @@ def get_plants(
     sql = _base_product_sql() + " WHERE 1=1 "
     params: list[Any] = []
 
-    if not include_inactive:
+    if include_inactive:
+        user = get_current_user(token)
+        require_admin(user)
+    else:
         sql += " AND p.is_active = 1 AND p.deleted_at IS NULL"
 
     if category_id is not None:
@@ -389,8 +394,9 @@ def get_plant(plant_id: int = FastApiPath(..., ge=1)):
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, summary="Create Plant")
-def create_plant(payload: ProductCreateRequest):
+def create_plant(payload: ProductCreateRequest, user=Depends(get_current_user)):
     """Создает новое растение в каталоге."""
+    require_admin(user)
     conn = get_db_connection()
     try:
         cur = conn.cursor()
@@ -441,8 +447,9 @@ def create_plant(payload: ProductCreateRequest):
 
 
 @router.put("/{plant_id}", summary="Update Plant")
-def update_plant(plant_id: int, payload: ProductUpdateRequest):
+def update_plant(plant_id: int, payload: ProductUpdateRequest, user=Depends(get_current_user)):
     """Обновляет поля растения."""
+    require_admin(user)
     updates = payload.model_dump(exclude_unset=True)
     if not updates:
         raise HTTPException(status_code=400, detail="No data provided")
@@ -505,8 +512,9 @@ def update_plant(plant_id: int, payload: ProductUpdateRequest):
 
 
 @router.delete("/{plant_id}", summary="Archive Plant")
-def delete_plant(plant_id: int):
+def delete_plant(plant_id: int, user=Depends(get_current_user)):
     """Архивирует растение (мягкое удаление)."""
+    require_admin(user)
     conn = get_db_connection()
     try:
         cur = conn.cursor()
@@ -532,8 +540,13 @@ def delete_plant(plant_id: int):
 
 
 @router.post("/{plant_id}/image", summary="Upload Plant Image")
-async def upload_plant_image(plant_id: int, image: UploadFile = File(...)):
+async def upload_plant_image(
+    plant_id: int,
+    image: UploadFile = File(...),
+    user=Depends(get_current_user),
+):
     """Загружает изображение растения и добавляет запись в product_images."""
+    require_admin(user)
     filename = image.filename or ""
     suffix = FsPath(filename).suffix.lower()
     if suffix not in ALLOWED_IMAGE_EXTS:
@@ -578,8 +591,9 @@ async def upload_plant_image(plant_id: int, image: UploadFile = File(...)):
 
 
 @router.delete("/{plant_id}/image", summary="Delete Plant Image")
-def delete_plant_image(plant_id: int):
+def delete_plant_image(plant_id: int, user=Depends(get_current_user)):
     """Удаляет основное изображение растения и деактивирует связанные фото."""
+    require_admin(user)
     conn = get_db_connection()
     try:
         cur = conn.cursor()

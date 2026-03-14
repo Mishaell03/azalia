@@ -913,8 +913,8 @@ def payment_callback(payload: PaymentCallbackRequest):
 
 
 @router.get("/status/{payment_id}", summary="Check Payment Status")
-def check_payment_status(payment_id: str):
-    """Публичная проверка статуса платежа по external_payment_id."""
+def check_payment_status(payment_id: str, user=Depends(get_current_user)):
+    """Проверка статуса платежа владельцем токена по external_payment_id."""
     clean_payment_id = clean_text(payment_id, max_len=128)
     if not clean_payment_id:
         raise HTTPException(status_code=400, detail="Invalid payment id")
@@ -927,6 +927,8 @@ def check_payment_status(payment_id: str):
             "SELECT * FROM payments WHERE external_payment_id = ? LIMIT 1",
             (clean_payment_id,),
         ).fetchone()
+        if row and int(row["user_id"]) != int(user["id"]):
+            raise HTTPException(status_code=403, detail="Access denied")
         if row:
             _refresh_payment_status(cur, settings, row)
             conn.commit()

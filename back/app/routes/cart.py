@@ -478,6 +478,7 @@ def get_pot_price(
     size: Optional[str] = Query(default=None, max_length=50),
     material_id: Optional[int] = Query(default=None, ge=1),
     size_id: Optional[int] = Query(default=None, ge=1),
+    user=Depends(get_current_user),
 ):
     """Возвращает цену горшка по размеру и материалу."""
     conn = get_db_connection()
