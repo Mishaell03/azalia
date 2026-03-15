@@ -46,8 +46,11 @@ class OrderHistorySummary {
   final int orderId;
   final String orderNumber;
   final String status;
+  final String statusCode;
   final String paymentStatus;
+  final String paymentStatusCode;
   final String orderType;
+  final String orderTypeLabel;
   final double totalPrice;
   final int itemsCount;
   final String createdAt;
@@ -58,8 +61,11 @@ class OrderHistorySummary {
     required this.orderId,
     required this.orderNumber,
     required this.status,
+    required this.statusCode,
     required this.paymentStatus,
+    required this.paymentStatusCode,
     required this.orderType,
+    required this.orderTypeLabel,
     required this.totalPrice,
     required this.itemsCount,
     required this.createdAt,
@@ -72,8 +78,11 @@ class OrderHistorySummary {
       orderId: (json['order_id'] as num?)?.toInt() ?? 0,
       orderNumber: json['order_number']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
+      statusCode: json['status_code']?.toString() ?? '',
       paymentStatus: json['payment_status']?.toString() ?? '',
+      paymentStatusCode: json['payment_status_code']?.toString() ?? '',
       orderType: json['order_type']?.toString() ?? '',
+      orderTypeLabel: json['order_type_label']?.toString() ?? '',
       totalPrice: (json['total_price'] as num?)?.toDouble() ?? 0,
       itemsCount: (json['items_count'] as num?)?.toInt() ?? 0,
       createdAt: json['created_at']?.toString() ?? '',
@@ -89,8 +98,11 @@ class OrderHistoryDetail {
   final int orderId;
   final String orderNumber;
   final String status;
+  final String statusCode;
   final String paymentStatus;
+  final String paymentStatusCode;
   final String orderType;
+  final String orderTypeLabel;
   final int storeId;
   final String? address;
   final String? comment;
@@ -110,8 +122,11 @@ class OrderHistoryDetail {
     required this.orderId,
     required this.orderNumber,
     required this.status,
+    required this.statusCode,
     required this.paymentStatus,
+    required this.paymentStatusCode,
     required this.orderType,
+    required this.orderTypeLabel,
     required this.storeId,
     required this.address,
     required this.comment,
@@ -133,8 +148,11 @@ class OrderHistoryDetail {
       orderId: (json['order_id'] as num?)?.toInt() ?? 0,
       orderNumber: json['order_number']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
+      statusCode: json['status_code']?.toString() ?? '',
       paymentStatus: json['payment_status']?.toString() ?? '',
+      paymentStatusCode: json['payment_status_code']?.toString() ?? '',
       orderType: json['order_type']?.toString() ?? '',
+      orderTypeLabel: json['order_type_label']?.toString() ?? '',
       storeId: (json['store_id'] as num?)?.toInt() ?? 0,
       address: json['address']?.toString(),
       comment: json['comment']?.toString(),
@@ -328,14 +346,18 @@ class OrderRefund {
 class OrderStatusHistoryItem {
   final int id;
   final String? oldStatus;
+  final String? oldStatusCode;
   final String newStatus;
+  final String newStatusCode;
   final String changedAt;
   final OrderStatusChangedBy changedBy;
 
   OrderStatusHistoryItem({
     required this.id,
     required this.oldStatus,
+    required this.oldStatusCode,
     required this.newStatus,
+    required this.newStatusCode,
     required this.changedAt,
     required this.changedBy,
   });
@@ -344,7 +366,9 @@ class OrderStatusHistoryItem {
     return OrderStatusHistoryItem(
       id: (json['id'] as num?)?.toInt() ?? 0,
       oldStatus: json['old_status']?.toString(),
+      oldStatusCode: json['old_status_code']?.toString(),
       newStatus: json['new_status']?.toString() ?? '',
+      newStatusCode: json['new_status_code']?.toString() ?? '',
       changedAt: json['changed_at']?.toString() ?? '',
       changedBy: OrderStatusChangedBy.fromJson(
         json['changed_by'] as Map<String, dynamic>? ?? const {},

@@ -156,7 +156,7 @@ class _CartCardState extends State<CartCard> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_showCard || !_isItemAvailable) {
+    if (!_showCard) {
       return const SizedBox.shrink();
     }
 
@@ -170,10 +170,6 @@ class _CartCardState extends State<CartCard> {
         ],
       ),
     );
-  }
-
-  bool get _isItemAvailable {
-    return widget.item.plant.inStock && widget.item.plant.stockQuantity > 0;
   }
 
   Widget _buildPlantImage() {
@@ -209,7 +205,7 @@ class _CartCardState extends State<CartCard> {
         width: 24,
         height: 24,
         decoration: BoxDecoration(
-          color: AppColors.white.withOpacity(0.9),
+          color: AppColors.white.withValues(alpha: 0.9),
           borderRadius: BorderRadius.circular(4),
           border: Border.all(
             color: _isSelected ? AppColors.brown : AppColors.grey_light,
@@ -378,7 +374,7 @@ class _CartCardState extends State<CartCard> {
         width: 32,
         height: 32,
         decoration: BoxDecoration(
-          color: AppColors.white_dark.withOpacity(0.6),
+          color: AppColors.white_dark.withValues(alpha: 0.6),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Padding(
@@ -403,8 +399,6 @@ class _CartCardState extends State<CartCard> {
   }
 
   Widget _buildQuantitySelector() {
-    final maxQuantity = widget.item.plant.stockQuantity;
-    
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: AppColors.grey_light),
@@ -414,7 +408,7 @@ class _CartCardState extends State<CartCard> {
         children: [
           _buildDecrementButton(),
           _buildQuantityDisplay(),
-          _buildIncrementButton(maxQuantity),
+          _buildIncrementButton(),
         ],
       ),
     );
@@ -446,17 +440,13 @@ class _CartCardState extends State<CartCard> {
           );
   }
 
-  Widget _buildIncrementButton(int maxQuantity) {
+  Widget _buildIncrementButton() {
     return IconButton(
-      onPressed: widget.item.quantity >= maxQuantity
-          ? null
-          : () => _updateQuantity(widget.item.quantity + 1),
+      onPressed: () => _updateQuantity(widget.item.quantity + 1),
       icon: Icon(
         Icons.add,
         size: 18,
-        color: widget.item.quantity >= maxQuantity
-            ? AppColors.grey_light
-            : AppColors.brown,
+        color: AppColors.brown,
       ),
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 36, minHeight: 36),

@@ -13,6 +13,9 @@ class ApiConfig {
   static String updateAdmin(int userId) => '$baseURL/admins/$userId';
   static const String assignEmployee = '$baseURL/employees/assign';
   static String employeeDeactivate(int id) => '$baseURL/employees/$id/deactivate';
+  static const String warehouseProducts = '$baseURL/warehouse/products';
+  static String warehouseAdjustProduct(int productId) =>
+      '$baseURL/warehouse/products/$productId/adjust';
 
   // payments
   static String get paymentGenerateLink => '$baseURL/payments/generate-link';
@@ -20,10 +23,43 @@ class ApiConfig {
   static String paymentCancel(int linkId) => '$baseURL/payments/link/$linkId/cancel';
   static String paymentLinkStatus(int linkId) => '$baseURL/payments/status/link/$linkId';
   static String orderStatus(int orderId) => '$baseURL/payments/status/order/$orderId';
+  static String get paymentStores => '$baseURL/payments/stores';
+  static String get paymentAvailability => '$baseURL/payments/availability';
   static String orders({int limit = 20, int offset = 0}) =>
       '$baseURL/payments/orders?limit=$limit&offset=$offset';
   static String orderDetails(int orderId) => '$baseURL/payments/orders/$orderId';
+  static String orderCancel(int orderId) => '$baseURL/payments/orders/$orderId/cancel';
   static String orderAddress(int orderId) => '$baseURL/payments/orders/$orderId/address';
+  static String adminOrders({
+    int limit = 30,
+    int offset = 0,
+    String? status,
+    int? storeId,
+    String sortBy = 'created_at_desc',
+    bool includeClosed = true,
+  }) {
+    final params = <String, String>{
+      'limit': '$limit',
+      'offset': '$offset',
+      'sort_by': sortBy,
+      'include_closed': includeClosed ? 'true' : 'false',
+    };
+    if (status != null && status.isNotEmpty) {
+      params['status'] = status;
+    }
+    if (storeId != null) {
+      params['store_id'] = '$storeId';
+    }
+    return Uri.parse('$baseURL/payments/admin/orders')
+        .replace(queryParameters: params)
+        .toString();
+  }
+  static String adminOrderDetails(int orderId) => '$baseURL/payments/admin/orders/$orderId';
+  static String adminOrderAccept(int orderId) => '$baseURL/payments/admin/orders/$orderId/accept';
+  static String adminOrderStatus(int orderId) => '$baseURL/payments/admin/orders/$orderId/status';
+  static String adminOrderClose(int orderId) => '$baseURL/payments/admin/orders/$orderId/close';
+  static String adminOrderMarkPaid(int orderId) => '$baseURL/payments/admin/orders/$orderId/mark-paid';
+  static String adminOrderRefund(int orderId) => '$baseURL/payments/admin/orders/$orderId/refund';
 
   // auth
   static const String authVerify = '$baseURL/auth/verify';

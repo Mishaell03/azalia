@@ -179,6 +179,8 @@ class PaymentRouteArgs {
   final double totalPrice;
   final String? address;
   final String paymentMethod;
+  final String paymentTiming;
+  final String? onDeliveryMethod;
   final List<int> selectedItemIds;
   final List<PaymentItemArgs> items;
 
@@ -186,6 +188,8 @@ class PaymentRouteArgs {
     required this.totalPrice,
     this.address,
     required this.paymentMethod,
+    this.paymentTiming = 'online',
+    this.onDeliveryMethod,
     required this.selectedItemIds,
     required this.items,
   });
@@ -202,6 +206,7 @@ class PaymentWebViewArgs {
 }
 
 class PaymentItemArgs {
+  final int cartItemId;
   final String plantName;
   final int quantity;
   final double plantPrice;
@@ -209,6 +214,7 @@ class PaymentItemArgs {
   final double itemTotal;
 
   PaymentItemArgs({
+    required this.cartItemId,
     required this.plantName,
     required this.quantity,
     required this.plantPrice,

@@ -1,6 +1,7 @@
 import 'package:azalia/backend/models/payment/order_history.dart';
 import 'package:azalia/backend/services/order_history.dart';
 import 'package:azalia/components/colors.dart';
+import 'package:azalia/components/order_payment_status_config.dart';
 import 'package:azalia/components/text_styles.dart';
 import 'package:azalia/pages/error/loading_error.dart';
 import 'package:flutter/material.dart';
@@ -66,57 +67,10 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
     return '$day.$month.$year, $hour:$minute';
   }
 
-  String _prettyStatus(String status) {
-    switch (status) {
-      case 'awaiting_payment':
-        return 'Ожидает оплаты';
-      case 'processing':
-        return 'В работе';
-      case 'assembled':
-        return 'Собран';
-      case 'shipped':
-        return 'В доставке';
-      case 'ready_for_pickup':
-        return 'Готов к выдаче';
-      case 'delivered':
-        return 'Доставлен';
-      case 'completed':
-        return 'Завершен';
-      case 'cancelled':
-        return 'Отменен';
-      case 'pending':
-        return 'Ожидает';
-      case 'paid':
-        return 'Оплачен';
-      case 'failed':
-        return 'Ошибка';
-      case 'refunded':
-        return 'Возврат';
-      case 'partially_refunded':
-        return 'Частичный возврат';
-      default:
-        return status;
-    }
-  }
-
-  Color _statusColor(String status) {
-    switch (status) {
-      case 'completed':
-      case 'paid':
-      case 'delivered':
-        return AppColors.brown;
-      case 'cancelled':
-      case 'failed':
-      case 'refunded':
-      case 'partially_refunded':
-        return AppColors.error;
-      default:
-        return AppColors.star;
-    }
-  }
-
-  Widget _buildStatusChip(String label, String status) {
-    final color = _statusColor(status);
+  Widget _buildStatusChip(String label, String status, {required bool isPayment}) {
+    final color = isPayment
+        ? OrderPaymentStatusConfig.paymentColor(status)
+        : OrderPaymentStatusConfig.orderColor(status);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -164,10 +118,23 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _buildStatusChip(_prettyStatus(order.status), order.status),
                   _buildStatusChip(
-                    _prettyStatus(order.paymentStatus),
-                    order.paymentStatus,
+                    OrderPaymentStatusConfig.orderLabel(
+                      order.statusCode.isNotEmpty ? order.statusCode : order.status,
+                    ),
+                    order.statusCode.isNotEmpty ? order.statusCode : order.status,
+                    isPayment: false,
+                  ),
+                  _buildStatusChip(
+                    OrderPaymentStatusConfig.paymentLabel(
+                      order.paymentStatusCode.isNotEmpty
+                          ? order.paymentStatusCode
+                          : order.paymentStatus,
+                    ),
+                    order.paymentStatusCode.isNotEmpty
+                        ? order.paymentStatusCode
+                        : order.paymentStatus,
+                    isPayment: true,
                   ),
                 ],
               ),
@@ -191,7 +158,9 @@ class _OrderHistoryPageState extends State<OrderHistoryPage> {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    order.orderType == 'pickup' ? 'Самовывоз' : 'Доставка',
+                    order.orderTypeLabel.isNotEmpty
+                        ? order.orderTypeLabel
+                        : (order.orderType == 'pickup' ? 'Без доставки' : 'С доставкой'),
                     style: AppText.medium_14.copyWith(
                       color: AppColors.black_transparent,
                     ),

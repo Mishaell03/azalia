@@ -37,6 +37,14 @@ class _PaymentWebViewPage extends State<PaymentWebViewPage>
   bool _isLaunchingExternal = false;
   bool _externalBrowserOpened = false;
 
+  bool _isPaidStatus(String? rawStatus) {
+    final status = (rawStatus ?? '').trim().toLowerCase();
+    return status == 'paid' ||
+        status == 'succeeded' ||
+        status == 'оплачен' ||
+        status == 'оплачено';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -64,7 +72,7 @@ class _PaymentWebViewPage extends State<PaymentWebViewPage>
             final status =
                 uri?.queryParameters['payment_status'] ??
                 uri?.queryParameters['status'];
-            if (status == 'paid' && mounted) {
+            if (_isPaidStatus(status) && mounted) {
               Navigator.pop(context, true);
               return;
             }
@@ -220,10 +228,12 @@ class _PaymentWebViewPage extends State<PaymentWebViewPage>
 
       if (!mounted) return;
 
-      final status = response['data']?['status']?.toString();
-      debugPrint('PaymentWebViewPage: статус платежа: $status');
+      final data = response['data'] as Map<String, dynamic>? ?? const {};
+      final status = data['status']?.toString();
+      final statusCode = data['status_code']?.toString();
+      debugPrint('PaymentWebViewPage: статус платежа: $status, код: $statusCode');
 
-      if (status == 'paid' || status == 'succeeded') {
+      if (_isPaidStatus(statusCode) || _isPaidStatus(status)) {
         setState(() {
           _paymentCompleted = true;
           _isCheckingStatus = false;
@@ -235,7 +245,7 @@ class _PaymentWebViewPage extends State<PaymentWebViewPage>
       setState(() {
         _isCheckingStatus = false;
         if (!silent) {
-          _error = 'Платёж не завершён. Статус: ${status ?? 'unknown'}';
+          _error = 'Платёж не завершён. Статус: ${status ?? statusCode ?? 'unknown'}';
         }
       });
     } catch (e) {

@@ -11,5 +11,6 @@ class AppColors{
   static const grey = Color(0xFF505050);
   static const grey_light = Color(0xFFBFC2C8);
   static const error = Color(0xFFD32F2F);
+  static const success = Color(0xFF2E7D32);
   static const transparent = Color(0x00000000);
 }

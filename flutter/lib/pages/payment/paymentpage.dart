@@ -28,6 +28,14 @@ class _PaymentPageState extends State<PaymentPage> {
   bool _isSubmitting = false;
   bool _isCancelling = false;
   bool _allowPop = false;
+  String _paymentTiming = 'online';
+  String _onDeliveryMethod = 'cash';
+  String _orderType = 'delivery';
+  bool _isLoadingStores = false;
+  bool _isCheckingAvailability = false;
+  int? _selectedPickupStoreId;
+  List<_PickupStore> _pickupStores = const [];
+  Map<int, _ItemAvailability> _availabilityByCartItem = const {};
 
   @override
   void initState() {
@@ -35,6 +43,13 @@ class _PaymentPageState extends State<PaymentPage> {
     _savedAddress = (widget.args.address ?? '').trim();
     _addressController = TextEditingController(text: _savedAddress);
     _paymentService = PaymentService(ApiClient());
+    _paymentTiming = widget.args.paymentTiming;
+    _onDeliveryMethod =
+        widget.args.onDeliveryMethod ?? widget.args.paymentMethod;
+    if (_onDeliveryMethod != 'cash' && _onDeliveryMethod != 'card') {
+      _onDeliveryMethod = 'cash';
+    }
+    _loadPickupStores();
   }
 
   @override
@@ -44,7 +59,16 @@ class _PaymentPageState extends State<PaymentPage> {
   }
 
   String _formatPaymentMethod(String method) {
-    return method == 'card' ? 'Карта' : 'Наличные';
+    switch (method) {
+      case 'card':
+        return 'Карта';
+      case 'cash':
+        return 'Наличные';
+      case 'sbp':
+        return 'СБП';
+      default:
+        return method;
+    }
   }
 
   String _formatCurrency(double value) {
@@ -64,6 +88,164 @@ class _PaymentPageState extends State<PaymentPage> {
     }
 
     return message;
+  }
+
+  Future<void> _loadPickupStores() async {
+    setState(() {
+      _isLoadingStores = true;
+    });
+    try {
+      final rows = await _paymentService.getStores();
+      final stores = rows
+          .map(_PickupStore.fromJson)
+          .where((s) => s.isActivePickupCandidate)
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _pickupStores = stores;
+        _selectedPickupStoreId = stores.isNotEmpty ? stores.first.id : null;
+      });
+      await _refreshAvailabilityPreview();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _pickupStores = const [];
+        _selectedPickupStoreId = null;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingStores = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _refreshAvailabilityPreview() async {
+    if (_orderType != 'pickup' || _selectedPickupStoreId == null) {
+      if (!mounted) return;
+      setState(() {
+        _isCheckingAvailability = false;
+        _availabilityByCartItem = const {};
+      });
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _isCheckingAvailability = true;
+      });
+    }
+
+    try {
+      final availability = await _paymentService.checkAvailability(
+        selectedItemIds: widget.args.selectedItemIds,
+        orderType: _orderType,
+        storeId: _selectedPickupStoreId,
+      );
+      final availabilityItems = (availability['items'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .toList();
+      final availabilityMap = <int, _ItemAvailability>{};
+      for (final item in availabilityItems) {
+        final cartItemId = (item['cart_item_id'] as num?)?.toInt();
+        final requestedQty = (item['requested_quantity'] as num?)?.toInt() ?? 0;
+        final availableQty = (item['available_quantity'] as num?)?.toInt() ?? 0;
+        final missingQty =
+            (item['missing_quantity'] as num?)?.toInt() ??
+            (requestedQty > availableQty ? (requestedQty - availableQty) : 0);
+        if (cartItemId != null && requestedQty > availableQty) {
+          availabilityMap[cartItemId] = _ItemAvailability(
+            availableQuantity: availableQty,
+            missingQuantity: missingQty,
+          );
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _isCheckingAvailability = false;
+        _availabilityByCartItem = availabilityMap;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isCheckingAvailability = false;
+        _availabilityByCartItem = const {};
+      });
+    }
+  }
+
+  Future<bool> _confirmProceedWithoutMissing(
+    List<Map<String, dynamic>> missingItems,
+  ) async {
+    final lines = <String>[];
+    var hasRemovedItems = false;
+
+    for (final item in missingItems) {
+      final name = item['name']?.toString() ?? 'Товар';
+      final available = (item['available_quantity'] as num?)?.toInt() ?? 0;
+      final miss = (item['missing_quantity'] as num?)?.toInt() ?? 0;
+      if (available <= 0) {
+        hasRemovedItems = true;
+        lines.add(
+          '• $name — товара нет в наличии. Доступно: 0 шт. Товар будет исключен.',
+        );
+      } else {
+        lines.add('• $name — доступно: $available шт., не хватает: $miss шт.');
+      }
+    }
+    final message = lines.join('\n');
+    final hint = hasRemovedItems
+        ? 'Оформить заказ с доступным количеством? Недоступные товары будут исключены.'
+        : 'Оформить заказ с доступным количеством?';
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Не всё в наличии'),
+        content: SingleChildScrollView(child: Text('$message\n\n$hint')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            style: TextButton.styleFrom(
+                side: BorderSide(
+                    color: AppColors.brown
+                )
+            ),
+            child: Text('Отмена', style: AppText.medium_14.copyWith(color: AppColors.brown),),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(
+              backgroundColor: AppColors.brown
+            ),
+            child: Text('Оформить с доступным', style: AppText.medium_14.copyWith(color: AppColors.white_transparent)),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
+
+  String? _buildQuantityChangedNote(List<Map<String, dynamic>> missingItems) {
+    if (missingItems.isEmpty) return null;
+
+    final lines = <String>[];
+    for (final item in missingItems) {
+      final name = item['name']?.toString() ?? 'Товар';
+      final requested = (item['requested_quantity'] as num?)?.toInt() ?? 0;
+      final available = (item['available_quantity'] as num?)?.toInt() ?? 0;
+
+      if (available <= 0) {
+        lines.add('• $name: было $requested шт., станет 0 шт. (нет в наличии)');
+      } else if (available < requested) {
+        lines.add('• $name: было $requested шт., станет $available шт.');
+      }
+    }
+
+    if (lines.isEmpty) return null;
+
+    return 'Количество товаров будет изменено по остаткам:\n${lines.join('\n')}';
   }
 
   void _showSnackBar(String message, {bool isError = false}) {
@@ -98,18 +280,14 @@ class _PaymentPageState extends State<PaymentPage> {
     return true;
   }
 
-  Future<bool> _showPaymentWarning() async {
+  Future<bool> _showPaymentWarning({String? quantityChangedNote}) async {
     final confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: true,
       builder: (dialogContext) => AlertDialog(
         title: Row(
           children: [
-            const Icon(
-              Icons.warning_amber,
-              size: 25,
-              color: AppColors.brown,
-            ),
+            const Icon(Icons.warning_amber, size: 25, color: AppColors.brown),
             const SizedBox(width: 10),
             Text(
               'Предупреждение',
@@ -118,6 +296,7 @@ class _PaymentPageState extends State<PaymentPage> {
           ],
         ),
         content: Text(
+          '${quantityChangedNote != null && quantityChangedNote.isNotEmpty ? '$quantityChangedNote\n\n' : ''}'
           'Если вы используете VPN, оплата может работать некорректно.\n\n'
           'Рекомендуем временно отключить VPN для успешного завершения платежа.',
           style: AppText.medium_14.copyWith(color: AppColors.grey),
@@ -217,13 +396,17 @@ class _PaymentPageState extends State<PaymentPage> {
 
     FocusScope.of(context).unfocus();
 
-    if (!_validateAddress()) {
-      _showSnackBar('Укажите корректный адрес доставки', isError: true);
-      return;
+    if (_orderType == 'delivery') {
+      if (!_validateAddress()) {
+        _showSnackBar('Укажите корректный адрес доставки', isError: true);
+        return;
+      }
+    } else {
+      if (_selectedPickupStoreId == null) {
+        _showSnackBar('Выберите точку самовывоза', isError: true);
+        return;
+      }
     }
-
-    final confirmed = await _showPaymentWarning();
-    if (!confirmed || !context.mounted) return;
 
     setState(() {
       _isSubmitting = true;
@@ -231,10 +414,71 @@ class _PaymentPageState extends State<PaymentPage> {
 
     PaymentGenerateResponse? paymentResponse;
     try {
+      var selectedIds = widget.args.selectedItemIds;
+      String? quantityChangedNote;
+      if (_orderType == 'pickup') {
+        final availability = await _paymentService.checkAvailability(
+          selectedItemIds: selectedIds,
+          orderType: _orderType,
+          storeId: _selectedPickupStoreId,
+        );
+
+        final canProceed = availability['can_proceed'] == true;
+        final availableItemIds =
+            (availability['available_item_ids'] as List? ?? const [])
+                .whereType<num>()
+                .map((x) => x.toInt())
+                .toList();
+        final missingItems =
+            (availability['missing_items'] as List? ?? const [])
+                .whereType<Map<String, dynamic>>()
+                .toList();
+        final hasUnavailableItems = missingItems.any(
+          (item) => ((item['available_quantity'] as num?)?.toInt() ?? 0) <= 0,
+        );
+
+        if (!canProceed || availableItemIds.isEmpty) {
+          _showSnackBar(
+            'На выбранной точке нет товаров в наличии. Оформление невозможно.',
+            isError: true,
+          );
+          return;
+        }
+
+        if (missingItems.isNotEmpty) {
+          final confirmed = await _confirmProceedWithoutMissing(missingItems);
+          if (!confirmed) {
+            return;
+          }
+          selectedIds = availableItemIds;
+          quantityChangedNote = _buildQuantityChangedNote(missingItems);
+          if (quantityChangedNote == null) {
+            quantityChangedNote = hasUnavailableItems
+                ? 'Количество товаров изменено по остаткам выбранной точки самовывоза. Часть недоступных товаров будет исключена из заказа.'
+                : 'Количество товаров изменено по остаткам выбранной точки самовывоза. Заказ будет оформлен с доступным количеством.';
+          }
+        }
+      }
+
+      if (_paymentTiming == 'online') {
+        final confirmed = await _showPaymentWarning(
+          quantityChangedNote: quantityChangedNote,
+        );
+        if (!confirmed || !context.mounted) return;
+      }
+
       paymentResponse = await _paymentService.generatePaymentLink(
-        address: _addressController.text.trim(),
-        paymentMethod: widget.args.paymentMethod,
-        selectedItemIds: widget.args.selectedItemIds,
+        address: _orderType == 'delivery' ? _addressController.text.trim() : null,
+        paymentMethod: _paymentTiming == 'on_delivery'
+            ? _onDeliveryMethod
+            : 'card',
+        paymentTiming: _paymentTiming,
+        onDeliveryMethod: _paymentTiming == 'on_delivery'
+            ? _onDeliveryMethod
+            : null,
+        orderType: _orderType,
+        storeId: _orderType == 'pickup' ? _selectedPickupStoreId : null,
+        selectedItemIds: selectedIds,
       );
 
       _savedAddress =
@@ -248,6 +492,14 @@ class _PaymentPageState extends State<PaymentPage> {
       _pendingPaymentLinkId = paymentResponse.paymentLinkId;
 
       if (!mounted) return;
+
+      if (_paymentTiming == 'on_delivery') {
+        _paymentCompleted = true;
+        _pendingPaymentLinkId = null;
+        _showSnackBar('✓ Заказ оформлен. Оплата при получении');
+        context.goNamed('profileOrders');
+        return;
+      }
 
       final result = await context.pushNamed<bool>(
         'payment_webview',
@@ -263,7 +515,7 @@ class _PaymentPageState extends State<PaymentPage> {
         _paymentCompleted = true;
         _pendingPaymentLinkId = null;
         _showSnackBar('✓ Оплата прошла успешно!');
-        context.go('/');
+        context.goNamed('profileOrders');
         return;
       }
 
@@ -321,6 +573,31 @@ class _PaymentPageState extends State<PaymentPage> {
                               color: AppColors.grey,
                             ),
                           ),
+                          if (_orderType == 'pickup' &&
+                              _availabilityByCartItem[item.cartItemId] !=
+                                  null) ...[
+                            const SizedBox(height: 4),
+                            Builder(
+                              builder: (_) {
+                                final availability =
+                                    _availabilityByCartItem[item.cartItemId]!;
+                                if (availability.availableQuantity <= 0) {
+                                  return Text(
+                                    'Товара нет в наличии. Доступно: 0 шт.',
+                                    style: AppText.medium_12.copyWith(
+                                      color: AppColors.error,
+                                    ),
+                                  );
+                                }
+                                return Text(
+                                  'Доступно: ${availability.availableQuantity} шт. вместо ${item.quantity} шт.',
+                                  style: AppText.medium_12.copyWith(
+                                    color: AppColors.error,
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
                           if (item.potPrice > 0) ...[
                             const SizedBox(height: 4),
                             Text(
@@ -410,7 +687,204 @@ class _PaymentPageState extends State<PaymentPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildItemsBlock(),
+                      Text(
+                        'Способ получения',
+                        style: AppText.bold_15.copyWith(color: AppColors.grey),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppColors.grey_light),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Самовывоз',
+                                style: AppText.medium_14.copyWith(
+                                  color: AppColors.black,
+                                ),
+                              ),
+                            ),
+                            Switch(
+                              value: _orderType == 'pickup',
+                              activeThumbColor: AppColors.brown,
+                              onChanged: _isSubmitting
+                                  ? null
+                                  : (enabled) async {
+                                      setState(() {
+                                        _orderType = enabled
+                                            ? 'pickup'
+                                            : 'delivery';
+                                        if (!enabled) {
+                                          _addressError = null;
+                                        }
+                                      });
+                                      if (enabled &&
+                                          _selectedPickupStoreId == null &&
+                                          _pickupStores.isNotEmpty) {
+                                        setState(() {
+                                          _selectedPickupStoreId =
+                                              _pickupStores.first.id;
+                                        });
+                                      }
+                                      await _refreshAvailabilityPreview();
+                                    },
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      if (_orderType == 'delivery') ...[
+                        Text(
+                          'Адрес доставки',
+                          style: AppText.bold_15.copyWith(
+                            color: AppColors.grey,
+                          ),
+                        ),
+                        Text(
+                          'Область, город, улица, дом, квартира',
+                          style: AppText.medium_12.copyWith(
+                            color: AppColors.grey,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _addressController,
+                          maxLines: 2,
+                          minLines: 1,
+                          onChanged: (value) {
+                            if (_addressError != null &&
+                                value.trim().length >= 5) {
+                              setState(() {
+                                _addressError = null;
+                              });
+                            }
+                          },
+                          style: AppText.medium_16.copyWith(
+                            color: AppColors.black,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: 'Введите адрес доставки',
+                            hintStyle: AppText.medium_14.copyWith(
+                              color: AppColors.black_transparent,
+                            ),
+                            errorText: _addressError,
+                            errorStyle: AppText.medium_12.copyWith(
+                              color: AppColors.error,
+                            ),
+                            filled: true,
+                            fillColor: AppColors.white,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: const BorderSide(
+                                color: AppColors.grey_light,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: const BorderSide(
+                                color: AppColors.brown,
+                                width: 1.5,
+                              ),
+                            ),
+                            errorBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: const BorderSide(
+                                color: AppColors.error,
+                              ),
+                            ),
+                            focusedErrorBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: const BorderSide(
+                                color: AppColors.error,
+                                width: 1.5,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ] else ...[
+                        Text(
+                          'Точка самовывоза',
+                          style: AppText.bold_15.copyWith(
+                            color: AppColors.grey,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        if (_isLoadingStores)
+                          const LinearProgressIndicator()
+                        else if (_pickupStores.isEmpty)
+                          Text(
+                            'Нет доступных точек самовывоза',
+                            style: AppText.medium_14.copyWith(
+                              color: AppColors.error,
+                            ),
+                          )
+                        else
+                          DropdownButtonFormField<int>(
+                            isExpanded: true,
+                            initialValue: _selectedPickupStoreId,
+                            decoration: const InputDecoration(
+                              border: OutlineInputBorder(),
+                              labelText: 'Выберите точку',
+                            ),
+                            items: _pickupStores
+                                .map(
+                                  (store) => DropdownMenuItem<int>(
+                                    value: store.id,
+                                    child: SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      child: Text(
+                                        '${store.name} • ${store.address}',
+                                        softWrap: false,
+                                      ),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: _isSubmitting
+                                ? null
+                                : (value) async {
+                                    setState(() {
+                                      _selectedPickupStoreId = value;
+                                    });
+                                    await _refreshAvailabilityPreview();
+                                  },
+                          ),
+                      ],
+                      if (_orderType == 'pickup' &&
+                          _isCheckingAvailability) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Проверяем наличие на выбранной точке...',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppText.medium_12.copyWith(
+                                  color: AppColors.grey,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 12),
                       const Divider(
                         color: AppColors.brown,
@@ -418,83 +892,22 @@ class _PaymentPageState extends State<PaymentPage> {
                         thickness: 1,
                       ),
                       const SizedBox(height: 12),
-                      Text(
-                        'Адрес доставки',
-                        style: AppText.bold_15.copyWith(color: AppColors.grey),
-                      ),
-                      Text(
-                        'Область, город, улица, дом, квартира',
-                        style: AppText.medium_12.copyWith(color: AppColors.grey),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _addressController,
-                        maxLines: 2,
-                        minLines: 1,
-                        onChanged: (value) {
-                          if (_addressError != null &&
-                              value.trim().length >= 5) {
-                            setState(() {
-                              _addressError = null;
-                            });
-                          }
-                        },
-                        style: AppText.medium_16.copyWith(
-                          color: AppColors.black,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'Введите адрес доставки',
-                          hintStyle: AppText.medium_14.copyWith(
-                            color: AppColors.black_transparent,
-                          ),
-                          errorText: _addressError,
-                          errorStyle: AppText.medium_12.copyWith(
-                            color: AppColors.error,
-                          ),
-                          filled: true,
-                          fillColor: AppColors.white,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 14,
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: const BorderSide(
-                              color: AppColors.grey_light,
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: const BorderSide(
-                              color: AppColors.brown,
-                              width: 1.5,
-                            ),
-                          ),
-                          errorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: const BorderSide(
-                              color: AppColors.error,
-                            ),
-                          ),
-                          focusedErrorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: const BorderSide(
-                              color: AppColors.error,
-                              width: 1.5,
-                            ),
-                          ),
-                        ),
-                      ),
+                      _buildItemsBlock(),
                       const SizedBox(height: 10),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            'Метод оплаты',
-                            style: AppText.medium_14.copyWith(
-                              color: AppColors.grey,
+                          Expanded(
+                            child: Text(
+                              'Метод оплаты',
+                              style: AppText.medium_14.copyWith(
+                                color: AppColors.grey,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 12,
@@ -505,7 +918,13 @@ class _PaymentPageState extends State<PaymentPage> {
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
-                              _formatPaymentMethod(widget.args.paymentMethod),
+                              _formatPaymentMethod(
+                                _paymentTiming == 'on_delivery'
+                                    ? _onDeliveryMethod
+                                    : 'card',
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: AppText.medium_12.copyWith(
                                 color: AppColors.black_transparent,
                               ),
@@ -513,6 +932,78 @@ class _PaymentPageState extends State<PaymentPage> {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppColors.grey_light),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Оплатить при получении',
+                                style: AppText.medium_14.copyWith(
+                                  color: AppColors.black,
+                                ),
+                              ),
+                            ),
+                            Switch(
+                              value: _paymentTiming == 'on_delivery',
+                              activeThumbColor: AppColors.brown,
+                              onChanged: _isSubmitting
+                                  ? null
+                                  : (enabled) {
+                                      setState(() {
+                                        _paymentTiming = enabled
+                                            ? 'on_delivery'
+                                            : 'online';
+                                      });
+                                    },
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_paymentTiming == 'on_delivery') ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ChoiceChip(
+                                label: const Text('Наличные'),
+                                selected: _onDeliveryMethod == 'cash',
+                                onSelected: _isSubmitting
+                                    ? null
+                                    : (selected) {
+                                        if (!selected) return;
+                                        setState(() {
+                                          _onDeliveryMethod = 'cash';
+                                        });
+                                      },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: ChoiceChip(
+                                label: const Text('Картой'),
+                                selected: _onDeliveryMethod == 'card',
+                                onSelected: _isSubmitting
+                                    ? null
+                                    : (selected) {
+                                        if (!selected) return;
+                                        setState(() {
+                                          _onDeliveryMethod = 'card';
+                                        });
+                                      },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 20),
                       Container(
                         padding: const EdgeInsets.all(12),
@@ -567,7 +1058,9 @@ class _PaymentPageState extends State<PaymentPage> {
                             ),
                           )
                         : Text(
-                            'Оплатить',
+                            _paymentTiming == 'on_delivery'
+                                ? 'Оформить заказ'
+                                : 'Оплатить',
                             style: AppText.semibold_18.copyWith(
                               color: AppColors.white,
                             ),
@@ -606,4 +1099,42 @@ class _PaymentPageState extends State<PaymentPage> {
       ),
     );
   }
+}
+
+class _PickupStore {
+  final int id;
+  final String name;
+  final String address;
+  final String storeType;
+
+  const _PickupStore({
+    required this.id,
+    required this.name,
+    required this.address,
+    required this.storeType,
+  });
+
+  bool get isActivePickupCandidate =>
+      storeType == 'pickup_point' ||
+      storeType == 'shop' ||
+      storeType == 'warehouse';
+
+  factory _PickupStore.fromJson(Map<String, dynamic> json) {
+    return _PickupStore(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      name: json['name']?.toString() ?? '',
+      address: json['address']?.toString() ?? '',
+      storeType: json['store_type']?.toString() ?? '',
+    );
+  }
+}
+
+class _ItemAvailability {
+  final int availableQuantity;
+  final int missingQuantity;
+
+  const _ItemAvailability({
+    required this.availableQuantity,
+    required this.missingQuantity,
+  });
 }

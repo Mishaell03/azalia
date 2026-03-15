@@ -116,7 +116,19 @@ def _resolve_pot_unit_price(
 
 def _cart_item_to_dict(cur, row):
     product = cur.execute(
-        "SELECT id, name, image_url FROM products WHERE id = ?",
+        """
+        SELECT
+            p.id,
+            p.name,
+            p.image_url,
+            p.is_active,
+            p.deleted_at,
+            COALESCE(SUM(i.quantity_available), 0) AS available_qty
+        FROM products p
+        LEFT JOIN inventory i ON i.product_id = p.id
+        WHERE p.id = ?
+        GROUP BY p.id
+        """,
         (row["product_id"],),
     ).fetchone()
 
@@ -142,6 +154,10 @@ def _cart_item_to_dict(cur, row):
         "plant_id": row["product_id"],
         "product_name": product["name"] if product else None,
         "image_url": product["image_url"] if product else None,
+        "is_active": bool(product["is_active"]) if product else True,
+        "deleted_at": product["deleted_at"] if product else None,
+        "in_stock": bool((product["available_qty"] or 0) > 0) if product else False,
+        "stock_quantity": int(product["available_qty"] or 0) if product else 0,
         "quantity": int(row["quantity"]),
         "pot_size_id": row["pot_size_id"],
         "pot_size": size_name,
@@ -227,12 +243,6 @@ def add_to_cart(payload: CartAddRequest, response: Response, user=Depends(get_cu
         current_quantity = int(existing["quantity"]) if existing else 0
         requested_quantity = current_quantity + payload.quantity
 
-        if requested_quantity > int(product["available_qty"]):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Not enough product in stock. Available: {int(product['available_qty'])}",
-            )
-
         product_unit_price = float(product["base_price"])
         total_price = round((product_unit_price + pot_unit_price) * requested_quantity, 2)
 
@@ -315,12 +325,6 @@ def update_cart_item(item_id: int, payload: CartUpdateRequest, user=Depends(get_
             return {"success": True, "message": "Item removed from cart", "data": None}
 
         product = _resolve_product(cur, int(item["product_id"]))
-        if payload.quantity > int(product["available_qty"]):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Not enough product in stock. Available: {int(product['available_qty'])}",
-            )
-
         total_price = round((float(item["product_unit_price"]) + float(item["pot_unit_price"])) * payload.quantity, 2)
         cur.execute(
             "UPDATE cart_items SET quantity = ?, total_price = ? WHERE id = ?",
@@ -376,11 +380,21 @@ def get_wishlist(user=Depends(get_current_user)):
     try:
         rows = conn.execute(
             """
-            SELECT wi.id, wi.user_id, wi.product_id, wi.created_at,
-                   p.name AS product_name, p.image_url
+            SELECT
+                wi.id,
+                wi.user_id,
+                wi.product_id,
+                wi.created_at,
+                p.name AS product_name,
+                p.image_url,
+                p.is_active,
+                p.deleted_at,
+                COALESCE(SUM(i.quantity_available), 0) AS available_qty
             FROM wishlist_items wi
             JOIN products p ON p.id = wi.product_id
+            LEFT JOIN inventory i ON i.product_id = p.id
             WHERE wi.user_id = ?
+            GROUP BY wi.id, wi.user_id, wi.product_id, wi.created_at, p.name, p.image_url, p.is_active, p.deleted_at
             ORDER BY wi.created_at DESC
             """,
             (user["id"],),
@@ -396,6 +410,10 @@ def get_wishlist(user=Depends(get_current_user)):
             "plant_id": row["product_id"],
             "product_name": row["product_name"],
             "image_url": row["image_url"],
+            "is_active": bool(row["is_active"]),
+            "deleted_at": row["deleted_at"],
+            "in_stock": bool((row["available_qty"] or 0) > 0),
+            "stock_quantity": int(row["available_qty"] or 0),
             "created_at": row["created_at"],
         }
         for row in rows

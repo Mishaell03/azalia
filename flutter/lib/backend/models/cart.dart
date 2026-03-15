@@ -54,8 +54,10 @@ class CartItem {
               'base_price':
                   json['plant_unit_price'] ?? json['product_unit_price'],
               'image_url': json['image_url'],
-              'stock_quantity': 1,
-              'in_stock': true,
+              'stock_quantity': json['stock_quantity'] ?? 0,
+              'in_stock': json['in_stock'] ?? false,
+              'is_active': json['is_active'] ?? true,
+              'deleted_at': json['deleted_at'],
             }),
     );
   }

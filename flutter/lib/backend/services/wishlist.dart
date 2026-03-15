@@ -94,6 +94,9 @@ class WishlistService {
   }
 
   static Future<WishlistItem> _hydrateWishlistItem(WishlistItem item) async {
+    if (!item.plant.isActive || item.plant.deletedAt != null) {
+      return item;
+    }
     try {
       final plant = await PlantService.getPlantById(item.plantId);
       return item.copyWith(plant: plant);

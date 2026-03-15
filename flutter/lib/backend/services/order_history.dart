@@ -44,4 +44,11 @@ class OrderHistoryService {
 
     return OrderHistoryDetail.fromJson(data);
   }
+
+  static Future<void> cancelOrder(int orderId) async {
+    final response = await _api.post(ApiConfig.orderCancel(orderId));
+    if (response['success'] != true) {
+      throw ApiException('Не удалось отменить заказ');
+    }
+  }
 }

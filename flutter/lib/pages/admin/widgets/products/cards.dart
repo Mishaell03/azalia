@@ -8,18 +8,11 @@ class AdminProductsCards extends StatelessWidget {
 
   static const List<Map<String, dynamic>> _carts = [
     {
-      "name": "Редактор товаров",
-      "pic": Icons.edit_note_outlined,
-      "heading": "Изменение карточек",
-      "description": "Изменение информации по товарам, управление статусом продаж и просмотр остатков в штуках.",
-      "route": "editor"
-    },
-    {
-      "name": "Товары в закупках",
-      "pic": Icons.add_shopping_cart,
-      "heading": "Ожидают заказа",
-      "description": "Планируемые позиции для заказа у поставщиков. Формирование новых поставок.",
-      "route": "procurement"
+      "name": "Клиентские заказы",
+      "pic": Icons.inventory_2_outlined,
+      "heading": "Текущие заказы",
+      "description": "Активные заявки от клиентов, которые требуют сборки, упаковки или подготовки к выдаче.",
+      "route": "orders"
     },
     {
       "name": "Товары на складах",
@@ -29,6 +22,13 @@ class AdminProductsCards extends StatelessWidget {
       "route": "warehouse"
     },
     {
+      "name": "Товары в закупках",
+      "pic": Icons.add_shopping_cart,
+      "heading": "Ожидают заказа",
+      "description": "Планируемые позиции для заказа у поставщиков. Формирование новых поставок.",
+      "route": "procurement"
+    },
+    {
       "name": "Товары в доставке",
       "pic": Icons.local_shipping_outlined,
       "heading": "Поступление товаров",
@@ -36,18 +36,18 @@ class AdminProductsCards extends StatelessWidget {
       "route": "delivery"
     },
     {
-      "name": "Клиентские заказы",
-      "pic": Icons.inventory_2_outlined,
-      "heading": "Текущие заказы",
-      "description": "Активные заявки от клиентов, которые требуют сборки, упаковки или подготовки к выдаче.",
-      "route": "orders"
-    },
-    {
       "name": "Прием поставок",
       "pic": Icons.conveyor_belt,
       "heading": "Поступления на склад",
       "description": "Регистрация и проверка поступивших товаров от поставщиков.",
       "route": "receipts"
+    },
+    {
+      "name": "Редактор товаров",
+      "pic": Icons.edit_note_outlined,
+      "heading": "Изменение карточек",
+      "description": "Изменение информации по товарам, управление статусом продаж и просмотр остатков в штуках.",
+      "route": "editor"
     },
   ];
 

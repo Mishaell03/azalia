@@ -57,10 +57,11 @@ class _WishlistPageState extends State<WishlistPage> {
       final List<Plant> outOfStockPlants = [];
 
       for (final plant in plants) {
-        if (plant.inStock && plant.stockQuantity > 0) {
-          availablePlants.add(plant);
-        } else {
+        final isRemovedFromSale = !plant.isActive || plant.deletedAt != null;
+        if (isRemovedFromSale) {
           outOfStockPlants.add(plant);
+        } else {
+          availablePlants.add(plant);
         }
       }
 
@@ -186,8 +187,7 @@ class _WishlistPageState extends State<WishlistPage> {
                   plant: plant,
                   onWishlistUpdated: _onWishlistUpdated,
                 ),
-              )
-              .toList(),
+              ),
 
           // недоступные товары с разделителем
           if (_outOfStockPlants.isNotEmpty) ...[
@@ -199,8 +199,7 @@ class _WishlistPageState extends State<WishlistPage> {
                     plant: plant,
                     onWishlistUpdated: _onWishlistUpdated,
                   ),
-                )
-                .toList(),
+                ),
           ],
         ],
       ),

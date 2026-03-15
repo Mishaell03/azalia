@@ -2,6 +2,7 @@ import 'package:azalia/backend/apiClient.dart';
 import 'package:azalia/backend/models/employeesAdmin.dart';
 import 'package:azalia/backend/services/employeesAdmin.dart';
 import 'package:azalia/components/colors.dart';
+import 'package:azalia/components/order_payment_status_config.dart';
 import 'package:azalia/components/text_styles.dart';
 import 'package:flutter/material.dart';
 
@@ -126,6 +127,13 @@ class _AdminUserViewDialogState extends State<AdminUserViewDialog> {
   }
 
   String _prettyStatus(String status) {
+    if (OrderPaymentStatusConfig.isOrderStatus(status)) {
+      return OrderPaymentStatusConfig.orderLabel(status);
+    }
+    if (OrderPaymentStatusConfig.isPaymentStatus(status)) {
+      return OrderPaymentStatusConfig.paymentLabel(status);
+    }
+
     switch (status) {
       case 'active':
         return 'Активен';
@@ -133,44 +141,24 @@ class _AdminUserViewDialogState extends State<AdminUserViewDialog> {
         return 'Заблокирован';
       case 'deleted':
         return 'Удален';
-      case 'awaiting_payment':
-        return 'Ожидает оплаты';
-      case 'processing':
-        return 'В работе';
-      case 'assembled':
-        return 'Собран';
-      case 'shipped':
-        return 'В доставке';
-      case 'ready_for_pickup':
-        return 'Готов к выдаче';
-      case 'delivered':
-        return 'Доставлен';
-      case 'completed':
-        return 'Завершен';
-      case 'cancelled':
-        return 'Отменен';
-      case 'pending':
-        return 'Ожидает';
-      case 'paid':
-        return 'Оплачен';
-      case 'failed':
-        return 'Ошибка';
       default:
         return status.isEmpty ? 'Не задан' : status;
     }
   }
 
   Color _statusColor(String status) {
+    if (OrderPaymentStatusConfig.isOrderStatus(status)) {
+      return OrderPaymentStatusConfig.orderColor(status);
+    }
+    if (OrderPaymentStatusConfig.isPaymentStatus(status)) {
+      return OrderPaymentStatusConfig.paymentColor(status);
+    }
+
     switch (status) {
       case 'active':
-      case 'completed':
-      case 'paid':
-      case 'delivered':
         return AppColors.brown;
       case 'blocked':
       case 'deleted':
-      case 'cancelled':
-      case 'failed':
         return AppColors.error;
       default:
         return AppColors.star;

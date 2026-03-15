@@ -1,6 +1,7 @@
 import 'package:azalia/backend/models/payment/order_history.dart';
 import 'package:azalia/backend/services/order_history.dart';
 import 'package:azalia/components/colors.dart';
+import 'package:azalia/components/order_payment_status_config.dart';
 import 'package:azalia/components/text_styles.dart';
 import 'package:azalia/pages/error/loading_error.dart';
 import 'package:flutter/material.dart';
@@ -67,57 +68,10 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
     return '$day.$month.$year, $hour:$minute';
   }
 
-  String _prettyStatus(String status) {
-    switch (status) {
-      case 'awaiting_payment':
-        return 'Ожидает оплаты';
-      case 'processing':
-        return 'В работе';
-      case 'assembled':
-        return 'Собран';
-      case 'shipped':
-        return 'В доставке';
-      case 'ready_for_pickup':
-        return 'Готов к выдаче';
-      case 'delivered':
-        return 'Доставлен';
-      case 'completed':
-        return 'Завершен';
-      case 'cancelled':
-        return 'Отменен';
-      case 'pending':
-        return 'Ожидает';
-      case 'paid':
-        return 'Оплачен';
-      case 'failed':
-        return 'Ошибка';
-      case 'refunded':
-        return 'Возврат';
-      case 'partially_refunded':
-        return 'Частичный возврат';
-      default:
-        return status;
-    }
-  }
-
-  Color _statusColor(String status) {
-    switch (status) {
-      case 'completed':
-      case 'paid':
-      case 'delivered':
-        return AppColors.brown;
-      case 'cancelled':
-      case 'failed':
-      case 'refunded':
-      case 'partially_refunded':
-        return AppColors.error;
-      default:
-        return AppColors.star;
-    }
-  }
-
-  Widget _buildChip(String text, String status) {
-    final color = _statusColor(status);
+  Widget _buildChip(String text, String status, {required bool isPayment}) {
+    final color = isPayment
+        ? OrderPaymentStatusConfig.paymentColor(status)
+        : OrderPaymentStatusConfig.orderColor(status);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -129,6 +83,59 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
         style: AppText.medium_12.copyWith(color: color),
       ),
     );
+  }
+
+  bool _canCancelOrder(OrderHistoryDetail order) {
+    final statusCode = order.statusCode.isNotEmpty ? order.statusCode : order.status;
+    return statusCode != 'completed' && statusCode != 'cancelled';
+  }
+
+  Future<void> _cancelOrder(OrderHistoryDetail order) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Отмена заказа'),
+        content: Text('Отменить заказ №${order.orderNumber}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Нет'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Да, отменить'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await OrderHistoryService.cancelOrder(order.orderId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.white,
+          content: Text(
+            'Заказ отменен',
+            style: AppText.medium_14.copyWith(color: AppColors.brown),
+          ),
+        ),
+      );
+      await _loadOrder();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.white,
+          content: Text(
+            'Не удалось отменить заказ: $e',
+            style: AppText.medium_14.copyWith(color: AppColors.error),
+          ),
+        ),
+      );
+    }
   }
 
   Widget _buildSection({
@@ -268,7 +275,11 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                 height: 10,
                 margin: const EdgeInsets.only(top: 5),
                 decoration: BoxDecoration(
-                  color: _statusColor(event.newStatus),
+                  color: OrderPaymentStatusConfig.orderColor(
+                    event.newStatusCode.isNotEmpty
+                        ? event.newStatusCode
+                        : event.newStatus,
+                  ),
                   shape: BoxShape.circle,
                 ),
               ),
@@ -278,7 +289,11 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _prettyStatus(event.newStatus),
+                      OrderPaymentStatusConfig.orderLabel(
+                        event.newStatusCode.isNotEmpty
+                            ? event.newStatusCode
+                            : event.newStatus,
+                      ),
                       style: AppText.medium_14.copyWith(
                         color: AppColors.black,
                       ),
@@ -327,7 +342,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _prettyStatus(refund.status),
+                      OrderPaymentStatusConfig.paymentLabel(refund.status),
                       style: AppText.medium_14.copyWith(color: AppColors.black),
                     ),
                     if (refund.reason != null && refund.reason!.isNotEmpty)
@@ -387,12 +402,26 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                           runSpacing: 8,
                           children: [
                             _buildChip(
-                              _prettyStatus(order.status),
-                              order.status,
+                              OrderPaymentStatusConfig.orderLabel(
+                                order.statusCode.isNotEmpty
+                                    ? order.statusCode
+                                    : order.status,
+                              ),
+                              order.statusCode.isNotEmpty
+                                  ? order.statusCode
+                                  : order.status,
+                              isPayment: false,
                             ),
                             _buildChip(
-                              _prettyStatus(order.paymentStatus),
-                              order.paymentStatus,
+                              OrderPaymentStatusConfig.paymentLabel(
+                                order.paymentStatusCode.isNotEmpty
+                                    ? order.paymentStatusCode
+                                    : order.paymentStatus,
+                              ),
+                              order.paymentStatusCode.isNotEmpty
+                                  ? order.paymentStatusCode
+                                  : order.paymentStatus,
+                              isPayment: true,
                             ),
                           ],
                         ),
@@ -407,6 +436,20 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                           _buildInfoRow('Адрес', order.address!),
                         if (order.comment != null && order.comment!.isNotEmpty)
                           _buildInfoRow('Комментарий', order.comment!),
+                        if (_canCancelOrder(order)) ...[
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: OutlinedButton(
+                              onPressed: () => _cancelOrder(order),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: AppColors.error),
+                                foregroundColor: AppColors.error,
+                              ),
+                              child: const Text('Отменить заказ'),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -441,7 +484,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                         children: [
                           _buildInfoRow(
                             'Статус',
-                            _prettyStatus(order.payment!.status),
+                            OrderPaymentStatusConfig.paymentLabel(order.payment!.status),
                           ),
                           _buildInfoRow(
                             'Способ',

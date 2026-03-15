@@ -11,8 +11,12 @@ class PaymentService {
 
   /// создать ссылку на оплату
   Future<PaymentGenerateResponse> generatePaymentLink({
-    required String address,
+    String? address,
     required String paymentMethod,
+    String paymentTiming = 'online',
+    String? onDeliveryMethod,
+    String orderType = 'delivery',
+    int? storeId,
     List<int>? selectedItemIds,
   }) async {
     final response = await _api.post(
@@ -20,6 +24,10 @@ class PaymentService {
       body: {
         'address': address,
         'payment_method': paymentMethod,
+        'payment_timing': paymentTiming,
+        'on_delivery_method': onDeliveryMethod,
+        'order_type': orderType,
+        'store_id': storeId,
         'selected_item_ids': selectedItemIds ?? [],
       },
     );
@@ -93,5 +101,28 @@ class PaymentService {
     }
 
     return data['address']?.toString() ?? address;
+  }
+
+  Future<List<Map<String, dynamic>>> getStores() async {
+    final response = await _api.get(ApiConfig.paymentStores);
+    final data = response['data'] as Map<String, dynamic>? ?? const {};
+    final items = data['items'] as List? ?? const [];
+    return items.whereType<Map<String, dynamic>>().toList();
+  }
+
+  Future<Map<String, dynamic>> checkAvailability({
+    required List<int> selectedItemIds,
+    required String orderType,
+    int? storeId,
+  }) async {
+    final response = await _api.post(
+      ApiConfig.paymentAvailability,
+      body: {
+        'selected_item_ids': selectedItemIds,
+        'order_type': orderType,
+        'store_id': storeId,
+      },
+    );
+    return response['data'] as Map<String, dynamic>? ?? const {};
   }
 }

@@ -68,18 +68,13 @@ class _CartPageState extends State<CartPage> {
 
     for (final item in items) {
       final itemWithPot = CartItemWithPot.fromCartItem(item);
+      final isRemovedFromSale =
+          !item.plant.isActive || item.plant.deletedAt != null;
 
-      if (item.plant.inStock && item.plant.stockQuantity > 0) {
-        if (item.quantity > item.plant.stockQuantity) {
-          await _autoReduceQuantity(item.id, item.plant.stockQuantity);
-          availableItems.add(
-            _createUpdatedItem(item, item.plant.stockQuantity),
-          );
-        } else {
-          availableItems.add(itemWithPot);
-        }
-      } else {
+      if (isRemovedFromSale) {
         outOfStockItems.add(itemWithPot);
+      } else {
+        availableItems.add(itemWithPot);
       }
     }
 
@@ -98,22 +93,6 @@ class _CartPageState extends State<CartPage> {
       _isLoading = false;
       _isUnauthorized = false;
     });
-  }
-
-  CartItemWithPot _createUpdatedItem(CartItem item, int newQuantity) {
-    return CartItemWithPot(
-      id: item.id,
-      userId: item.userId,
-      plantId: item.plantId,
-      quantity: newQuantity,
-      potColor: item.potColor,
-      potSize: item.potSize,
-      potMaterial: item.potMaterial,
-      plantUnitPrice: item.plantUnitPrice,
-      potUnitPrice: item.potUnitPrice,
-      totalPrice: (item.plantUnitPrice + item.potUnitPrice) * newQuantity,
-      plant: item.plant,
-    );
   }
 
   void _handleLoadError(dynamic e) {
@@ -139,17 +118,6 @@ class _CartPageState extends State<CartPage> {
       _error = 'Не удалось загрузить корзину';
       _isLoading = false;
     });
-  }
-
-  Future<void> _autoReduceQuantity(
-    int itemId,
-    int availableQuantity,
-  ) async {
-    try {
-      await CartService.updateCartItem(itemId, availableQuantity);
-    } catch (e) {
-      debugPrint('Ошибка автоматического обновления количества: $e');
-    }
   }
 
   Map<String, dynamic> _calculateSummary(List<CartItemWithPot> items, [Set<int>? selectedIds]) {
@@ -295,6 +263,7 @@ class _CartPageState extends State<CartPage> {
       final paymentItems = selectedItems
           .map(
             (item) => PaymentItemArgs(
+              cartItemId: item.id,
               plantName: item.plant.name,
               quantity: item.quantity,
               plantPrice: item.plantUnitPrice,

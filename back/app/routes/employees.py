@@ -73,6 +73,14 @@ class UpdateAdminRequest(BaseModel):
     fire: Optional[bool] = None
 
 
+class AdjustWarehouseProductRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    quantity_delta: int = Field(ge=-100000, le=100000)
+    comment: Optional[str] = Field(default=None, max_length=500)
+    store_id: Optional[int] = Field(default=None, ge=1)
+
+
 def _resolve_user(cur, user_id: Optional[int], telegram_id: Optional[int]):
     user = None
     if user_id is not None:
@@ -151,6 +159,28 @@ def _resolve_employee_by_user_id(cur, user_id: int):
     ).fetchone()
 
 
+def _resolve_active_employee_access(cur, user_id: int):
+    return cur.execute(
+        """
+        SELECT
+            e.id AS employee_id,
+            e.user_id,
+            e.position_id,
+            e.store_id,
+            p.title AS position_title,
+            s.name AS store_name,
+            s.address AS store_address
+        FROM employees e
+        JOIN positions p ON p.id = e.position_id
+        JOIN stores s ON s.id = e.store_id
+        WHERE e.user_id = ?
+          AND e.is_active = 1
+        LIMIT 1
+        """,
+        (user_id,),
+    ).fetchone()
+
+
 def _get_positions(cur):
     rows = cur.execute(
         """
@@ -189,6 +219,27 @@ def _get_stores(cur):
             "is_active": bool(row["is_active"]),
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
+        }
+        for row in rows
+    ]
+
+
+def _get_switchable_stores(cur):
+    rows = cur.execute(
+        """
+        SELECT id, name, address, store_type, is_active
+        FROM stores
+        WHERE is_active = 1
+        ORDER BY name ASC
+        """
+    ).fetchall()
+    return [
+        {
+            "id": row["id"],
+            "name": row["name"],
+            "address": row["address"],
+            "store_type": row["store_type"],
+            "is_active": bool(row["is_active"]),
         }
         for row in rows
     ]
@@ -1053,6 +1104,286 @@ def get_employee(employee_id: int, user=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Employee not found")
 
     return {"success": True, "data": _employee_to_dict(row)}
+
+
+@router.get("/warehouse/products", summary="Get Warehouse Products (Employee token)")
+def get_warehouse_products(
+    store_id: Optional[int] = Query(default=None, ge=1),
+    include_inactive_products: bool = Query(default=True),
+    user=Depends(get_current_user),
+):
+    """
+    Возвращает остатки склада для сотрудника.
+    - Без store_id: показывает склад, к которому привязан сотрудник.
+    - Со store_id: показывает выбранную точку (для переключения между точками).
+    Требуется заголовок Authorization: <session_token>.
+    """
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+
+        employee = _resolve_active_employee_access(cur, int(user["id"]))
+        if not employee:
+            raise HTTPException(status_code=403, detail="Active employee access required")
+
+        target_store_id = int(store_id) if store_id is not None else int(employee["store_id"])
+        target_store = cur.execute(
+            """
+            SELECT id, name, address, store_type, is_active
+            FROM stores
+            WHERE id = ?
+            LIMIT 1
+            """,
+            (target_store_id,),
+        ).fetchone()
+        if not target_store:
+            raise HTTPException(status_code=404, detail="Store not found")
+
+        sql = """
+            SELECT
+                p.id AS product_id,
+                p.name AS product_name,
+                p.image_url,
+                p.base_price,
+                p.is_active AS product_is_active,
+                p.deleted_at,
+                p.category_id,
+                c.name AS category_name,
+                i.quantity_on_hand,
+                i.quantity_reserved,
+                i.quantity_available,
+                i.reorder_point,
+                COALESCE(i.updated_at, p.updated_at) AS updated_at
+            FROM products p
+            LEFT JOIN inventory i
+              ON i.product_id = p.id
+             AND i.store_id = ?
+            LEFT JOIN categories c ON c.id = p.category_id
+            WHERE 1 = 1
+        """
+        params: list[object] = [target_store_id]
+
+        # Не показываем "мертвые" позиции: удален/неактивен и при этом на складе 0.
+        sql += """
+            AND NOT (
+                (p.deleted_at IS NOT NULL OR p.is_active = 0)
+                AND COALESCE(i.quantity_on_hand, 0) = 0
+                AND COALESCE(i.quantity_reserved, 0) = 0
+                AND COALESCE(i.quantity_available, 0) = 0
+            )
+        """
+
+        if not include_inactive_products:
+            sql += " AND p.is_active = 1 AND p.deleted_at IS NULL"
+
+        sql += " ORDER BY p.name ASC"
+        rows = cur.execute(sql, tuple(params)).fetchall()
+
+        switchable_stores = _get_switchable_stores(cur)
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "data": {
+            "employee": {
+                "employee_id": employee["employee_id"],
+                "user_id": employee["user_id"],
+                "position_id": employee["position_id"],
+                "position_title": employee["position_title"],
+                "home_store_id": employee["store_id"],
+                "home_store_name": employee["store_name"],
+                "home_store_address": employee["store_address"],
+            },
+            "selected_store": {
+                "id": target_store["id"],
+                "name": target_store["name"],
+                "address": target_store["address"],
+                "store_type": target_store["store_type"],
+                "is_active": bool(target_store["is_active"]),
+            },
+            "stores_for_switch": switchable_stores,
+            "products": [
+                {
+                    "product_id": row["product_id"],
+                    "name": row["product_name"],
+                    "image_url": row["image_url"] or "img/none.png",
+                    "base_price": float(row["base_price"] or 0),
+                    "is_active": bool(row["product_is_active"]),
+                    "deleted_at": row["deleted_at"],
+                    "category_id": row["category_id"],
+                    "category_name": row["category_name"],
+                    "quantity_on_hand": int(row["quantity_on_hand"] or 0),
+                    "quantity_reserved": int(row["quantity_reserved"] or 0),
+                    "quantity_available": int(row["quantity_available"] or 0),
+                    "reorder_point": int(row["reorder_point"] or 0),
+                    "updated_at": row["updated_at"],
+                }
+                for row in rows
+            ],
+            "count": len(rows),
+        },
+        "meta": {
+            "authorization_header": "Authorization: <session_token>",
+            "query": {
+                "store_id": target_store_id,
+                "include_inactive_products": include_inactive_products,
+            },
+        },
+    }
+
+
+@router.patch("/warehouse/products/{product_id}/adjust", summary="Adjust Warehouse Product Quantity")
+def adjust_warehouse_product(
+    product_id: int,
+    payload: AdjustWarehouseProductRequest,
+    user=Depends(get_current_user),
+):
+    """
+    Корректирует остаток товара на складе сотрудника (или выбранном store_id).
+    quantity_delta:
+      > 0  -> прибавить
+      < 0  -> убавить
+    comment сохраняется в inventory_movements.comment.
+    """
+    if payload.quantity_delta == 0:
+        raise HTTPException(status_code=400, detail="quantity_delta cannot be 0")
+
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+
+        employee = _resolve_active_employee_access(cur, int(user["id"]))
+        if not employee:
+            raise HTTPException(status_code=403, detail="Active employee access required")
+
+        target_store_id = int(payload.store_id) if payload.store_id is not None else int(employee["store_id"])
+        store = cur.execute(
+            "SELECT id FROM stores WHERE id = ? LIMIT 1",
+            (target_store_id,),
+        ).fetchone()
+        if not store:
+            raise HTTPException(status_code=404, detail="Store not found")
+
+        product = cur.execute(
+            """
+            SELECT id, name, image_url, base_price, is_active, deleted_at
+            FROM products
+            WHERE id = ?
+            LIMIT 1
+            """,
+            (product_id,),
+        ).fetchone()
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+
+        inv = cur.execute(
+            """
+            SELECT id, quantity_on_hand, quantity_reserved, quantity_available, reorder_point, updated_at
+            FROM inventory
+            WHERE store_id = ? AND product_id = ?
+            LIMIT 1
+            """,
+            (target_store_id, product_id),
+        ).fetchone()
+
+        if inv is None:
+            if payload.quantity_delta < 0:
+                raise HTTPException(status_code=400, detail="Cannot reduce stock below 0")
+            cur.execute(
+                """
+                INSERT INTO inventory (store_id, product_id, quantity_on_hand, quantity_reserved, quantity_available, reorder_point)
+                VALUES (?, ?, ?, 0, ?, 0)
+                """,
+                (target_store_id, product_id, payload.quantity_delta, payload.quantity_delta),
+            )
+            inv = cur.execute(
+                """
+                SELECT id, quantity_on_hand, quantity_reserved, quantity_available, reorder_point, updated_at
+                FROM inventory
+                WHERE store_id = ? AND product_id = ?
+                LIMIT 1
+                """,
+                (target_store_id, product_id),
+            ).fetchone()
+        else:
+            new_on_hand = int(inv["quantity_on_hand"] or 0) + int(payload.quantity_delta)
+            reserved = int(inv["quantity_reserved"] or 0)
+            if new_on_hand < 0:
+                raise HTTPException(status_code=400, detail="Cannot reduce stock below 0")
+            if new_on_hand < reserved:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cannot reduce below reserved quantity ({reserved})",
+                )
+            cur.execute(
+                """
+                UPDATE inventory
+                SET quantity_on_hand = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (new_on_hand, inv["id"]),
+            )
+
+        movement_comment = clean_optional_text(payload.comment, max_len=500)
+        delta_sign = "+" if payload.quantity_delta > 0 else ""
+        delta_prefix = f"manual_adjustment {delta_sign}{payload.quantity_delta}"
+        movement_comment = f"{delta_prefix}; {movement_comment}" if movement_comment else delta_prefix
+
+        cur.execute(
+            """
+            INSERT INTO inventory_movements (
+                store_id, product_id, movement_type, quantity,
+                unit_cost, related_order_id, created_by_employee_id, comment
+            )
+            VALUES (?, ?, 'adjustment', ?, NULL, NULL, ?, ?)
+            """,
+            (
+                target_store_id,
+                product_id,
+                abs(int(payload.quantity_delta)),
+                int(employee["employee_id"]),
+                movement_comment,
+            ),
+        )
+
+        conn.commit()
+
+        updated = cur.execute(
+            """
+            SELECT id, quantity_on_hand, quantity_reserved, quantity_available, reorder_point, updated_at
+            FROM inventory
+            WHERE store_id = ? AND product_id = ?
+            LIMIT 1
+            """,
+            (target_store_id, product_id),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "message": "Inventory adjusted",
+        "data": {
+            "store_id": target_store_id,
+            "product_id": int(product["id"]),
+            "name": product["name"],
+            "image_url": product["image_url"] or "img/none.png",
+            "base_price": float(product["base_price"] or 0),
+            "is_active": bool(product["is_active"]),
+            "deleted_at": product["deleted_at"],
+            "quantity_on_hand": int(updated["quantity_on_hand"] or 0),
+            "quantity_reserved": int(updated["quantity_reserved"] or 0),
+            "quantity_available": int(updated["quantity_available"] or 0),
+            "reorder_point": int(updated["reorder_point"] or 0),
+            "updated_at": updated["updated_at"],
+            "adjustment": {
+                "delta": int(payload.quantity_delta),
+                "comment": movement_comment,
+            },
+        },
+    }
 
 
 @router.post("/employees/assign", status_code=status.HTTP_201_CREATED, summary="Assign Employee")

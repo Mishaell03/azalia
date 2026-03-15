@@ -43,7 +43,7 @@ class _WishlistCardState extends State<WishlistCard> {
     }
 
     final bool isOutOfStock =
-        !widget.plant.inStock || widget.plant.stockQuantity <= 0;
+        !widget.plant.isActive || widget.plant.deletedAt != null;
 
     return Padding(
       padding: const EdgeInsets.only(right: 24, left: 24, top: 16),
@@ -64,7 +64,7 @@ class _WishlistCardState extends State<WishlistCard> {
   Widget _buildOutOfStockCard() {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.grey_light.withOpacity(0.1),
+        color: AppColors.grey_light.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.grey_light),
       ),
@@ -98,7 +98,7 @@ class _WishlistCardState extends State<WishlistCard> {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
               color: outOfStock
-                  ? AppColors.grey_light.withOpacity(0.1)
+                  ? AppColors.grey_light.withValues(alpha: 0.1)
                   : AppColors.white,
             ),
           ),
@@ -266,7 +266,7 @@ class _WishlistCardState extends State<WishlistCard> {
                 onStateChanged: widget.onCartUpdated,
                 size: 32,
                 showBackground: true,
-                inactiveColor: AppColors.white_dark.withOpacity(0.6),
+                inactiveColor: AppColors.white_dark.withValues(alpha: 0.6),
               ),
             ],
           ),
@@ -309,7 +309,7 @@ class _WishlistCardState extends State<WishlistCard> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: AppColors.error.withOpacity(0.1),
+              color: AppColors.error.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
