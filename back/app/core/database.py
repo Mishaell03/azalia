@@ -342,6 +342,20 @@ def create_database() -> None:
             FOREIGN KEY (pot_color_id) REFERENCES pot_colors(id) ON DELETE SET NULL
         );
 
+        CREATE TABLE IF NOT EXISTS procurement_cart_items (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            store_id            INTEGER NOT NULL,
+            product_id          INTEGER NOT NULL,
+            quantity            INTEGER NOT NULL CHECK(quantity > 0),
+            created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, store_id, product_id),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE,
+            FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+        );
+
         
         -- СОТРУДНИКИ / УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ
         
@@ -743,6 +757,7 @@ def create_database() -> None:
 
         CREATE INDEX IF NOT EXISTS idx_purchase_orders_store_id ON purchase_orders(store_id);
         CREATE INDEX IF NOT EXISTS idx_purchase_orders_supplier_id ON purchase_orders(supplier_id);
+        CREATE INDEX IF NOT EXISTS idx_procurement_cart_user_store ON procurement_cart_items(user_id, store_id);
 
         CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
         CREATE INDEX IF NOT EXISTS idx_notifications_status ON notifications(status);
@@ -808,6 +823,14 @@ def create_database() -> None:
         WHEN NEW.updated_at = OLD.updated_at
         BEGIN
             UPDATE cart_items SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_procurement_cart_items_updated_at
+        AFTER UPDATE ON procurement_cart_items
+        FOR EACH ROW
+        WHEN NEW.updated_at = OLD.updated_at
+        BEGIN
+            UPDATE procurement_cart_items SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
         END;
 
         CREATE TRIGGER IF NOT EXISTS trg_orders_updated_at

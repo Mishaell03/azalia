@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -79,6 +80,22 @@ class AdjustWarehouseProductRequest(BaseModel):
     quantity_delta: int = Field(ge=-100000, le=100000)
     comment: Optional[str] = Field(default=None, max_length=500)
     store_id: Optional[int] = Field(default=None, ge=1)
+
+
+class ProcurementCartUpsertRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    store_id: int = Field(ge=1)
+    product_id: int = Field(ge=1)
+    quantity: int = Field(ge=1, le=100000)
+
+
+class ProcurementCheckoutRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    store_id: int = Field(ge=1)
+    cart_item_ids: list[int] = Field(min_length=1, max_length=500)
+    comment: Optional[str] = Field(default=None, max_length=500)
 
 
 def _resolve_user(cur, user_id: Optional[int], telegram_id: Optional[int]):
@@ -1382,6 +1399,425 @@ def adjust_warehouse_product(
                 "delta": int(payload.quantity_delta),
                 "comment": movement_comment,
             },
+        },
+    }
+
+
+def _require_employee_access(cur, user_id: int):
+    employee = _resolve_active_employee_access(cur, user_id)
+    if not employee:
+        raise HTTPException(status_code=403, detail="Active employee access required")
+    return employee
+
+
+def _resolve_procurement_store(cur, store_id: int):
+    row = cur.execute(
+        """
+        SELECT id, name, address, store_type, is_active
+        FROM stores
+        WHERE id = ?
+        LIMIT 1
+        """,
+        (store_id,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Store not found")
+    if not bool(row["is_active"]):
+        raise HTTPException(status_code=400, detail="Store is inactive")
+    return row
+
+
+def _procurement_cart_items(cur, *, user_id: int, store_id: int):
+    rows = cur.execute(
+        """
+        SELECT
+            pci.id,
+            pci.user_id,
+            pci.store_id,
+            pci.product_id,
+            pci.quantity,
+            pci.created_at,
+            pci.updated_at,
+            p.name AS product_name,
+            p.base_price,
+            p.cost_price,
+            p.image_url,
+            COALESCE(i.quantity_available, 0) AS quantity_available
+        FROM procurement_cart_items pci
+        JOIN products p ON p.id = pci.product_id
+        LEFT JOIN inventory i ON i.store_id = pci.store_id AND i.product_id = pci.product_id
+        WHERE pci.user_id = ? AND pci.store_id = ?
+        ORDER BY p.name ASC, pci.id ASC
+        """,
+        (user_id, store_id),
+    ).fetchall()
+    return [
+        {
+            "id": int(row["id"]),
+            "store_id": int(row["store_id"]),
+            "product_id": int(row["product_id"]),
+            "name": row["product_name"],
+            "quantity_to_order": int(row["quantity"]),
+            "quantity_available": int(row["quantity_available"] or 0),
+            "cost_price": float(row["cost_price"] or 0),
+            "base_price": float(row["base_price"] or 0),
+            "image_url": row["image_url"] or "img/none.png",
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+        for row in rows
+    ]
+
+
+@router.get("/procurement/stores", summary="Procurement: Stores For Switch")
+def procurement_stores(user=Depends(get_current_user)):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        _require_employee_access(cur, int(user["id"]))
+        stores = _get_switchable_stores(cur)
+    finally:
+        conn.close()
+    return {"success": True, "data": {"items": stores}}
+
+
+@router.get("/procurement/missing-products", summary="Procurement: Missing Products By Store")
+def procurement_missing_products(
+    store_id: int = Query(ge=1),
+    user=Depends(get_current_user),
+):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        _require_employee_access(cur, int(user["id"]))
+        target_store = _resolve_procurement_store(cur, store_id)
+        rows = cur.execute(
+            """
+            SELECT
+                p.id AS product_id,
+                p.name AS product_name,
+                p.image_url,
+                p.base_price,
+                p.cost_price,
+                COALESCE(i.quantity_available, 0) AS quantity_available
+            FROM products p
+            LEFT JOIN inventory i ON i.store_id = ? AND i.product_id = p.id
+            WHERE p.deleted_at IS NULL
+              AND p.is_active = 1
+              AND COALESCE(i.quantity_available, 0) <= 0
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM procurement_cart_items pci
+                    WHERE pci.user_id = ?
+                      AND pci.store_id = ?
+                      AND pci.product_id = p.id
+                )
+            ORDER BY p.name ASC
+            """,
+            (store_id, int(user["id"]), store_id),
+        ).fetchall()
+    finally:
+        conn.close()
+    return {
+        "success": True,
+        "data": {
+            "store": {
+                "id": int(target_store["id"]),
+                "name": target_store["name"],
+                "address": target_store["address"],
+                "store_type": target_store["store_type"],
+            },
+            "items": [
+                {
+                    "product_id": int(row["product_id"]),
+                    "name": row["product_name"],
+                    "quantity_available": int(row["quantity_available"] or 0),
+                    "cost_price": float(row["cost_price"] or 0),
+                    "base_price": float(row["base_price"] or 0),
+                    "image_url": row["image_url"] or "img/none.png",
+                }
+                for row in rows
+            ],
+            "count": len(rows),
+        },
+    }
+
+
+@router.get("/procurement/catalog-products", summary="Procurement: Available Catalog Products By Store")
+def procurement_catalog_products(
+    store_id: int = Query(ge=1),
+    user=Depends(get_current_user),
+):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        _require_employee_access(cur, int(user["id"]))
+        target_store = _resolve_procurement_store(cur, store_id)
+        rows = cur.execute(
+            """
+            SELECT
+                p.id AS product_id,
+                p.name AS product_name,
+                p.image_url,
+                p.base_price,
+                p.cost_price,
+                COALESCE(i.quantity_available, 0) AS quantity_available
+            FROM products p
+            LEFT JOIN inventory i ON i.store_id = ? AND i.product_id = p.id
+            WHERE p.deleted_at IS NULL
+              AND p.is_active = 1
+              AND COALESCE(i.quantity_available, 0) > 0
+            ORDER BY p.name ASC
+            """,
+            (store_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+    return {
+        "success": True,
+        "data": {
+            "store": {
+                "id": int(target_store["id"]),
+                "name": target_store["name"],
+                "address": target_store["address"],
+                "store_type": target_store["store_type"],
+            },
+            "items": [
+                {
+                    "product_id": int(row["product_id"]),
+                    "name": row["product_name"],
+                    "quantity_available": int(row["quantity_available"] or 0),
+                    "cost_price": float(row["cost_price"] or 0),
+                    "base_price": float(row["base_price"] or 0),
+                    "image_url": row["image_url"] or "img/none.png",
+                }
+                for row in rows
+            ],
+            "count": len(rows),
+        },
+    }
+
+
+@router.get("/procurement/cart", summary="Procurement: Get Cart By Store")
+def procurement_get_cart(
+    store_id: int = Query(ge=1),
+    user=Depends(get_current_user),
+):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        _require_employee_access(cur, int(user["id"]))
+        _resolve_procurement_store(cur, store_id)
+        items = _procurement_cart_items(cur, user_id=int(user["id"]), store_id=store_id)
+    finally:
+        conn.close()
+    return {"success": True, "data": {"items": items, "count": len(items), "store_id": store_id}}
+
+
+@router.post("/procurement/cart/items", summary="Procurement: Add/Update Cart Item")
+def procurement_upsert_cart_item(
+    payload: ProcurementCartUpsertRequest,
+    user=Depends(get_current_user),
+):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        _require_employee_access(cur, int(user["id"]))
+        _resolve_procurement_store(cur, int(payload.store_id))
+        product = cur.execute(
+            """
+            SELECT id
+            FROM products
+            WHERE id = ? AND deleted_at IS NULL
+            LIMIT 1
+            """,
+            (int(payload.product_id),),
+        ).fetchone()
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+
+        existing = cur.execute(
+            """
+            SELECT id
+            FROM procurement_cart_items
+            WHERE user_id = ? AND store_id = ? AND product_id = ?
+            LIMIT 1
+            """,
+            (int(user["id"]), int(payload.store_id), int(payload.product_id)),
+        ).fetchone()
+        if existing:
+            cur.execute(
+                """
+                UPDATE procurement_cart_items
+                SET quantity = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (int(payload.quantity), int(existing["id"])),
+            )
+        else:
+            cur.execute(
+                """
+                INSERT INTO procurement_cart_items (user_id, store_id, product_id, quantity)
+                VALUES (?, ?, ?, ?)
+                """,
+                (int(user["id"]), int(payload.store_id), int(payload.product_id), int(payload.quantity)),
+            )
+        conn.commit()
+        items = _procurement_cart_items(cur, user_id=int(user["id"]), store_id=int(payload.store_id))
+    finally:
+        conn.close()
+    return {"success": True, "data": {"items": items, "count": len(items), "store_id": int(payload.store_id)}}
+
+
+@router.delete("/procurement/cart/items/{cart_item_id}", summary="Procurement: Remove Cart Item")
+def procurement_delete_cart_item(cart_item_id: int, user=Depends(get_current_user)):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        _require_employee_access(cur, int(user["id"]))
+        row = cur.execute(
+            """
+            SELECT id, store_id
+            FROM procurement_cart_items
+            WHERE id = ? AND user_id = ?
+            LIMIT 1
+            """,
+            (cart_item_id, int(user["id"])),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Cart item not found")
+        store_id = int(row["store_id"])
+        cur.execute("DELETE FROM procurement_cart_items WHERE id = ?", (cart_item_id,))
+        conn.commit()
+        items = _procurement_cart_items(cur, user_id=int(user["id"]), store_id=store_id)
+    finally:
+        conn.close()
+    return {"success": True, "data": {"items": items, "count": len(items), "store_id": store_id}}
+
+
+@router.post("/procurement/cart/checkout", summary="Procurement: Checkout Cart")
+def procurement_checkout(
+    payload: ProcurementCheckoutRequest,
+    user=Depends(get_current_user),
+):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        employee = _resolve_active_employee_access(cur, int(user["id"]))
+        if not employee:
+            raise HTTPException(status_code=403, detail="Active employee access required")
+
+        _resolve_procurement_store(cur, int(payload.store_id))
+        cart_item_ids = sorted(set(int(x) for x in payload.cart_item_ids))
+        if not cart_item_ids:
+            raise HTTPException(status_code=400, detail="cart_item_ids is required")
+
+        placeholders = ",".join(["?"] * len(cart_item_ids))
+        rows = cur.execute(
+            f"""
+            SELECT
+                pci.id,
+                pci.product_id,
+                pci.quantity,
+                p.name AS product_name,
+                p.cost_price,
+                p.base_price,
+                p.supplier_id
+            FROM procurement_cart_items pci
+            JOIN products p ON p.id = pci.product_id
+            WHERE pci.user_id = ?
+              AND pci.store_id = ?
+              AND pci.id IN ({placeholders})
+            ORDER BY pci.id ASC
+            """,
+            (int(user["id"]), int(payload.store_id), *cart_item_ids),
+        ).fetchall()
+        if not rows:
+            raise HTTPException(status_code=400, detail="No cart items found for checkout")
+
+        supplier_id = None
+        for row in rows:
+            if row["supplier_id"] is not None:
+                supplier_id = int(row["supplier_id"])
+                break
+        if supplier_id is None:
+            supplier = cur.execute(
+                "SELECT id FROM suppliers WHERE is_active = 1 ORDER BY id ASC LIMIT 1"
+            ).fetchone()
+            if not supplier:
+                raise HTTPException(status_code=400, detail="No active supplier available")
+            supplier_id = int(supplier["id"])
+
+        purchase_number = f"PR-{int(payload.store_id)}-{uuid.uuid4().hex[:10].upper()}"
+        cur.execute(
+            """
+            INSERT INTO purchase_orders (
+                supplier_id, store_id, created_by_employee_id, purchase_number,
+                status, ordered_at, comment, total_amount
+            )
+            VALUES (?, ?, ?, ?, 'sent', CURRENT_TIMESTAMP, ?, 0)
+            """,
+            (
+                supplier_id,
+                int(payload.store_id),
+                int(employee["employee_id"]),
+                purchase_number,
+                clean_optional_text(payload.comment, max_len=500),
+            ),
+        )
+        purchase_order_id = int(cur.lastrowid)
+
+        total_amount = 0.0
+        for row in rows:
+            qty = int(row["quantity"])
+            unit_cost = float(row["cost_price"] or 0)
+            if unit_cost <= 0:
+                unit_cost = float(row["base_price"] or 0)
+            line_total = round(unit_cost * qty, 2)
+            total_amount += line_total
+            cur.execute(
+                """
+                INSERT INTO purchase_order_items (
+                    purchase_order_id, product_id, ordered_quantity,
+                    received_quantity, rejected_quantity, unit_cost, line_total
+                )
+                VALUES (?, ?, ?, 0, 0, ?, ?)
+                """,
+                (purchase_order_id, int(row["product_id"]), qty, unit_cost, line_total),
+            )
+
+        cur.execute(
+            """
+            UPDATE purchase_orders
+            SET total_amount = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (round(total_amount, 2), purchase_order_id),
+        )
+
+        cur.execute(
+            f"DELETE FROM procurement_cart_items WHERE user_id = ? AND store_id = ? AND id IN ({placeholders})",
+            (int(user["id"]), int(payload.store_id), *cart_item_ids),
+        )
+        conn.commit()
+
+        remaining = _procurement_cart_items(cur, user_id=int(user["id"]), store_id=int(payload.store_id))
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "data": {
+            "purchase_order_id": purchase_order_id,
+            "purchase_number": purchase_number,
+            "store_id": int(payload.store_id),
+            "supplier_id": supplier_id,
+            "status": "sent",
+            "total_amount": round(total_amount, 2),
+            "items_count": len(rows),
+            "remaining_cart_items": remaining,
         },
     }
 

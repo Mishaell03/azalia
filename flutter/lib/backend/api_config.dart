@@ -16,6 +16,17 @@ class ApiConfig {
   static const String warehouseProducts = '$baseURL/warehouse/products';
   static String warehouseAdjustProduct(int productId) =>
       '$baseURL/warehouse/products/$productId/adjust';
+  static const String procurementStores = '$baseURL/procurement/stores';
+  static String procurementMissingProducts(int storeId) =>
+      '$baseURL/procurement/missing-products?store_id=$storeId';
+  static String procurementCatalogProducts(int storeId) =>
+      '$baseURL/procurement/catalog-products?store_id=$storeId';
+  static String procurementCart(int storeId) =>
+      '$baseURL/procurement/cart?store_id=$storeId';
+  static const String procurementCartItems = '$baseURL/procurement/cart/items';
+  static String procurementCartItemById(int cartItemId) =>
+      '$baseURL/procurement/cart/items/$cartItemId';
+  static const String procurementCheckout = '$baseURL/procurement/cart/checkout';
 
   // payments
   static String get paymentGenerateLink => '$baseURL/payments/generate-link';
