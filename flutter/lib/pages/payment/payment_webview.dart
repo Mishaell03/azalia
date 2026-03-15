@@ -310,9 +310,9 @@ class _PaymentWebViewPage extends State<PaymentWebViewPage>
             const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton.icon(
+              child: TextButton.icon(
                 onPressed: _isCheckingStatus ? null : () => _checkPaymentStatus(),
-                style: ElevatedButton.styleFrom(
+                style: TextButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(18),

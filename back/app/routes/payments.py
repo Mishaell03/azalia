@@ -28,6 +28,7 @@ class GeneratePaymentLinkRequest(BaseModel):
     payment_timing: str = Field(default="online", max_length=24)
     on_delivery_method: Optional[str] = Field(default=None, max_length=32)
     selected_item_ids: list[int] = Field(default_factory=list, max_length=200)
+    accept_quantity_changes: bool = False
     order_type: str = Field(default="delivery", max_length=16)
     store_id: Optional[int] = Field(default=None, ge=1)
     comment: Optional[str] = Field(default=None, max_length=500)
@@ -160,6 +161,21 @@ def _resolve_active_store(cur, store_id: int):
     ).fetchone()
     if not row:
         raise HTTPException(status_code=400, detail="Store not found or inactive")
+    return row
+
+
+def _resolve_default_delivery_store(cur):
+    row = cur.execute(
+        """
+        SELECT id, name, address, store_type
+        FROM stores
+        WHERE is_active = 1
+        ORDER BY id ASC
+        LIMIT 1
+        """
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=400, detail="No active stores available")
     return row
 
 
@@ -1447,11 +1463,15 @@ def generate_payment_link(
     try:
         cur = conn.cursor()
 
-        if order_type == "pickup" and payload.store_id is None:
-            raise HTTPException(status_code=400, detail="store_id is required for pickup")
-
-        store_id = payload.store_id or 1
-        store = _resolve_active_store(cur, int(store_id))
+        if order_type == "pickup":
+            if payload.store_id is None:
+                raise HTTPException(status_code=400, detail="store_id is required for pickup")
+            store = _resolve_active_store(cur, int(payload.store_id))
+        else:
+            # Для доставки не привязываем заказ к store_id из запроса:
+            # наличие и резерв проверяются по всем магазинам.
+            store = _resolve_default_delivery_store(cur)
+        store_id = int(store["id"])
 
         payment_method_id = _resolve_payment_method(cur, payment_method_code)
 
@@ -1459,13 +1479,13 @@ def generate_payment_link(
             cur,
             int(user["id"]),
             selected_ids,
-            store_id=int(store_id),
+            store_id=store_id,
             limit_to_store=(order_type == "pickup"),
         )
         total_price, validated_items = _validate_cart_items(
             cur,
             cart_items,
-            clamp_to_available=(order_type == "pickup"),
+            clamp_to_available=(order_type == "pickup" or bool(payload.accept_quantity_changes)),
         )
 
         order_address_snapshot = address

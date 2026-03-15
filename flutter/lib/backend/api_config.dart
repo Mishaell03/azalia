@@ -72,8 +72,16 @@ class ApiConfig {
 
   // plants
   static const String plants = '$baseURL/plants/';
+  static const String plantsAdminCreate = '$baseURL/plants/admin/create';
   static String plantsId(int id) => '$baseURL/plants/$id';
   static const String categories = '$baseURL/plants/categories';
+  static const String adminCategories = '$baseURL/categories';
+  static String adminCategoryById(int id) => '$baseURL/categories/$id';
+  static const String adminCategoriesCreate = '$baseURL/categories/admin/create';
+  static String adminCategoryDeletionCheck(int id) =>
+      '$baseURL/categories/admin/$id/deletion-check';
+  static String adminCategoryDelete(int id) =>
+      '$baseURL/categories/admin/$id/delete';
   static const String filters = '$baseURL/plants/filters';
   static const String topRated = '$baseURL/plants/top-rated';
 

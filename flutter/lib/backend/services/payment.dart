@@ -18,18 +18,24 @@ class PaymentService {
     String orderType = 'delivery',
     int? storeId,
     List<int>? selectedItemIds,
+    bool acceptQuantityChanges = false,
   }) async {
+    final body = <String, dynamic>{
+      'address': address,
+      'payment_method': paymentMethod,
+      'payment_timing': paymentTiming,
+      'on_delivery_method': onDeliveryMethod,
+      'order_type': orderType,
+      'selected_item_ids': selectedItemIds ?? [],
+      'accept_quantity_changes': acceptQuantityChanges,
+    };
+    if (storeId != null) {
+      body['store_id'] = storeId;
+    }
+
     final response = await _api.post(
       ApiConfig.paymentGenerateLink,
-      body: {
-        'address': address,
-        'payment_method': paymentMethod,
-        'payment_timing': paymentTiming,
-        'on_delivery_method': onDeliveryMethod,
-        'order_type': orderType,
-        'store_id': storeId,
-        'selected_item_ids': selectedItemIds ?? [],
-      },
+      body: body,
     );
 
     // Берём только data из ответа
@@ -115,13 +121,17 @@ class PaymentService {
     required String orderType,
     int? storeId,
   }) async {
+    final body = <String, dynamic>{
+      'selected_item_ids': selectedItemIds,
+      'order_type': orderType,
+    };
+    if (storeId != null) {
+      body['store_id'] = storeId;
+    }
+
     final response = await _api.post(
       ApiConfig.paymentAvailability,
-      body: {
-        'selected_item_ids': selectedItemIds,
-        'order_type': orderType,
-        'store_id': storeId,
-      },
+      body: body,
     );
     return response['data'] as Map<String, dynamic>? ?? const {};
   }

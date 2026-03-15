@@ -54,19 +54,24 @@ class _ImageEditState extends State<ImageEdit> {
 
   @override
   Widget build(BuildContext context) {
-    final imageProvider = widget.imageFile != null
+    final resolvedUrl = widget.fullImageUrl.trim();
+    final ImageProvider<Object>? imageProvider = widget.imageFile != null
         ? FileImage(widget.imageFile!)
-        : NetworkImage(widget.fullImageUrl) as ImageProvider;
+        : (resolvedUrl.isNotEmpty ? NetworkImage(resolvedUrl) : null);
 
     return Stack(
       children: [
         SizedBox(
           width: 113,
           height: 88,
-          child: Image(
-            image: imageProvider,
-            fit: BoxFit.cover,
-          ),
+          child: imageProvider == null
+              ? Container(color: AppColors.grey_light)
+              : Image(
+                  image: imageProvider,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) =>
+                      Container(color: AppColors.grey_light),
+                ),
         ),
         Positioned(
           bottom: 4,

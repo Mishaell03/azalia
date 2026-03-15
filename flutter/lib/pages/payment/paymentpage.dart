@@ -90,6 +90,30 @@ class _PaymentPageState extends State<PaymentPage> {
     return message;
   }
 
+  Map<int, _ItemAvailability> _buildAvailabilityMap(
+    Map<String, dynamic> availability,
+  ) {
+    final availabilityItems = (availability['items'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
+    final availabilityMap = <int, _ItemAvailability>{};
+    for (final item in availabilityItems) {
+      final cartItemId = (item['cart_item_id'] as num?)?.toInt();
+      final requestedQty = (item['requested_quantity'] as num?)?.toInt() ?? 0;
+      final availableQty = (item['available_quantity'] as num?)?.toInt() ?? 0;
+      final missingQty =
+          (item['missing_quantity'] as num?)?.toInt() ??
+          (requestedQty > availableQty ? (requestedQty - availableQty) : 0);
+      if (cartItemId != null && requestedQty > availableQty) {
+        availabilityMap[cartItemId] = _ItemAvailability(
+          availableQuantity: availableQty,
+          missingQuantity: missingQty,
+        );
+      }
+    }
+    return availabilityMap;
+  }
+
   Future<void> _loadPickupStores() async {
     setState(() {
       _isLoadingStores = true;
@@ -122,7 +146,7 @@ class _PaymentPageState extends State<PaymentPage> {
   }
 
   Future<void> _refreshAvailabilityPreview() async {
-    if (_orderType != 'pickup' || _selectedPickupStoreId == null) {
+    if (_orderType == 'pickup' && _selectedPickupStoreId == null) {
       if (!mounted) return;
       setState(() {
         _isCheckingAvailability = false;
@@ -141,26 +165,9 @@ class _PaymentPageState extends State<PaymentPage> {
       final availability = await _paymentService.checkAvailability(
         selectedItemIds: widget.args.selectedItemIds,
         orderType: _orderType,
-        storeId: _selectedPickupStoreId,
+        storeId: _orderType == 'pickup' ? _selectedPickupStoreId : null,
       );
-      final availabilityItems = (availability['items'] as List? ?? const [])
-          .whereType<Map<String, dynamic>>()
-          .toList();
-      final availabilityMap = <int, _ItemAvailability>{};
-      for (final item in availabilityItems) {
-        final cartItemId = (item['cart_item_id'] as num?)?.toInt();
-        final requestedQty = (item['requested_quantity'] as num?)?.toInt() ?? 0;
-        final availableQty = (item['available_quantity'] as num?)?.toInt() ?? 0;
-        final missingQty =
-            (item['missing_quantity'] as num?)?.toInt() ??
-            (requestedQty > availableQty ? (requestedQty - availableQty) : 0);
-        if (cartItemId != null && requestedQty > availableQty) {
-          availabilityMap[cartItemId] = _ItemAvailability(
-            availableQuantity: availableQty,
-            missingQuantity: missingQty,
-          );
-        }
-      }
+      final availabilityMap = _buildAvailabilityMap(availability);
       if (!mounted) return;
       setState(() {
         _isCheckingAvailability = false;
@@ -415,48 +422,59 @@ class _PaymentPageState extends State<PaymentPage> {
     PaymentGenerateResponse? paymentResponse;
     try {
       var selectedIds = widget.args.selectedItemIds;
+      var acceptQuantityChanges = false;
       String? quantityChangedNote;
-      if (_orderType == 'pickup') {
-        final availability = await _paymentService.checkAvailability(
-          selectedItemIds: selectedIds,
-          orderType: _orderType,
-          storeId: _selectedPickupStoreId,
-        );
+      final availability = await _paymentService.checkAvailability(
+        selectedItemIds: selectedIds,
+        orderType: _orderType,
+        storeId: _orderType == 'pickup' ? _selectedPickupStoreId : null,
+      );
+      if (mounted) {
+        setState(() {
+          _availabilityByCartItem = _buildAvailabilityMap(availability);
+        });
+      }
 
-        final canProceed = availability['can_proceed'] == true;
-        final availableItemIds =
-            (availability['available_item_ids'] as List? ?? const [])
-                .whereType<num>()
-                .map((x) => x.toInt())
-                .toList();
-        final missingItems =
-            (availability['missing_items'] as List? ?? const [])
-                .whereType<Map<String, dynamic>>()
-                .toList();
-        final hasUnavailableItems = missingItems.any(
-          (item) => ((item['available_quantity'] as num?)?.toInt() ?? 0) <= 0,
-        );
+      final canProceed = availability['can_proceed'] == true;
+      final availableItemIds =
+          (availability['available_item_ids'] as List? ?? const [])
+              .whereType<num>()
+              .map((x) => x.toInt())
+              .toList();
+      final missingItems =
+          (availability['missing_items'] as List? ?? const [])
+              .whereType<Map<String, dynamic>>()
+              .toList();
+      final hasUnavailableItems = missingItems.any(
+        (item) => ((item['available_quantity'] as num?)?.toInt() ?? 0) <= 0,
+      );
 
-        if (!canProceed || availableItemIds.isEmpty) {
-          _showSnackBar(
-            'На выбранной точке нет товаров в наличии. Оформление невозможно.',
-            isError: true,
-          );
+      if (!canProceed || availableItemIds.isEmpty) {
+        _showSnackBar(
+          _orderType == 'pickup'
+              ? 'На выбранной точке нет товаров в наличии. Оформление невозможно.'
+              : 'Нет товаров в наличии для доставки. Оформление невозможно.',
+          isError: true,
+        );
+        return;
+      }
+
+      if (missingItems.isNotEmpty) {
+        final confirmed = await _confirmProceedWithoutMissing(missingItems);
+        if (!confirmed) {
           return;
         }
-
-        if (missingItems.isNotEmpty) {
-          final confirmed = await _confirmProceedWithoutMissing(missingItems);
-          if (!confirmed) {
-            return;
-          }
-          selectedIds = availableItemIds;
-          quantityChangedNote = _buildQuantityChangedNote(missingItems);
-          if (quantityChangedNote == null) {
-            quantityChangedNote = hasUnavailableItems
-                ? 'Количество товаров изменено по остаткам выбранной точки самовывоза. Часть недоступных товаров будет исключена из заказа.'
-                : 'Количество товаров изменено по остаткам выбранной точки самовывоза. Заказ будет оформлен с доступным количеством.';
-          }
+        selectedIds = availableItemIds;
+        acceptQuantityChanges = true;
+        quantityChangedNote = _buildQuantityChangedNote(missingItems);
+        if (quantityChangedNote == null) {
+          quantityChangedNote = hasUnavailableItems
+              ? (_orderType == 'pickup'
+                    ? 'Количество товаров изменено по остаткам выбранной точки самовывоза. Часть недоступных товаров будет исключена из заказа.'
+                    : 'Количество товаров изменено по остаткам доступных магазинов. Часть недоступных товаров будет исключена из заказа.')
+              : (_orderType == 'pickup'
+                    ? 'Количество товаров изменено по остаткам выбранной точки самовывоза. Заказ будет оформлен с доступным количеством.'
+                    : 'Количество товаров изменено по остаткам доступных магазинов. Заказ будет оформлен с доступным количеством.');
         }
       }
 
@@ -479,6 +497,7 @@ class _PaymentPageState extends State<PaymentPage> {
         orderType: _orderType,
         storeId: _orderType == 'pickup' ? _selectedPickupStoreId : null,
         selectedItemIds: selectedIds,
+        acceptQuantityChanges: acceptQuantityChanges,
       );
 
       _savedAddress =
@@ -527,7 +546,36 @@ class _PaymentPageState extends State<PaymentPage> {
         await _cancelPendingPayment();
       }
       if (!mounted) return;
-      _showSnackBar(_normalizeError(e), isError: true);
+      final normalized = _normalizeError(e);
+      if (normalized.toLowerCase().contains('timeout')) {
+        try {
+          final availability = await _paymentService.checkAvailability(
+            selectedItemIds: widget.args.selectedItemIds,
+            orderType: _orderType,
+            storeId: _orderType == 'pickup' ? _selectedPickupStoreId : null,
+          );
+          if (!mounted) return;
+          setState(() {
+            _availabilityByCartItem = _buildAvailabilityMap(availability);
+          });
+          final canProceed = availability['can_proceed'] == true;
+          final availableItemIds =
+              (availability['available_item_ids'] as List? ?? const [])
+                  .whereType<num>()
+                  .map((x) => x.toInt())
+                  .toList();
+          if (!canProceed || availableItemIds.isEmpty) {
+            _showSnackBar(
+              _orderType == 'pickup'
+                  ? 'На выбранной точке нет товаров в наличии. Оформление невозможно.'
+                  : 'Нет товаров в наличии для доставки. Оформление невозможно.',
+              isError: true,
+            );
+            return;
+          }
+        } catch (_) {}
+      }
+      _showSnackBar(normalized, isError: true);
     } finally {
       if (mounted) {
         setState(() {
@@ -573,9 +621,8 @@ class _PaymentPageState extends State<PaymentPage> {
                               color: AppColors.grey,
                             ),
                           ),
-                          if (_orderType == 'pickup' &&
-                              _availabilityByCartItem[item.cartItemId] !=
-                                  null) ...[
+                          if (_availabilityByCartItem[item.cartItemId] !=
+                              null) ...[
                             const SizedBox(height: 4),
                             Builder(
                               builder: (_) {
@@ -861,8 +908,7 @@ class _PaymentPageState extends State<PaymentPage> {
                                   },
                           ),
                       ],
-                      if (_orderType == 'pickup' &&
-                          _isCheckingAvailability) ...[
+                      if (_isCheckingAvailability) ...[
                         const SizedBox(height: 8),
                         Row(
                           children: [
@@ -874,7 +920,9 @@ class _PaymentPageState extends State<PaymentPage> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'Проверяем наличие на выбранной точке...',
+                                _orderType == 'pickup'
+                                    ? 'Проверяем наличие на выбранной точке...'
+                                    : 'Проверяем наличие для доставки...',
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: AppText.medium_12.copyWith(

@@ -24,6 +24,7 @@ class _AdminProductsCartEditorState extends State<AdminProductsCartEditor> {
   bool _isLoading = true;
   String? _error;
   List<Plant> _plants = <Plant>[];
+  bool _showQuickActions = false;
 
   @override
   void initState() {
@@ -70,10 +71,98 @@ class _AdminProductsCartEditorState extends State<AdminProductsCartEditor> {
     });
   }
 
+  void _addCreatedPlant(Plant createdPlant) {
+    setState(() {
+      _plants = [..._plants, createdPlant]
+        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    });
+  }
+
+  Future<void> _openCreateDialog() async {
+    setState(() {
+      _showQuickActions = false;
+    });
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _CreatePlantDialog(
+        onCreated: _addCreatedPlant,
+      ),
+    );
+  }
+
+  Future<void> _openCreateCategoryDialog() async {
+    setState(() {
+      _showQuickActions = false;
+    });
+    await showDialog<void>(
+      context: context,
+      builder: (_) => const _CreateCategoryDialog(),
+    );
+  }
+
+  Future<void> _openDeleteCategoryDialog() async {
+    setState(() {
+      _showQuickActions = false;
+    });
+    await showDialog<void>(
+      context: context,
+      builder: (_) => const _DeleteCategoryDialog(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppHeader(items: adminProductsHeaderItems),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (_showQuickActions) ...[
+            FloatingActionButton.extended(
+              heroTag: 'create_category',
+              onPressed: _openCreateCategoryDialog,
+              backgroundColor: AppColors.white,
+              foregroundColor: AppColors.brown,
+              label: const Text('Новая категория'),
+              icon: const Icon(Icons.create_new_folder_outlined),
+            ),
+            const SizedBox(height: 8),
+            FloatingActionButton.extended(
+              heroTag: 'delete_category',
+              onPressed: _openDeleteCategoryDialog,
+              backgroundColor: AppColors.white,
+              foregroundColor: AppColors.error,
+              label: const Text('Удалить категорию'),
+              icon: const Icon(Icons.delete_outline),
+            ),
+            const SizedBox(height: 8),
+            FloatingActionButton.extended(
+              heroTag: 'create_plant',
+              onPressed: _openCreateDialog,
+              backgroundColor: AppColors.white,
+              foregroundColor: AppColors.brown,
+              label: const Text('Новый товар'),
+              icon: const Icon(Icons.add_box_outlined),
+            ),
+            const SizedBox(height: 10),
+          ],
+          FloatingActionButton(
+            heroTag: 'editor_plus',
+            onPressed: () {
+              setState(() {
+                _showQuickActions = !_showQuickActions;
+              });
+            },
+            backgroundColor: AppColors.brown,
+            foregroundColor: AppColors.white_transparent,
+            child: Text(
+              _showQuickActions ? '×' : '+',
+              style: AppText.bold_23.copyWith(color: AppColors.white),
+            ),
+          ),
+        ],
+      ),
       body: Builder(
         builder: (_) {
           if (_isLoading) {
@@ -118,19 +207,31 @@ class _PlantCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
         children: [
-          Image.network(
-            plant.fullImageUrl,
-            width: 113,
-            height: 88,
-            fit: BoxFit.cover,
-            errorBuilder: (_, error, stackTrace) => Container(
+          (() {
+            final imageUrl = plant.fullImageUrl.trim();
+            if (imageUrl.isEmpty) {
+              return Container(
+                width: 113,
+                height: 88,
+                color: AppColors.grey_light,
+                alignment: Alignment.center,
+                child: const Icon(Icons.image_not_supported_outlined),
+              );
+            }
+            return Image.network(
+              imageUrl,
               width: 113,
               height: 88,
-              color: AppColors.grey_light,
-              alignment: Alignment.center,
-              child: const Icon(Icons.image_not_supported_outlined),
-            ),
-          ),
+              fit: BoxFit.cover,
+              errorBuilder: (_, error, stackTrace) => Container(
+                width: 113,
+                height: 88,
+                color: AppColors.grey_light,
+                alignment: Alignment.center,
+                child: const Icon(Icons.image_not_supported_outlined),
+              ),
+            );
+          })(),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -184,6 +285,888 @@ class _PlantCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _CreateCategoryDialog extends StatefulWidget {
+  const _CreateCategoryDialog();
+
+  @override
+  State<_CreateCategoryDialog> createState() => _CreateCategoryDialogState();
+}
+
+class _CreateCategoryDialogState extends State<_CreateCategoryDialog> {
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
+  late Future<List<Category>> _categoriesFuture;
+  int? _parentId;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _categoriesFuture = PlantService.getCategories();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveCategory() async {
+    if (_isSaving) return;
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.white,
+          content: Text(
+            'Введите название категории',
+            style: AppText.medium_14.copyWith(color: AppColors.brown),
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      await PlantService.createCategory(
+        name: name,
+        description: _descriptionController.text.trim(),
+        parentId: _parentId,
+      );
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      Navigator.of(context).pop();
+      messenger.showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.white,
+          content: Text(
+            'Категория создана',
+            style: AppText.medium_14.copyWith(color: AppColors.brown),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.white,
+          content: Text(
+            'Не удалось создать категорию: $e',
+            style: AppText.medium_14.copyWith(color: AppColors.brown),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              const Text('Новая категория'),
+              const SizedBox(height: 16),
+              AppTextField(
+                controller: _nameController,
+                labelText: 'Название категории',
+              ),
+              AppTextField(
+                controller: _descriptionController,
+                labelText: 'Описание (опционально)',
+                necessarily: false,
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Родительская категория:',
+                  style: AppText.medium_12.copyWith(
+                    color: AppColors.black_transparent,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              FutureBuilder<List<Category>>(
+                future: _categoriesFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final categories = snapshot.data ?? const <Category>[];
+                  return Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      AdminCategory(
+                        name: 'Без родителя',
+                        isActive: _parentId == null,
+                        onTap: () {
+                          setState(() {
+                            _parentId = null;
+                          });
+                        },
+                      ),
+                      ...categories.map(
+                        (category) => AdminCategory(
+                          name: category.name,
+                          isActive: _parentId == category.id,
+                          onTap: () {
+                            setState(() {
+                              _parentId = category.id;
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _isSaving
+                          ? null
+                          : () => Navigator.of(context).pop(),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: AppColors.brown),
+                      ),
+                      child: Text(
+                        'Отмена',
+                        style: AppText.medium_14.copyWith(
+                          color: AppColors.brown,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _isSaving ? null : _saveCategory,
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: AppColors.brown,
+                        side: BorderSide(color: AppColors.white),
+                      ),
+                      child: Text(
+                        _isSaving ? 'Создание...' : 'Создать',
+                        style: AppText.medium_14.copyWith(
+                          color: AppColors.white_transparent,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DeleteCategoryDialog extends StatefulWidget {
+  const _DeleteCategoryDialog();
+
+  @override
+  State<_DeleteCategoryDialog> createState() => _DeleteCategoryDialogState();
+}
+
+class _DeleteCategoryDialogState extends State<_DeleteCategoryDialog> {
+  late Future<List<Category>> _categoriesFuture;
+  int? _selectedCategoryId;
+  bool _isDeleting = false;
+  bool _isChecking = false;
+  bool _canDeleteSelected = false;
+  List<Map<String, dynamic>> _blockedProducts = const [];
+  int _blockedSubcategoriesCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _categoriesFuture = PlantService.getCategories();
+  }
+
+  Future<void> _checkSelectedCategory() async {
+    final categoryId = _selectedCategoryId;
+    if (categoryId == null) {
+      setState(() {
+        _canDeleteSelected = false;
+        _blockedProducts = const [];
+        _blockedSubcategoriesCount = 0;
+      });
+      return;
+    }
+    setState(() {
+      _isChecking = true;
+    });
+    try {
+      final data = await PlantService.getCategoryDeletionCheck(categoryId);
+      final canDelete = data['can_delete'] == true;
+      final products = (data['products'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .toList();
+      final subcategoriesCount =
+          (data['subcategories_count'] as num?)?.toInt() ?? 0;
+      if (!mounted) return;
+      setState(() {
+        _canDeleteSelected = canDelete;
+        _blockedProducts = products;
+        _blockedSubcategoriesCount = subcategoriesCount;
+      });
+      if (!canDelete && products.isNotEmpty && mounted) {
+        await _showBlockedProductsDialog(products);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _canDeleteSelected = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.white,
+          content: Text(
+            'Не удалось проверить категорию: $e',
+            style: AppText.medium_14.copyWith(color: AppColors.brown),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isChecking = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _showBlockedProductsDialog(List<Map<String, dynamic>> products) async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Удаление невозможно'),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'В категории есть товары (${products.length}):',
+                  style: AppText.medium_14.copyWith(color: AppColors.black),
+                ),
+                const SizedBox(height: 8),
+                ...products.map(
+                  (p) => Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(
+                      '• ${p['name']?.toString() ?? '-'}',
+                      style: AppText.medium_14.copyWith(color: AppColors.grey),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            style: TextButton.styleFrom(
+              backgroundColor: AppColors.brown,
+            ),
+            child: Text(
+              'Ок',
+              style: AppText.medium_14.copyWith(color: AppColors.white_transparent),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteCategory() async {
+    if (_isDeleting || _selectedCategoryId == null || !_canDeleteSelected) return;
+    setState(() {
+      _isDeleting = true;
+    });
+    try {
+      await PlantService.deleteCategory(_selectedCategoryId!);
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      Navigator.of(context).pop();
+      messenger.showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.white,
+          content: Text(
+            'Категория удалена',
+            style: AppText.medium_14.copyWith(color: AppColors.brown),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.white,
+          content: Text(
+            'Не удалось удалить категорию: $e',
+            style: AppText.medium_14.copyWith(color: AppColors.brown),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDeleting = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              const Text('Удалить категорию'),
+              const SizedBox(height: 16),
+              FutureBuilder<List<Category>>(
+                future: _categoriesFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final categories = snapshot.data ?? const <Category>[];
+                  if (categories.isEmpty) {
+                    return const Text('Категорий нет');
+                  }
+                  return Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: categories.map((category) {
+                      return AdminCategory(
+                        name: category.name,
+                        isActive: _selectedCategoryId == category.id,
+                        onTap: () {
+                          setState(() {
+                            _selectedCategoryId = category.id;
+                          });
+                          _checkSelectedCategory();
+                        },
+                      );
+                    }).toList(),
+                  );
+                },
+              ),
+              if (_isChecking) ...[
+                const SizedBox(height: 8),
+                const CircularProgressIndicator(strokeWidth: 2),
+              ],
+              if (_selectedCategoryId != null && !_isChecking && !_canDeleteSelected)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(
+                    _blockedProducts.isNotEmpty
+                        ? 'Категорию нельзя удалить: в ней есть товары (${_blockedProducts.length}).'
+                        : (_blockedSubcategoriesCount > 0
+                            ? 'Категорию нельзя удалить: есть подкатегории ($_blockedSubcategoriesCount).'
+                            : 'Категорию нельзя удалить.'),
+                    style: AppText.medium_12.copyWith(color: AppColors.error),
+                  ),
+                ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _isDeleting
+                          ? null
+                          : () => Navigator.of(context).pop(),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: AppColors.brown),
+                      ),
+                      child: Text(
+                        'Отмена',
+                        style: AppText.medium_14.copyWith(
+                          color: AppColors.brown,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _isDeleting ||
+                              _isChecking ||
+                              _selectedCategoryId == null ||
+                              !_canDeleteSelected
+                          ? null
+                          : _deleteCategory,
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: AppColors.error,
+                        side: BorderSide(color: AppColors.white),
+                      ),
+                      child: Text(
+                        _isDeleting ? 'Удаление...' : 'Удалить',
+                        style: AppText.medium_14.copyWith(
+                          color: AppColors.white_transparent,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CreatePlantDialog extends StatefulWidget {
+  final ValueChanged<Plant> onCreated;
+
+  const _CreatePlantDialog({required this.onCreated});
+
+  @override
+  State<_CreatePlantDialog> createState() => _CreatePlantDialogState();
+}
+
+class _CreatePlantDialogState extends State<_CreatePlantDialog> {
+  static const Map<String, int> _potSizeToId = {
+    'S': 1,
+    'M': 2,
+    'L': 3,
+    'XL': 4,
+  };
+
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _priceController = TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
+  final TextEditingController _careController = TextEditingController();
+  final TextEditingController _wateringController = TextEditingController();
+  final TextEditingController _heightController = TextEditingController();
+  final TextEditingController _ratingController = TextEditingController(
+    text: '0',
+  );
+
+  late Future<List<Category>> _categoriesFuture;
+  late Future<List<_RefItem>> _plantTypesFuture;
+
+  bool _isSaving = false;
+  bool _isActive = true;
+  File? _selectedImageFile;
+  int? _selectedCategoryId;
+  int? _selectedPlantTypeId;
+  String _selectedPotSize = 'M';
+  String _lightValue = lightItems.first.value;
+
+  @override
+  void initState() {
+    super.initState();
+    _categoriesFuture = PlantService.getCategories();
+    _plantTypesFuture = _loadPlantTypes();
+    _plantTypesFuture.then((items) {
+      if (!mounted || items.isEmpty || _selectedPlantTypeId != null) return;
+      setState(() {
+        _selectedPlantTypeId = items.first.id;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _priceController.dispose();
+    _descriptionController.dispose();
+    _careController.dispose();
+    _wateringController.dispose();
+    _heightController.dispose();
+    _ratingController.dispose();
+    super.dispose();
+  }
+
+  Future<List<_RefItem>> _loadPlantTypes() async {
+    final filters = await PlantService.getFilters();
+    final raw = (filters['plant_types'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
+    return raw
+        .map(
+          (e) => _RefItem(
+            id: (e['id'] as num?)?.toInt() ?? 0,
+            name: e['name']?.toString() ?? '',
+          ),
+        )
+        .where((e) => e.id > 0 && e.name.isNotEmpty)
+        .toList();
+  }
+
+  String _norm(String value) => value.trim();
+
+  double _parseDouble(TextEditingController controller, double fallback) {
+    return double.tryParse(controller.text.trim().replaceAll(',', '.')) ??
+        fallback;
+  }
+
+  int? _parseOptionalInt(TextEditingController controller) {
+    final text = controller.text.trim();
+    if (text.isEmpty) return null;
+    return int.tryParse(text);
+  }
+
+  Future<void> _create() async {
+    if (_isSaving) return;
+
+    final name = _norm(_nameController.text);
+    final price = _parseDouble(_priceController, -1);
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.white,
+          content: Text(
+            'Введите название товара',
+            style: AppText.medium_14.copyWith(color: AppColors.brown),
+          ),
+        ),
+      );
+      return;
+    }
+    if (price < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.white,
+          content: Text(
+            'Введите корректную цену',
+            style: AppText.medium_14.copyWith(color: AppColors.brown),
+          ),
+        ),
+      );
+      return;
+    }
+    if (_selectedCategoryId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.white,
+          content: Text(
+            'Выберите категорию',
+            style: AppText.medium_14.copyWith(color: AppColors.brown),
+          ),
+        ),
+      );
+      return;
+    }
+    if (_selectedPlantTypeId == null) {
+      final types = await _plantTypesFuture;
+      if (!mounted) return;
+      if (types.isNotEmpty) {
+        _selectedPlantTypeId = types.first.id;
+      }
+    }
+    if (_selectedPlantTypeId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.white,
+          content: Text(
+            'Не удалось определить тип растения',
+            style: AppText.medium_14.copyWith(color: AppColors.brown),
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      final payload = <String, dynamic>{
+        'name': name,
+        'description': _norm(_descriptionController.text),
+        'category_id': _selectedCategoryId,
+        'plant_type_id': _selectedPlantTypeId,
+        'base_price': price,
+        'cost_price': 0,
+        'recommended_pot_size_id': _potSizeToId[_selectedPotSize],
+        'height_cm': _parseOptionalInt(_heightController) ?? 0,
+        'light_requirements': _lightValue,
+        'watering_notes': _norm(_wateringController.text),
+        'care_instructions': _norm(_careController.text),
+        'rating': _parseDouble(_ratingController, 0),
+        'is_active': _isActive,
+      };
+
+      final createdId = await PlantService.createPlant(payload: payload);
+      if (_selectedImageFile != null) {
+        await PlantService.uploadPlantImage(createdId, _selectedImageFile!);
+      }
+      final createdPlant = await PlantService.getPlantById(createdId);
+
+      if (!mounted) return;
+      widget.onCreated(createdPlant);
+      final messenger = ScaffoldMessenger.of(context);
+      Navigator.of(context).pop();
+      messenger.showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.white,
+          content: Text(
+            'Товар создан',
+            style: AppText.medium_14.copyWith(color: AppColors.brown),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.white,
+          content: Text(
+            'Не удалось создать товар: $e',
+            style: AppText.medium_14.copyWith(color: AppColors.brown),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              const Text('Новый товар'),
+              const SizedBox(height: 20),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Column(
+                    children: [
+                      ImageEdit(
+                        fullImageUrl: '',
+                        imageFile: _selectedImageFile,
+                        onImageSelected: (file) {
+                          setState(() {
+                            _selectedImageFile = file;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        AppTextField(
+                          controller: _nameController,
+                          labelText: 'Название товара',
+                        ),
+                        AppTextField(
+                          controller: _priceController,
+                          labelText: 'Цена рубли',
+                          isDouble: true,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                title: Text(
+                  'Товар в продаже',
+                  style: AppText.medium_14.copyWith(color: AppColors.black),
+                ),
+                subtitle: Text(
+                  _isActive ? 'В продаже' : 'Снят с продажи',
+                  style: AppText.medium_12.copyWith(
+                    color: _isActive ? AppColors.brown : AppColors.error,
+                  ),
+                ),
+                value: _isActive,
+                onChanged: (value) {
+                  setState(() {
+                    _isActive = value;
+                  });
+                },
+              ),
+              const SizedBox(height: 12),
+              AppTextField(
+                controller: _descriptionController,
+                labelText: 'Описание товара',
+                necessarily: false,
+              ),
+              AppTextField(
+                controller: _careController,
+                labelText: 'Инструкция использования',
+                necessarily: false,
+              ),
+              FutureBuilder<List<Category>>(
+                future: _categoriesFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Text('Ошибка получения категорий: ${snapshot.error}'),
+                    );
+                  }
+                  final categories = snapshot.data ?? const <Category>[];
+                  if (categories.isEmpty) {
+                    return const Center(child: Text('Список категорий пуст'));
+                  }
+                  return Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: categories.map((category) {
+                      return AdminCategory(
+                        name: category.name,
+                        isActive: _selectedCategoryId == category.id,
+                        onTap: () {
+                          setState(() {
+                            _selectedCategoryId = category.id;
+                          });
+                        },
+                      );
+                    }).toList(),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+              const SizedBox(height: 15),
+              Text(
+                'Требуемое освещение:',
+                style: AppText.medium_12.copyWith(
+                  color: AppColors.black_transparent,
+                ),
+              ),
+              const SizedBox(height: 10),
+              IconValueSelector(
+                items: lightItems,
+                selectedValue: _lightValue,
+                onSelected: (value) {
+                  setState(() {
+                    _lightValue = value;
+                  });
+                },
+              ),
+              const SizedBox(height: 15),
+              Text(
+                'Рекомендуемый размер горшка:',
+                style: AppText.medium_12.copyWith(
+                  color: AppColors.black_transparent,
+                ),
+              ),
+              const SizedBox(height: 10),
+              IconValueSelector(
+                items: potSizeItems,
+                selectedValue: _selectedPotSize,
+                onSelected: (value) {
+                  setState(() {
+                    _selectedPotSize = value;
+                  });
+                },
+              ),
+              const SizedBox(height: 15),
+              AppTextField(
+                controller: _wateringController,
+                labelText: 'Требования к поливу',
+                necessarily: false,
+              ),
+              AppTextField(
+                controller: _heightController,
+                labelText: 'Высота см',
+                necessarily: false,
+                isDouble: true,
+              ),
+              AppTextField(
+                controller: _ratingController,
+                labelText: 'Рейтинг',
+                isDouble: true,
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _isSaving
+                          ? null
+                          : () => Navigator.of(context).pop(),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: AppColors.brown),
+                      ),
+                      child: Text(
+                        'Отмена',
+                        style: AppText.medium_14.copyWith(
+                          color: AppColors.brown,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _isSaving ? null : _create,
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: AppColors.brown,
+                        side: BorderSide(color: AppColors.white),
+                      ),
+                      child: Text(
+                        _isSaving ? 'Создание...' : 'Создать',
+                        style: AppText.medium_14.copyWith(
+                          color: AppColors.white_transparent,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RefItem {
+  final int id;
+  final String name;
+
+  const _RefItem({required this.id, required this.name});
 }
 
 class _EditPlantDialog extends StatefulWidget {

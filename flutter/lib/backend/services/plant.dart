@@ -94,6 +94,65 @@ class PlantService {
     }
   }
 
+  /// Создание категории (админ)
+  static Future<Category> createCategory({
+    required String name,
+    String? description,
+    int? parentId,
+  }) async {
+    try {
+      final response = await _api.post(
+        ApiConfig.adminCategoriesCreate,
+        body: {
+          'name': name,
+          if (description != null && description.trim().isNotEmpty)
+            'description': description.trim(),
+          if (parentId != null) 'parent_id': parentId,
+        },
+      );
+      if (response['success'] != true) {
+        throw Exception('Не удалось создать категорию');
+      }
+      final data = response['data'] as Map<String, dynamic>? ?? const {};
+      return Category(
+        id: (data['id'] as num?)?.toInt() ?? 0,
+        name: data['name']?.toString() ?? name,
+        description: description ?? '',
+        parentId: (data['parent_id'] as num?)?.toInt(),
+      );
+    } catch (e) {
+      debugPrint('PlantService: createCategory исключение - $e');
+      throw Exception('Не удалось создать категорию');
+    }
+  }
+
+  /// Удаление категории (админ)
+  static Future<void> deleteCategory(int categoryId) async {
+    try {
+      final response = await _api.delete(ApiConfig.adminCategoryDelete(categoryId));
+      if (response['success'] != true) {
+        throw Exception('Не удалось удалить категорию');
+      }
+    } catch (e) {
+      debugPrint('PlantService: deleteCategory исключение - $e');
+      throw Exception('Не удалось удалить категорию');
+    }
+  }
+
+  /// Проверка удаления категории и список товаров в ней (админ)
+  static Future<Map<String, dynamic>> getCategoryDeletionCheck(int categoryId) async {
+    try {
+      final response = await _api.get(ApiConfig.adminCategoryDeletionCheck(categoryId));
+      if (response['success'] != true) {
+        throw Exception('Не удалось получить информацию по категории');
+      }
+      return response['data'] as Map<String, dynamic>? ?? const {};
+    } catch (e) {
+      debugPrint('PlantService: getCategoryDeletionCheck исключение - $e');
+      throw Exception('Не удалось получить информацию по категории');
+    }
+  }
+
   /// Получение растений с высоким рейтингом
   static Future<PlantResponse> getTopRatedPlants({
     double minRating = 4.0,
@@ -143,6 +202,31 @@ class PlantService {
     } catch (e) {
       debugPrint('PlantService: updatePlant исключение - $e');
       throw Exception('Не удалось обновить товар');
+    }
+  }
+
+  /// Создание товара (админ)
+  static Future<int> createPlant({
+    required Map<String, dynamic> payload,
+  }) async {
+    try {
+      final response = await _api.post(
+        ApiConfig.plantsAdminCreate,
+        body: payload,
+      );
+      if (response['success'] != true) {
+        throw Exception('Не удалось создать товар');
+      }
+
+      final data = response['data'] as Map<String, dynamic>?;
+      final id = (data?['id'] as num?)?.toInt();
+      if (id == null || id <= 0) {
+        throw Exception('Некорректный id созданного товара');
+      }
+      return id;
+    } catch (e) {
+      debugPrint('PlantService: createPlant исключение - $e');
+      throw Exception('Не удалось создать товар');
     }
   }
 

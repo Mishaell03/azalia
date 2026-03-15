@@ -20,7 +20,7 @@ class OutOfStockCard extends StatelessWidget {
       padding: const EdgeInsets.only(right: 24, left: 24, top: 16),
       child: Container(
         decoration: BoxDecoration(
-          color: AppColors.grey_light.withOpacity(0.1),
+          color: AppColors.grey_light.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: AppColors.grey_light),
         ),
@@ -40,6 +40,7 @@ class OutOfStockCard extends StatelessWidget {
   }
 
   Widget _buildPlantImage() {
+    final imageUrl = item.plant.fullImageUrl.trim();
     return Container(
       width: 80,
       height: 60,
@@ -51,12 +52,23 @@ class OutOfStockCard extends StatelessWidget {
         // изображение
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
-            child: CachedNetworkImage(
-              imageUrl: item.plant.fullImageUrl,
-              width: 80,
-              height: 60,
-              fit: BoxFit.cover,
-            ),
+            child: imageUrl.isEmpty
+                ? Container(
+                    width: 80,
+                    height: 60,
+                    color: AppColors.grey_light,
+                  )
+                : CachedNetworkImage(
+                    imageUrl: imageUrl,
+                    width: 80,
+                    height: 60,
+                    fit: BoxFit.cover,
+                    errorWidget: (context, url, error) => Container(
+                      width: 80,
+                      height: 60,
+                      color: AppColors.grey_light,
+                    ),
+                  ),
           ),
           Container(
             width: 80,
@@ -105,7 +117,7 @@ class OutOfStockCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: AppColors.error.withOpacity(0.1),
+              color: AppColors.error.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(

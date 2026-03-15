@@ -29,6 +29,73 @@ class CategoryUpdateRequest(BaseModel):
     parent_id: Optional[int] = Field(default=None, ge=1)
 
 
+def _get_category_or_404(cur, category_id: int):
+    category = cur.execute(
+        "SELECT id, name, parent_id, created_at FROM categories WHERE id = ?",
+        (category_id,),
+    ).fetchone()
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    return category
+
+
+def _get_active_products_in_category(cur, category_id: int):
+    return cur.execute(
+        """
+        SELECT id, name
+        FROM products
+        WHERE category_id = ?
+          AND deleted_at IS NULL
+        ORDER BY name ASC
+        """,
+        (category_id,),
+    ).fetchall()
+
+
+def _get_subcategories_count(cur, category_id: int) -> int:
+    row = cur.execute(
+        "SELECT COUNT(*) AS cnt FROM categories WHERE parent_id = ?",
+        (category_id,),
+    ).fetchone()
+    return int(row["cnt"] or 0)
+
+
+def _build_deletion_check(cur, category_id: int) -> dict:
+    category = _get_category_or_404(cur, category_id)
+    products = _get_active_products_in_category(cur, category_id)
+    subcategories_count = _get_subcategories_count(cur, category_id)
+
+    can_delete = len(products) == 0 and subcategories_count == 0
+    if len(products) > 0:
+        reason = "category_has_products"
+        message = "В категории есть товары"
+    elif subcategories_count > 0:
+        reason = "category_has_subcategories"
+        message = "У категории есть подкатегории"
+    else:
+        reason = "ok"
+        message = "Категорию можно удалить"
+
+    return {
+        "category": {
+            "id": int(category["id"]),
+            "name": category["name"],
+        },
+        "can_delete": can_delete,
+        "reason": reason,
+        "message": message,
+        "products_count": len(products),
+        "products": [
+            {
+                "id": int(row["id"]),
+                "name": row["name"],
+            }
+            for row in products
+        ],
+        "subcategories_count": subcategories_count,
+    }
+
+
 def _clean_text(value: Optional[str], max_len: int) -> Optional[str]:
     if value is None:
         return None
@@ -222,6 +289,12 @@ def create_category(payload: CategoryCreateRequest, user=Depends(get_current_use
     }
 
 
+@router.post("/admin/create", status_code=status.HTTP_201_CREATED, summary="Admin Create Category")
+def admin_create_category(payload: CategoryCreateRequest, user=Depends(get_current_user)):
+    """Создает новую категорию (админ endpoint для редактора)."""
+    return create_category(payload, user)
+
+
 @router.put("/{category_id}", summary="Update Category")
 def update_category(category_id: int, payload: CategoryUpdateRequest, user=Depends(get_current_user)):
     """Обновляет существующую категорию."""
@@ -308,6 +381,46 @@ def delete_category(category_id: int, user=Depends(get_current_user)):
                 detail=f"Cannot delete category with {subcategories_count} subcategories",
             )
 
+        cur.execute("DELETE FROM categories WHERE id = ?", (category_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {"success": True, "message": "Category deleted successfully"}
+
+
+@router.get("/admin/{category_id}/deletion-check", summary="Admin Category Deletion Check")
+def admin_category_deletion_check(category_id: int, user=Depends(get_current_user)):
+    """Проверка удаления категории и список товаров/блокировок."""
+    require_admin(user)
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        data = _build_deletion_check(cur, category_id)
+    finally:
+        conn.close()
+    return {"success": True, "data": data}
+
+
+@router.delete("/admin/{category_id}/delete", summary="Admin Delete Category")
+def admin_delete_category(category_id: int, user=Depends(get_current_user)):
+    """Удаляет категорию через админ endpoint."""
+    require_admin(user)
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        data = _build_deletion_check(cur, category_id)
+        if not data["can_delete"]:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": data["message"],
+                    "reason": data["reason"],
+                    "products": data["products"],
+                    "products_count": data["products_count"],
+                    "subcategories_count": data["subcategories_count"],
+                },
+            )
         cur.execute("DELETE FROM categories WHERE id = ?", (category_id,))
         conn.commit()
     finally:

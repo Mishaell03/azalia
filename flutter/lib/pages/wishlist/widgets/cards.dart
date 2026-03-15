@@ -162,10 +162,15 @@ class _WishlistCardState extends State<WishlistCard> {
   }
 
   Widget _buildCachedImage({bool outOfStock = false}) {
+    final imageUrl = widget.plant.fullImageUrl.trim();
+    if (imageUrl.isEmpty) {
+      return _buildEmptyPlaceholder(outOfStock: outOfStock);
+    }
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: CachedNetworkImage(
-        imageUrl: widget.plant.fullImageUrl,
+        imageUrl: imageUrl,
         width: outOfStock ? 80 : 113,
         height: outOfStock ? 60 : 88,
         fit: BoxFit.contain,
@@ -181,7 +186,7 @@ class _WishlistCardState extends State<WishlistCard> {
           });
           return _buildErrorPlaceholder(outOfStock: outOfStock);
         },
-        cacheKey: widget.plant.fullImageUrl,
+        cacheKey: imageUrl,
         maxWidthDiskCache: 300,
         maxHeightDiskCache: 300,
       ),
@@ -205,6 +210,17 @@ class _WishlistCardState extends State<WishlistCard> {
             color: AppColors.grey,
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyPlaceholder({bool outOfStock = false}) {
+    return Container(
+      width: outOfStock ? 80 : 113,
+      height: outOfStock ? 60 : 88,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        color: AppColors.grey_light,
       ),
     );
   }

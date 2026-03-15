@@ -319,25 +319,35 @@ class _AdminProductsCartWarehouseState
                             padding: const EdgeInsets.all(10),
                             child: Row(
                               children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Image.network(
-                                    ApiConfig.imageUrl(product.imageUrl),
+                                (() {
+                                  final imageUrl =
+                                      ApiConfig.imageUrl(product.imageUrl)
+                                          .trim();
+                                  final fallback = Container(
                                     width: 72,
                                     height: 72,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, error, stackTrace) =>
-                                        Container(
-                                          width: 72,
-                                          height: 72,
-                                          color: AppColors.grey_light,
-                                          alignment: Alignment.center,
-                                          child: const Icon(
-                                            Icons.image_not_supported,
-                                          ),
-                                        ),
-                                  ),
-                                ),
+                                    color: AppColors.grey_light,
+                                    alignment: Alignment.center,
+                                    child: const Icon(Icons.image_not_supported),
+                                  );
+                                  if (imageUrl.isEmpty) {
+                                    return ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: fallback,
+                                    );
+                                  }
+                                  return ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.network(
+                                      imageUrl,
+                                      width: 72,
+                                      height: 72,
+                                      fit: BoxFit.cover,
+                                      errorBuilder:
+                                          (_, error, stackTrace) => fallback,
+                                    ),
+                                  );
+                                })(),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Text(

@@ -145,11 +145,6 @@ class _HomePage extends State<HomePage> {
                     SliverList(
                       delegate: SliverChildBuilderDelegate((context, index) {
                         final plant = _viewModel.displayedPlants[index];
-
-                        if (plant.stockQuantity <= 0) {
-                          return const SizedBox.shrink();
-                        }
-
                         return HomeCard(key: ValueKey(plant.id), plant: plant);
                       }, childCount: _viewModel.displayedPlants.length),
                     ),

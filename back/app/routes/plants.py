@@ -182,6 +182,48 @@ def _validate_refs(cur, payload: ProductCreateRequest | ProductUpdateRequest) ->
             )
 
 
+def _create_product(cur, payload: ProductCreateRequest) -> int:
+    _validate_refs(cur, payload)
+
+    exists = cur.execute(
+        "SELECT id FROM products WHERE lower(name) = lower(?) AND deleted_at IS NULL",
+        (payload.name,),
+    ).fetchone()
+    if exists:
+        raise HTTPException(status_code=400, detail="Plant with this name already exists")
+
+    cur.execute(
+        """
+        INSERT INTO products (
+            sku, name, description, category_id, plant_type_id, supplier_id,
+            base_price, cost_price, recommended_pot_size_id, height_cm,
+            light_requirements, watering_notes, care_instructions, image_url,
+            rating, is_active
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            None,
+            payload.name,
+            _clean_text(payload.description, 2000),
+            payload.category_id,
+            payload.plant_type_id,
+            payload.supplier_id,
+            payload.base_price,
+            payload.cost_price,
+            payload.recommended_pot_size_id,
+            payload.height_cm,
+            _clean_text(payload.light_requirements, 32),
+            _clean_text(payload.watering_notes, 500),
+            _clean_text(payload.care_instructions, 3000),
+            _clean_text(payload.image_url, 500),
+            payload.rating,
+            int(payload.is_active),
+        ),
+    )
+    return int(cur.lastrowid)
+
+
 @router.get("/", summary="Get Plants")
 def get_plants(
     category_id: Optional[int] = Query(default=None, ge=1),
@@ -268,10 +310,13 @@ def get_plants(
 
     sql += " GROUP BY p.id"
 
-    if in_stock is True:
-        sql += " HAVING COALESCE(SUM(i.quantity_available), 0) > 0"
-    elif in_stock is False:
+    # Для публичной витрины API должен возвращать все товары в продаже,
+    # кроме снятых с продажи. Поэтому in_stock=True в публичном запросе
+    # не сужает выборку по остаткам.
+    if in_stock is False:
         sql += " HAVING COALESCE(SUM(i.quantity_available), 0) <= 0"
+    elif in_stock is True and include_inactive:
+        sql += " HAVING COALESCE(SUM(i.quantity_available), 0) > 0"
 
     count_sql = f"SELECT COUNT(*) AS total FROM ({sql}) AS filtered_products"
     count_params = params.copy()
@@ -400,50 +445,33 @@ def create_plant(payload: ProductCreateRequest, user=Depends(get_current_user)):
     conn = get_db_connection()
     try:
         cur = conn.cursor()
-        _validate_refs(cur, payload)
-
-        exists = cur.execute(
-            "SELECT id FROM products WHERE lower(name) = lower(?) AND deleted_at IS NULL",
-            (payload.name,),
-        ).fetchone()
-        if exists:
-            raise HTTPException(status_code=400, detail="Plant with this name already exists")
-
-        cur.execute(
-            """
-            INSERT INTO products (
-                sku, name, description, category_id, plant_type_id, supplier_id,
-                base_price, cost_price, recommended_pot_size_id, height_cm,
-                light_requirements, watering_notes, care_instructions, image_url,
-                rating, is_active
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                None,
-                payload.name,
-                _clean_text(payload.description, 2000),
-                payload.category_id,
-                payload.plant_type_id,
-                payload.supplier_id,
-                payload.base_price,
-                payload.cost_price,
-                payload.recommended_pot_size_id,
-                payload.height_cm,
-                _clean_text(payload.light_requirements, 32),
-                _clean_text(payload.watering_notes, 500),
-                _clean_text(payload.care_instructions, 3000),
-                _clean_text(payload.image_url, 500),
-                payload.rating,
-                int(payload.is_active),
-            ),
-        )
-        product_id = cur.lastrowid
+        product_id = _create_product(cur, payload)
         conn.commit()
     finally:
         conn.close()
 
     return {"success": True, "message": "Plant created successfully", "id": product_id}
+
+
+@router.post("/admin/create", status_code=status.HTTP_201_CREATED, summary="Admin Create Plant")
+def admin_create_plant(payload: ProductCreateRequest, user=Depends(get_current_user)):
+    """Создает новое растение через админ-редактор."""
+    require_admin(user)
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        product_id = _create_product(cur, payload)
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "message": "Plant created successfully",
+        "data": {
+            "id": product_id,
+        },
+    }
 
 
 @router.put("/{plant_id}", summary="Update Plant")

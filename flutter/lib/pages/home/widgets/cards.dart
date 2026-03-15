@@ -93,10 +93,15 @@ class _HomeCardState extends State<HomeCard> {
   }
 
   Widget _buildCachedImage() {
+    final imageUrl = widget.plant.fullImageUrl.trim();
+    if (imageUrl.isEmpty) {
+      return _buildEmptyPlaceholder();
+    }
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: CachedNetworkImage(
-        imageUrl: widget.plant.fullImageUrl,
+        imageUrl: imageUrl,
         width: 113,
         height: 88,
         fit: BoxFit.contain,
@@ -111,7 +116,7 @@ class _HomeCardState extends State<HomeCard> {
           });
           return _buildErrorPlaceholder();
         },
-        cacheKey: widget.plant.fullImageUrl,
+        cacheKey: imageUrl,
         maxWidthDiskCache: 300,
         maxHeightDiskCache: 300,
       ),
@@ -125,6 +130,15 @@ class _HomeCardState extends State<HomeCard> {
         color: AppColors.grey_light,
       ),
       child: const LoadingWidget(size: 20, strokeWidth: 2),
+    );
+  }
+
+  Widget _buildEmptyPlaceholder() {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        color: AppColors.grey_light,
+      ),
     );
   }
 

@@ -122,7 +122,7 @@ class HomeViewModel extends ChangeNotifier {
   }
 
   List<Plant> _filterAvailablePlants(List<Plant> plants) {
-    return plants.where((plant) => plant.stockQuantity > 0).toList();
+    return plants;
   }
 
   void _updateDisplayedPlants() {

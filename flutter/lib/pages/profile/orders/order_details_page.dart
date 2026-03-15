@@ -323,49 +323,6 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
     );
   }
 
-  Widget _buildRefunds(OrderHistoryDetail order) {
-    if (order.refunds.isEmpty) {
-      return Text(
-        'Возвратов нет',
-        style: AppText.medium_14.copyWith(color: AppColors.grey),
-      );
-    }
-
-    return Column(
-      children: order.refunds.map((refund) {
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      OrderPaymentStatusConfig.paymentLabel(refund.status),
-                      style: AppText.medium_14.copyWith(color: AppColors.black),
-                    ),
-                    if (refund.reason != null && refund.reason!.isNotEmpty)
-                      Text(
-                        refund.reason!,
-                        style: AppText.medium_12.copyWith(
-                          color: AppColors.grey,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              Text(
-                _formatPrice(refund.amount),
-                style: AppText.medium_14.copyWith(color: AppColors.error),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final order = _order;
@@ -513,11 +470,6 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                   _buildSection(
                     title: 'История статусов',
                     child: _buildHistory(order),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildSection(
-                    title: 'Возвраты',
-                    child: _buildRefunds(order),
                   ),
                 ],
               ),
