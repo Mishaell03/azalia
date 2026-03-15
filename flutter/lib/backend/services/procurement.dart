@@ -34,6 +34,11 @@ class ProcurementService {
     return items.whereType<Map<String, dynamic>>().toList();
   }
 
+  Future<Map<String, dynamic>> getHistory({int? storeId, int limit = 200}) async {
+    final response = await _api.get(ApiConfig.procurementHistory(storeId: storeId, limit: limit));
+    return response['data'] as Map<String, dynamic>? ?? const {};
+  }
+
   Future<void> upsertCartItem({
     required int storeId,
     required int productId,

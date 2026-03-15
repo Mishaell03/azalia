@@ -98,6 +98,17 @@ class ProcurementCheckoutRequest(BaseModel):
     comment: Optional[str] = Field(default=None, max_length=500)
 
 
+def _procurement_status_label(status_code: Optional[str]) -> str:
+    code = (status_code or "").strip().lower()
+    if code == "received":
+        return "принят"
+    if code == "partially_received":
+        return "частично принят"
+    if code == "cancelled":
+        return "отменен"
+    return "доставляется"
+
+
 def _resolve_user(cur, user_id: Optional[int], telegram_id: Optional[int]):
     user = None
     if user_id is not None:
@@ -1818,6 +1829,123 @@ def procurement_checkout(
             "total_amount": round(total_amount, 2),
             "items_count": len(rows),
             "remaining_cart_items": remaining,
+        },
+    }
+
+
+@router.get("/procurement/history", summary="Procurement: Supplies History")
+def procurement_history(
+    store_id: Optional[int] = Query(default=None, ge=1),
+    limit: int = Query(default=200, ge=1, le=1000),
+    user=Depends(get_current_user),
+):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        _require_employee_access(cur, int(user["id"]))
+        if store_id is not None:
+            _resolve_procurement_store(cur, int(store_id))
+
+        stores = _get_switchable_stores(cur)
+
+        params: list[object] = []
+        sql = """
+            SELECT
+                po.id,
+                po.purchase_number,
+                po.status,
+                po.total_amount,
+                po.comment,
+                po.ordered_at,
+                po.received_at,
+                po.created_at,
+                po.updated_at,
+                po.store_id,
+                s.name AS store_name,
+                s.address AS store_address
+            FROM purchase_orders po
+            JOIN stores s ON s.id = po.store_id
+            WHERE 1 = 1
+        """
+        if store_id is not None:
+            sql += " AND po.store_id = ?"
+            params.append(int(store_id))
+        sql += """
+            ORDER BY datetime(COALESCE(po.ordered_at, po.created_at)) DESC, po.id DESC
+            LIMIT ?
+        """
+        params.append(int(limit))
+        orders_rows = cur.execute(sql, tuple(params)).fetchall()
+
+        order_ids = [int(row["id"]) for row in orders_rows]
+        items_by_order: dict[int, list[dict[str, object]]] = {}
+        if order_ids:
+            placeholders = ",".join(["?"] * len(order_ids))
+            item_rows = cur.execute(
+                f"""
+                SELECT
+                    poi.purchase_order_id,
+                    poi.id,
+                    poi.product_id,
+                    poi.ordered_quantity,
+                    poi.received_quantity,
+                    poi.rejected_quantity,
+                    poi.unit_cost,
+                    poi.line_total,
+                    p.name AS product_name,
+                    p.image_url
+                FROM purchase_order_items poi
+                JOIN products p ON p.id = poi.product_id
+                WHERE poi.purchase_order_id IN ({placeholders})
+                ORDER BY poi.purchase_order_id DESC, p.name ASC, poi.id ASC
+                """,
+                tuple(order_ids),
+            ).fetchall()
+            for row in item_rows:
+                po_id = int(row["purchase_order_id"])
+                items_by_order.setdefault(po_id, []).append(
+                    {
+                        "id": int(row["id"]),
+                        "product_id": int(row["product_id"]),
+                        "name": row["product_name"],
+                        "image_url": row["image_url"] or "img/none.png",
+                        "ordered_quantity": int(row["ordered_quantity"] or 0),
+                        "received_quantity": int(row["received_quantity"] or 0),
+                        "rejected_quantity": int(row["rejected_quantity"] or 0),
+                        "unit_cost": float(row["unit_cost"] or 0),
+                        "line_total": float(row["line_total"] or 0),
+                    }
+                )
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "data": {
+            "store_id": store_id,
+            "stores": stores,
+            "items": [
+                {
+                    "id": int(row["id"]),
+                    "purchase_number": row["purchase_number"],
+                    "status_code": row["status"],
+                    "status": _procurement_status_label(row["status"]),
+                    "total_amount": float(row["total_amount"] or 0),
+                    "comment": row["comment"],
+                    "ordered_at": row["ordered_at"],
+                    "received_at": row["received_at"],
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"],
+                    "store": {
+                        "id": int(row["store_id"]),
+                        "name": row["store_name"],
+                        "address": row["store_address"],
+                    },
+                    "items": items_by_order.get(int(row["id"]), []),
+                }
+                for row in orders_rows
+            ],
+            "count": len(orders_rows),
         },
     }
 

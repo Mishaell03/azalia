@@ -23,6 +23,15 @@ class ApiConfig {
       '$baseURL/procurement/catalog-products?store_id=$storeId';
   static String procurementCart(int storeId) =>
       '$baseURL/procurement/cart?store_id=$storeId';
+  static String procurementHistory({int? storeId, int limit = 200}) {
+    final params = <String, String>{
+      'limit': '$limit',
+      if (storeId != null) 'store_id': '$storeId',
+    };
+    return Uri.parse('$baseURL/procurement/history')
+        .replace(queryParameters: params)
+        .toString();
+  }
   static const String procurementCartItems = '$baseURL/procurement/cart/items';
   static String procurementCartItemById(int cartItemId) =>
       '$baseURL/procurement/cart/items/$cartItemId';
