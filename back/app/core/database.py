@@ -290,11 +290,8 @@ def create_database() -> None:
             id                  INTEGER PRIMARY KEY AUTOINCREMENT,
             product_id          INTEGER NOT NULL,
             image_url           TEXT NOT NULL,
-            sort_order          INTEGER NOT NULL DEFAULT 0,
-            is_main             INTEGER NOT NULL DEFAULT 0 CHECK(is_main IN (0, 1)),
-            is_active           INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
-            alt_text            TEXT,
             created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(product_id, image_url),
             FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
         );
 
@@ -726,7 +723,7 @@ def create_database() -> None:
         CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
 
         CREATE INDEX IF NOT EXISTS idx_product_images_product_id ON product_images(product_id);
-        CREATE INDEX IF NOT EXISTS idx_product_images_sort ON product_images(product_id, sort_order);
+        CREATE INDEX IF NOT EXISTS idx_product_images_product_id_id ON product_images(product_id, id);
 
         CREATE INDEX IF NOT EXISTS idx_wishlist_user_id ON wishlist_items(user_id);
         CREATE INDEX IF NOT EXISTS idx_cart_user_id ON cart_items(user_id);

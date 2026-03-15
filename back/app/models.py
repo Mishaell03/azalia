@@ -148,10 +148,6 @@ class ProductImage:
     id: int
     product_id: int
     image_url: str
-    sort_order: int
-    is_main: bool
-    is_active: bool
-    alt_text: Optional[str]
     created_at: str
 
 
@@ -493,10 +489,6 @@ def _to_product_image(row: sqlite3.Row) -> ProductImage:
         id=row["id"],
         product_id=row["product_id"],
         image_url=row["image_url"],
-        sort_order=row["sort_order"],
-        is_main=bool(row["is_main"]),
-        is_active=bool(row["is_active"]),
-        alt_text=row["alt_text"],
         created_at=row["created_at"],
     )
 
@@ -689,10 +681,9 @@ class ProductRepository:
         sql = "SELECT * FROM product_images WHERE product_id = ?"
         params: list[Any] = [product_id]
 
-        if active_only:
-            sql += " AND is_active = 1"
-
-        sql += " ORDER BY is_main DESC, sort_order ASC, id ASC"
+        # Kept for backward compatibility; product_images no longer has is_active.
+        _ = active_only
+        sql += " ORDER BY id ASC"
         rows = db.fetch_all(sql, params)
         return [_to_product_image(row) for row in rows]
 

@@ -82,11 +82,7 @@ def _product_to_dict(row, images: list[dict[str, Any]]) -> dict[str, Any]:
     is_active = bool(row["is_active"])
     is_removed = (not is_active) or (row["deleted_at"] is not None)
     raw_image = (row["image_url"] or "").strip() if row["image_url"] is not None else ""
-    resolved_image = raw_image or (
-        images[0]["image_url"]
-        if images and isinstance(images[0], dict) and images[0].get("image_url")
-        else DEFAULT_PRODUCT_IMAGE_PATH
-    )
+    resolved_image = raw_image or DEFAULT_PRODUCT_IMAGE_PATH
     return {
         "id": row["id"],
         "sku": row["sku"],
@@ -121,10 +117,10 @@ def _product_to_dict(row, images: list[dict[str, Any]]) -> dict[str, Any]:
 def _fetch_images(cur, product_id: int) -> list[dict[str, Any]]:
     rows = cur.execute(
         """
-        SELECT id, image_url, sort_order, is_main, is_active, alt_text, created_at
+        SELECT id, image_url, created_at
         FROM product_images
-        WHERE product_id = ? AND is_active = 1
-        ORDER BY is_main DESC, sort_order ASC, id ASC
+        WHERE product_id = ?
+        ORDER BY id ASC
         """,
         (product_id,),
     ).fetchall()
@@ -132,9 +128,6 @@ def _fetch_images(cur, product_id: int) -> list[dict[str, Any]]:
         {
             "id": row["id"],
             "image_url": row["image_url"],
-            "sort_order": row["sort_order"],
-            "is_main": bool(row["is_main"]),
-            "alt_text": row["alt_text"],
             "created_at": row["created_at"],
         }
         for row in rows
@@ -606,8 +599,8 @@ async def upload_plant_image(
         cur.execute("UPDATE products SET image_url = ? WHERE id = ?", (rel_path, plant_id))
         cur.execute(
             """
-            INSERT INTO product_images (product_id, image_url, sort_order, is_main, is_active)
-            VALUES (?, ?, 0, 1, 1)
+            INSERT INTO product_images (product_id, image_url)
+            VALUES (?, ?)
             """,
             (plant_id, rel_path),
         )
@@ -620,7 +613,7 @@ async def upload_plant_image(
 
 @router.delete("/{plant_id}/image", summary="Delete Plant Image")
 def delete_plant_image(plant_id: int, user=Depends(get_current_user)):
-    """Удаляет основное изображение растения и деактивирует связанные фото."""
+    """Удаляет основное изображение растения и связанные фото."""
     require_admin(user)
     conn = get_db_connection()
     try:
@@ -632,7 +625,7 @@ def delete_plant_image(plant_id: int, user=Depends(get_current_user)):
         image_url = row["image_url"]
         cur.execute("UPDATE products SET image_url = NULL WHERE id = ?", (plant_id,))
         cur.execute(
-            "UPDATE product_images SET is_active = 0 WHERE product_id = ?",
+            "DELETE FROM product_images WHERE product_id = ?",
             (plant_id,),
         )
         conn.commit()
