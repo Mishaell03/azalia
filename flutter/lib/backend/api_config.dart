@@ -109,6 +109,7 @@ class ApiConfig {
   static const String updateProfile = '$baseURL/auth/update_profile';
   static const String authMe = '$baseURL/auth/me';
   static const String avatar = '$baseURL/auth/avatar';
+  static const String subscriptionPlans = '$baseURL/auth/subscription-plans';
 
   // plants
   static const String plants = '$baseURL/plants/';

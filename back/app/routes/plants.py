@@ -114,7 +114,7 @@ def _product_to_dict(row, images: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _fetch_images(cur, product_id: int) -> list[dict[str, Any]]:
+def _fetch_images(cur, product_id: int, preview_url: Optional[str] = None) -> list[dict[str, Any]]:
     rows = cur.execute(
         """
         SELECT id, image_url, created_at
@@ -124,14 +124,21 @@ def _fetch_images(cur, product_id: int) -> list[dict[str, Any]]:
         """,
         (product_id,),
     ).fetchall()
-    return [
-        {
-            "id": row["id"],
-            "image_url": row["image_url"],
-            "created_at": row["created_at"],
-        }
-        for row in rows
-    ]
+    preview_norm = (preview_url or "").strip()
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        image_url = (row["image_url"] or "").strip()
+        # Не показываем превью в подробной галерее товара.
+        if preview_norm and image_url == preview_norm:
+            continue
+        result.append(
+            {
+                "id": row["id"],
+                "image_url": row["image_url"],
+                "created_at": row["created_at"],
+            }
+        )
+    return result
 
 
 def _base_product_sql() -> str:
@@ -322,7 +329,13 @@ def get_plants(
         cur = conn.cursor()
         total = int(cur.execute(count_sql, count_params).fetchone()["total"])
         rows = cur.execute(sql, params).fetchall()
-        data = [_product_to_dict(row, _fetch_images(cur, row["id"])) for row in rows]
+        data = [
+            _product_to_dict(
+                row,
+                _fetch_images(cur, row["id"], preview_url=row["image_url"]),
+            )
+            for row in rows
+        ]
     finally:
         conn.close()
 
@@ -424,7 +437,10 @@ def get_plant(plant_id: int = FastApiPath(..., ge=1)):
         if not row:
             raise HTTPException(status_code=404, detail="Plant not found")
 
-        data = _product_to_dict(row, _fetch_images(cur, plant_id))
+        data = _product_to_dict(
+            row,
+            _fetch_images(cur, plant_id, preview_url=row["image_url"]),
+        )
     finally:
         conn.close()
 
@@ -566,7 +582,7 @@ async def upload_plant_image(
     image: UploadFile = File(...),
     user=Depends(get_current_user),
 ):
-    """Загружает изображение растения и добавляет запись в product_images."""
+    """Загружает превью товара (НЕ добавляет в product_images)."""
     require_admin(user)
     filename = image.filename or ""
     suffix = FsPath(filename).suffix.lower()
@@ -597,6 +613,52 @@ async def upload_plant_image(
             raise HTTPException(status_code=404, detail="Plant not found")
 
         cur.execute("UPDATE products SET image_url = ? WHERE id = ?", (rel_path, plant_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "message": "Image uploaded",
+        "image_url": rel_path,
+    }
+
+
+@router.post("/{plant_id}/images", summary="Upload Plant Detail Image")
+async def upload_plant_detail_image(
+    plant_id: int,
+    image: UploadFile = File(...),
+    user=Depends(get_current_user),
+):
+    """Загружает фото для подробной информации товара (product_images)."""
+    require_admin(user)
+    filename = image.filename or ""
+    suffix = FsPath(filename).suffix.lower()
+    if suffix not in ALLOWED_IMAGE_EXTS:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+
+    content = await image.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty file")
+    if len(content) > MAX_IMAGE_SIZE_BYTES:
+        raise HTTPException(status_code=400, detail="File too large")
+
+    img_dir = BASE_DIR / "img" / "preview"
+    img_dir.mkdir(parents=True, exist_ok=True)
+
+    safe_name = f"{uuid.uuid4().hex}{suffix}"
+    full_path = img_dir / safe_name
+    full_path.write_bytes(content)
+    rel_path = f"img/preview/{safe_name}"
+
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        exists = cur.execute("SELECT id FROM products WHERE id = ?", (plant_id,)).fetchone()
+        if not exists:
+            full_path.unlink(missing_ok=True)
+            raise HTTPException(status_code=404, detail="Plant not found")
+
         cur.execute(
             """
             INSERT INTO product_images (product_id, image_url)
@@ -604,37 +666,114 @@ async def upload_plant_image(
             """,
             (plant_id, rel_path),
         )
+        image_id = int(cur.lastrowid)
         conn.commit()
     finally:
         conn.close()
 
-    return {"success": True, "message": "Image uploaded", "image_url": rel_path}
+    return {
+        "success": True,
+        "message": "Detail image uploaded",
+        "image_id": image_id,
+        "image_url": rel_path,
+    }
 
 
-@router.delete("/{plant_id}/image", summary="Delete Plant Image")
-def delete_plant_image(plant_id: int, user=Depends(get_current_user)):
-    """Удаляет основное изображение растения и связанные фото."""
+@router.get("/{plant_id}/images", summary="Get Plant Images")
+def get_plant_images(plant_id: int, user=Depends(get_current_user)):
+    """Возвращает все изображения товара."""
     require_admin(user)
     conn = get_db_connection()
     try:
         cur = conn.cursor()
-        row = cur.execute("SELECT image_url FROM products WHERE id = ?", (plant_id,)).fetchone()
-        if not row:
+        exists = cur.execute("SELECT id FROM products WHERE id = ?", (plant_id,)).fetchone()
+        if not exists:
+            raise HTTPException(status_code=404, detail="Plant not found")
+        preview_row = cur.execute(
+            "SELECT image_url FROM products WHERE id = ?",
+            (plant_id,),
+        ).fetchone()
+        preview_url = preview_row["image_url"] if preview_row else None
+        images = _fetch_images(cur, plant_id, preview_url=preview_url)
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "data": {
+            "items": images,
+            "count": len(images),
+        },
+    }
+
+
+@router.delete("/{plant_id}/images/{image_id}", summary="Delete One Plant Image")
+def delete_one_plant_image(plant_id: int, image_id: int, user=Depends(get_current_user)):
+    """Удаляет одно фото товара, но оставляет минимум 1 изображение."""
+    require_admin(user)
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        exists = cur.execute("SELECT id FROM products WHERE id = ?", (plant_id,)).fetchone()
+        if not exists:
             raise HTTPException(status_code=404, detail="Plant not found")
 
-        image_url = row["image_url"]
-        cur.execute("UPDATE products SET image_url = NULL WHERE id = ?", (plant_id,))
-        cur.execute(
-            "DELETE FROM product_images WHERE product_id = ?",
+        row = cur.execute(
+            """
+            SELECT id, image_url
+            FROM product_images
+            WHERE id = ? AND product_id = ?
+            """,
+            (image_id, plant_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Image not found")
+
+        count_row = cur.execute(
+            "SELECT COUNT(*) AS c FROM product_images WHERE product_id = ?",
             (plant_id,),
-        )
+        ).fetchone()
+        count = int(count_row["c"] or 0)
+        if count <= 1:
+            raise HTTPException(status_code=400, detail="At least one image is required")
+
+        image_url = row["image_url"]
+        cur.execute("DELETE FROM product_images WHERE id = ?", (image_id,))
+
+        current_preview = cur.execute(
+            "SELECT image_url FROM products WHERE id = ?",
+            (plant_id,),
+        ).fetchone()
+        if current_preview and current_preview["image_url"] == image_url:
+            replacement = cur.execute(
+                """
+                SELECT image_url
+                FROM product_images
+                WHERE product_id = ?
+                ORDER BY id ASC
+                LIMIT 1
+                """,
+                (plant_id,),
+            ).fetchone()
+            if replacement:
+                cur.execute(
+                    "UPDATE products SET image_url = ? WHERE id = ?",
+                    (replacement["image_url"], plant_id),
+                )
+
         conn.commit()
     finally:
         conn.close()
 
-    if image_url:
-        normalized = FsPath(image_url)
-        if not normalized.is_absolute() and normalized.parts and normalized.parts[0] == "img":
-            (BASE_DIR / normalized).unlink(missing_ok=True)
+    normalized = FsPath(image_url)
+    if not normalized.is_absolute() and normalized.parts and normalized.parts[0] == "img":
+        (BASE_DIR / normalized).unlink(missing_ok=True)
 
     return {"success": True, "message": "Image deleted"}
+
+
+@router.delete("/{plant_id}/image", summary="Delete Plant Image")
+def delete_plant_image(plant_id: int, user=Depends(get_current_user)):
+    """Устаревший endpoint: удаление всех фото запрещено (минимум 1 фото)."""
+    require_admin(user)
+    raise HTTPException(status_code=400, detail="Use endpoint for deleting a single image")

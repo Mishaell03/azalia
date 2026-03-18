@@ -15,6 +15,7 @@ class AppProfileContent extends StatelessWidget {
   final VoidCallback onLogout;
   final VoidCallback onSettings;
   final VoidCallback onOrderHistory;
+  final VoidCallback onSubscriptions;
   final VoidCallback onHelp;
   final VoidCallback onAbout;
 
@@ -28,6 +29,7 @@ class AppProfileContent extends StatelessWidget {
     required this.onLogout,
     required this.onSettings,
     required this.onOrderHistory,
+    required this.onSubscriptions,
     required this.onHelp,
     required this.onAbout,
   });
@@ -134,6 +136,12 @@ class AppProfileContent extends StatelessWidget {
                   icon: Icons.history_rounded,
                   title: 'История заказов',
                   onTap: onOrderHistory,
+                ),
+                _buildDivider(),
+                AppProfileSetting(
+                  icon: Icons.workspace_premium_outlined,
+                  title: 'Подписки',
+                  onTap: onSubscriptions,
                 ),
                 _buildDivider(),
                 AppProfileSetting(

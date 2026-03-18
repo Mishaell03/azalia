@@ -443,6 +443,7 @@ class _ProfilePageState extends State<ProfilePage> {
               formattedPhone: _phoneController.text,
               onLogout: _logout,
               onOrderHistory: () => context.push('/profile/orders'),
+              onSubscriptions: () => context.push('/profile/subscriptions'),
               onSettings: () => _showSettings(context),
               onHelp: () => _showHelp(context),
               onAbout: () => _showAbout(context),

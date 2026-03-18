@@ -187,6 +187,12 @@ def create_database() -> None:
             name                    TEXT NOT NULL UNIQUE,
             monthly_price           REAL NOT NULL CHECK(monthly_price >= 0),
             yearly_price            REAL NOT NULL CHECK(yearly_price >= 0),
+            description             TEXT,
+            features_json           TEXT NOT NULL DEFAULT '[]',
+            max_plants              INTEGER NOT NULL DEFAULT 1 CHECK(max_plants >= 1),
+            notifications           TEXT NOT NULL DEFAULT 'basic',
+            has_corporate           INTEGER NOT NULL DEFAULT 0 CHECK(has_corporate IN (0, 1)),
+            has_analytics           INTEGER NOT NULL DEFAULT 0 CHECK(has_analytics IN (0, 1)),
             max_members             INTEGER NOT NULL DEFAULT 1 CHECK(max_members >= 1),
             can_create_company      INTEGER NOT NULL DEFAULT 0 CHECK(can_create_company IN (0, 1)),
             has_extended_features   INTEGER NOT NULL DEFAULT 0 CHECK(has_extended_features IN (0, 1)),
@@ -254,6 +260,26 @@ def create_database() -> None:
             FOREIGN KEY (plan_id) REFERENCES subscription_plans(id) ON DELETE RESTRICT,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS subscription_payment_links (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            plan_id                 INTEGER NOT NULL,
+            billing_period          TEXT NOT NULL CHECK(billing_period IN ('monthly', 'yearly')),
+            amount                  REAL NOT NULL CHECK(amount >= 0),
+            status                  TEXT NOT NULL DEFAULT 'pending'
+                                    CHECK(status IN ('pending', 'paid', 'failed', 'cancelled')),
+            payment_url             TEXT NOT NULL,
+            external_payment_id     TEXT,
+            subscription_id         INTEGER,
+            auto_renew_enabled      INTEGER NOT NULL DEFAULT 1 CHECK(auto_renew_enabled IN (0, 1)),
+            created_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            paid_at                 TEXT,
+            failed_at               TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (plan_id) REFERENCES subscription_plans(id) ON DELETE RESTRICT,
+            FOREIGN KEY (subscription_id) REFERENCES subscriptions(id) ON DELETE SET NULL
         );
 
         
@@ -716,6 +742,93 @@ def create_database() -> None:
     _ensure_column("wishlist_items", "pot_size", "pot_size TEXT")
     _ensure_column("wishlist_items", "pot_material", "pot_material TEXT")
     _ensure_column("wishlist_items", "pot_color", "pot_color TEXT")
+    _ensure_column("subscription_plans", "description", "description TEXT")
+    _ensure_column("subscription_plans", "features_json", "features_json TEXT NOT NULL DEFAULT '[]'")
+    _ensure_column("subscription_plans", "max_plants", "max_plants INTEGER NOT NULL DEFAULT 1")
+    _ensure_column("subscription_plans", "notifications", "notifications TEXT NOT NULL DEFAULT 'basic'")
+    _ensure_column("subscription_plans", "has_corporate", "has_corporate INTEGER NOT NULL DEFAULT 0")
+    _ensure_column("subscription_plans", "has_analytics", "has_analytics INTEGER NOT NULL DEFAULT 0")
+
+    # Subscription plans for mobile app (Free / Standard / Premium).
+    cur.executemany(
+        """
+        INSERT INTO subscription_plans (
+            id, code, name, monthly_price, yearly_price,
+            description, features_json, max_plants, notifications,
+            has_corporate, has_analytics,
+            max_members, can_create_company, has_extended_features, is_active
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            code = excluded.code,
+            name = excluded.name,
+            monthly_price = excluded.monthly_price,
+            yearly_price = excluded.yearly_price,
+            description = excluded.description,
+            features_json = excluded.features_json,
+            max_plants = excluded.max_plants,
+            notifications = excluded.notifications,
+            has_corporate = excluded.has_corporate,
+            has_analytics = excluded.has_analytics,
+            max_members = excluded.max_members,
+            can_create_company = excluded.can_create_company,
+            has_extended_features = excluded.has_extended_features,
+            is_active = excluded.is_active
+        """,
+        [
+            (
+                1,
+                "free",
+                "Free",
+                0.0,
+                0.0,
+                "Базовый уход за 1 растением и простые напоминания.",
+                '["1 растение в календаре","Уведомление за 1 день","Покупка растений","Telegram-бот (базовый)"]',
+                1,
+                "basic",
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+            ),
+            (
+                2,
+                "standard",
+                "Standard",
+                399.0,
+                3990.0,
+                "Основной тариф для регулярного ухода и покупок.",
+                '["До 30 растений в календаре","Расширенные напоминания","История ухода","Рекомендации по уходу","Telegram-бот (расширенный)"]',
+                30,
+                "extended",
+                0,
+                1,
+                1,
+                0,
+                1,
+                1,
+            ),
+            (
+                3,
+                "premium",
+                "Premium",
+                899.0,
+                8990.0,
+                "Максимум возможностей: безлимит, аналитика и корпоративные функции.",
+                '["Неограниченные растения","Умные уведомления","Продвинутая аналитика","Приоритетные рекомендации","Корпоративный аккаунт: организация и сотрудники","Общий календарь команды","Корпоративные события"]',
+                10000,
+                "smart",
+                1,
+                1,
+                50,
+                1,
+                1,
+                1,
+            ),
+        ],
+    )
 
     # Reference data for pots.
     cur.execute("INSERT OR IGNORE INTO pot_materials(name) VALUES ('Пластик')")
@@ -793,6 +906,8 @@ def create_database() -> None:
         CREATE INDEX IF NOT EXISTS idx_subscriptions_company_id ON subscriptions(company_id);
         CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status);
         CREATE INDEX IF NOT EXISTS idx_subscriptions_expires_at ON subscriptions(expires_at);
+        CREATE INDEX IF NOT EXISTS idx_subscription_payment_links_user_id ON subscription_payment_links(user_id);
+        CREATE INDEX IF NOT EXISTS idx_subscription_payment_links_status ON subscription_payment_links(status);
 
         CREATE INDEX IF NOT EXISTS idx_company_members_company_id ON company_members(company_id);
         CREATE INDEX IF NOT EXISTS idx_company_members_user_id ON company_members(user_id);
@@ -1244,6 +1359,7 @@ def validate_schema() -> None:
         "user_addresses",
         "subscription_plans",
         "subscriptions",
+        "subscription_payment_links",
         "companies",
         "company_members",
         "products",

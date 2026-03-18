@@ -247,4 +247,51 @@ class PlantService {
       throw Exception('Не удалось загрузить изображение');
     }
   }
+
+  /// Загрузка фото для подробной информации товара (галерея)
+  static Future<String> uploadPlantDetailImage(int id, File imageFile) async {
+    try {
+      final response = await _api.postMultipart(
+        '${ApiConfig.plantsId(id)}/images',
+        file: imageFile,
+        fieldName: 'image',
+      );
+      if (response['success'] != true) {
+        throw Exception('Не удалось загрузить изображение');
+      }
+      return (response['image_url'] ?? '').toString();
+    } catch (e) {
+      debugPrint('PlantService: uploadPlantDetailImage исключение - $e');
+      throw Exception('Не удалось загрузить изображение');
+    }
+  }
+
+  /// Получить все изображения товара (админ)
+  static Future<List<Map<String, dynamic>>> getPlantImages(int id) async {
+    try {
+      final response = await _api.get('${ApiConfig.plantsId(id)}/images');
+      if (response['success'] != true) {
+        throw Exception('Не удалось загрузить изображения');
+      }
+      final data = response['data'] as Map<String, dynamic>? ?? const {};
+      final items = data['items'] as List? ?? const [];
+      return items.whereType<Map<String, dynamic>>().toList();
+    } catch (e) {
+      debugPrint('PlantService: getPlantImages исключение - $e');
+      throw Exception('Не удалось загрузить изображения');
+    }
+  }
+
+  /// Удалить одно изображение товара (админ)
+  static Future<void> deletePlantImageById(int plantId, int imageId) async {
+    try {
+      final response = await _api.delete('${ApiConfig.plantsId(plantId)}/images/$imageId');
+      if (response['success'] != true) {
+        throw Exception('Не удалось удалить изображение');
+      }
+    } catch (e) {
+      debugPrint('PlantService: deletePlantImageById исключение - $e');
+      throw Exception('Не удалось удалить изображение');
+    }
+  }
 }

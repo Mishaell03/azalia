@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:azalia/backend/api_config.dart';
 import 'package:azalia/backend/models/plant.dart';
 import 'package:azalia/backend/services/plant.dart';
 import 'package:azalia/components/colors.dart';
@@ -11,6 +12,7 @@ import 'package:azalia/pages/admin/widgets/products/cards/widget/icon.dart';
 import 'package:azalia/pages/admin/widgets/products/cards/widget/imageEdit.dart';
 import 'package:azalia/pages/admin/widgets/products/cards/widget/textField.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 class AdminProductsCartEditor extends StatefulWidget {
   const AdminProductsCartEditor({super.key});
@@ -779,7 +781,8 @@ class _CreatePlantDialogState extends State<_CreatePlantDialog> {
 
   bool _isSaving = false;
   bool _isActive = true;
-  File? _selectedImageFile;
+  File? _selectedPreviewImageFile;
+  final List<File> _selectedDetailImageFiles = <File>[];
   int? _selectedCategoryId;
   int? _selectedPlantTypeId;
   String _selectedPotSize = 'M';
@@ -913,6 +916,18 @@ class _CreatePlantDialogState extends State<_CreatePlantDialog> {
       );
       return;
     }
+    if (_selectedDetailImageFiles.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.white,
+          content: Text(
+            'Добавьте минимум 1 фото для подробной информации',
+            style: AppText.medium_14.copyWith(color: AppColors.brown),
+          ),
+        ),
+      );
+      return;
+    }
 
     setState(() {
       _isSaving = true;
@@ -936,8 +951,14 @@ class _CreatePlantDialogState extends State<_CreatePlantDialog> {
       };
 
       final createdId = await PlantService.createPlant(payload: payload);
-      if (_selectedImageFile != null) {
-        await PlantService.uploadPlantImage(createdId, _selectedImageFile!);
+      if (_selectedPreviewImageFile != null) {
+        await PlantService.uploadPlantImage(createdId, _selectedPreviewImageFile!);
+      }
+      if (_selectedDetailImageFiles.isEmpty) {
+        throw Exception('Добавьте минимум 1 фото для подробной информации');
+      }
+      for (final file in _selectedDetailImageFiles) {
+        await PlantService.uploadPlantDetailImage(createdId, file);
       }
       final createdPlant = await PlantService.getPlantById(createdId);
 
@@ -987,18 +1008,14 @@ class _CreatePlantDialogState extends State<_CreatePlantDialog> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Column(
-                    children: [
-                      ImageEdit(
-                        fullImageUrl: '',
-                        imageFile: _selectedImageFile,
-                        onImageSelected: (file) {
-                          setState(() {
-                            _selectedImageFile = file;
-                          });
-                        },
-                      ),
-                    ],
+                  ImageEdit(
+                    fullImageUrl: '',
+                    imageFile: _selectedPreviewImageFile,
+                    onImageSelected: (file) {
+                      setState(() {
+                        _selectedPreviewImageFile = file;
+                      });
+                    },
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -1137,6 +1154,32 @@ class _CreatePlantDialogState extends State<_CreatePlantDialog> {
                 labelText: 'Рейтинг',
                 isDouble: true,
               ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Фото для подробной информации (минимум 1):',
+                  style: AppText.medium_12.copyWith(
+                    color: AppColors.black_transparent,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              _AdminImageGalleryEditor(
+                existingImages: const [],
+                localImages: _selectedDetailImageFiles,
+                minImages: 1,
+                onAddLocalImage: (file) {
+                  setState(() {
+                    _selectedDetailImageFiles.add(file);
+                  });
+                },
+                onRemoveLocalImage: (index) {
+                  setState(() {
+                    _selectedDetailImageFiles.removeAt(index);
+                  });
+                },
+              ),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -1213,7 +1256,10 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
   late String lightValue;
   late bool isActive;
   bool _isSaving = false;
-  File? _selectedImageFile;
+  File? _selectedPreviewImageFile;
+  final List<File> _selectedImageFiles = <File>[];
+  final List<Map<String, dynamic>> _existingImages = <Map<String, dynamic>>[];
+  int _initialImageCount = 0;
 
   late TextEditingController nameController;
   late TextEditingController salePriceController;
@@ -1252,6 +1298,18 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
     selectedCategoryId = plant.categoryId;
     selectedPotSize = plant.recommendedPotSize ?? 'M';
     isActive = plant.isActive && plant.deletedAt == null;
+    _existingImages
+      ..clear()
+      ..addAll(
+        plant.productImages.map(
+          (url) => {
+            'id': null,
+            'image_url': url,
+          },
+        ),
+      );
+    _initialImageCount = _existingImages.length;
+    _loadExistingImages();
   }
 
   @override
@@ -1265,6 +1323,66 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
     heightCmController.dispose();
     ratingController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadExistingImages() async {
+    try {
+      final items = await PlantService.getPlantImages(widget.plant.id);
+      if (!mounted) return;
+      setState(() {
+        _existingImages
+          ..clear()
+          ..addAll(items);
+        _initialImageCount = _existingImages.length;
+      });
+    } catch (_) {
+      // fallback to images from plant payload
+    }
+  }
+
+  Future<void> _deleteExistingImage(int index) async {
+    if (_isSaving) return;
+    final totalImages = _existingImages.length + _selectedImageFiles.length;
+    if (totalImages <= 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.white,
+          content: Text(
+            'Должна быть минимум 1 фотография',
+            style: AppText.medium_14.copyWith(color: AppColors.brown),
+          ),
+        ),
+      );
+      return;
+    }
+
+    final item = _existingImages[index];
+    final imageId = (item['id'] as num?)?.toInt();
+    if (imageId == null) {
+      setState(() {
+        _existingImages.removeAt(index);
+      });
+      return;
+    }
+
+    try {
+      await PlantService.deletePlantImageById(widget.plant.id, imageId);
+      if (!mounted) return;
+      setState(() {
+        _existingImages.removeAt(index);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.white,
+          content: Text(
+            'Не удалось удалить фото: $e',
+            style: AppText.medium_14.copyWith(color: AppColors.brown),
+          ),
+        ),
+      );
+    }
   }
 
   String _norm(String value) => value.trim();
@@ -1369,7 +1487,7 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
     final newRating = _parseDouble(ratingController, widget.plant.rating ?? 0);
     final newCategoryId = selectedCategoryId;
     final newLight = lightValue;
-    final imageChanged = _selectedImageFile != null;
+    final imageChanged = _selectedPreviewImageFile != null || _selectedImageFiles.isNotEmpty || _existingImages.length != _initialImageCount;
 
     return _buildChanges(
       newName: newName,
@@ -1456,6 +1574,18 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
     final newCategoryId = selectedCategoryId;
     final newLight = lightValue;
     final changes = _getCurrentChanges();
+    if (_existingImages.isEmpty && _selectedImageFiles.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.white,
+          content: Text(
+            'Должна быть минимум 1 фотография в подробной информации',
+            style: AppText.medium_14.copyWith(color: AppColors.brown),
+          ),
+        ),
+      );
+      return;
+    }
 
     if (newSalePrice < 0 || newCostPrice < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1532,11 +1662,14 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
       }
 
       String? uploadedImagePath;
-      if (_selectedImageFile != null) {
+      if (_selectedPreviewImageFile != null) {
         uploadedImagePath = await PlantService.uploadPlantImage(
           widget.plant.id,
-          _selectedImageFile!,
+          _selectedPreviewImageFile!,
         );
+      }
+      for (final file in _selectedImageFiles) {
+        await PlantService.uploadPlantDetailImage(widget.plant.id, file);
       }
 
       if (!mounted) return;
@@ -1558,7 +1691,7 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
         deletedAt: isActive
             ? null
             : (widget.plant.deletedAt ?? DateTime.now().toIso8601String()),
-        imageUrl: uploadedImagePath ?? widget.plant.imageUrl,
+        imageUrl: uploadedImagePath ?? (_existingImages.isNotEmpty ? _existingImages.first['image_url']?.toString() : widget.plant.imageUrl),
       );
 
       widget.onSaved(updatedPlant);
@@ -1656,10 +1789,10 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
                         children: [
                           ImageEdit(
                             fullImageUrl: widget.plant.fullImageUrl,
-                            imageFile: _selectedImageFile,
+                            imageFile: _selectedPreviewImageFile,
                             onImageSelected: (file) {
                               setState(() {
-                                _selectedImageFile = file;
+                                _selectedPreviewImageFile = file;
                               });
                             },
                           ),
@@ -1817,6 +1950,49 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
                     labelText: 'Рейтинг',
                     isDouble: true,
                   ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Фото для подробной информации (минимум 1):',
+                      style: AppText.medium_12.copyWith(
+                        color: AppColors.black_transparent,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _AdminImageGalleryEditor(
+                    existingImages: _existingImages
+                        .map((e) => e['image_url']?.toString() ?? '')
+                        .toList(),
+                    localImages: _selectedImageFiles,
+                    minImages: 1,
+                    onAddLocalImage: (file) {
+                      setState(() {
+                        _selectedImageFiles.add(file);
+                      });
+                    },
+                    onRemoveExistingImage: _deleteExistingImage,
+                    onRemoveLocalImage: (index) {
+                      final totalImages =
+                          _existingImages.length + _selectedImageFiles.length;
+                      if (totalImages <= 1) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            backgroundColor: Colors.white,
+                            content: Text(
+                              'Должна быть минимум 1 фотография',
+                              style: AppText.medium_14.copyWith(color: AppColors.brown),
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                      setState(() {
+                        _selectedImageFiles.removeAt(index);
+                      });
+                    },
+                  ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -1858,6 +2034,162 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _AdminImageGalleryEditor extends StatelessWidget {
+  final List<String> existingImages;
+  final List<File> localImages;
+  final int minImages;
+  final ValueChanged<File> onAddLocalImage;
+  final ValueChanged<int>? onRemoveExistingImage;
+  final ValueChanged<int> onRemoveLocalImage;
+
+  const _AdminImageGalleryEditor({
+    required this.existingImages,
+    required this.localImages,
+    required this.minImages,
+    required this.onAddLocalImage,
+    this.onRemoveExistingImage,
+    required this.onRemoveLocalImage,
+  });
+
+  Future<void> _pickImage(BuildContext context) async {
+    final picker = ImagePicker();
+    try {
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 90,
+      );
+      if (image != null) {
+        onAddLocalImage(File(image.path));
+      }
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.white,
+          content: Text(
+            'Ошибка при выборе изображения',
+            style: AppText.medium_14.copyWith(color: AppColors.brown),
+          ),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total = existingImages.length + localImages.length;
+    return SizedBox(
+      width: 170,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Фото ($total, минимум $minImages)',
+            style: AppText.medium_12.copyWith(color: AppColors.black_transparent),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ...List.generate(existingImages.length, (index) {
+                final raw = existingImages[index].trim();
+                final resolved = ApiConfig.imageUrl(raw);
+                return _ImageThumb(
+                  imageProvider: (resolved.isNotEmpty ? NetworkImage(resolved) : null),
+                  onRemove: onRemoveExistingImage == null ? null : () => onRemoveExistingImage!(index),
+                  canRemove: total > minImages,
+                );
+              }),
+              ...List.generate(localImages.length, (index) {
+                return _ImageThumb(
+                  imageProvider: FileImage(localImages[index]),
+                  onRemove: () => onRemoveLocalImage(index),
+                  canRemove: total > minImages,
+                );
+              }),
+              InkWell(
+                onTap: () => _pickImage(context),
+                child: Container(
+                  width: 76,
+                  height: 76,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: AppColors.brown),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.add_a_photo_outlined, color: AppColors.brown),
+                ),
+              ),
+            ],
+          ),
+          if (total < minImages) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Нужно минимум $minImages фото',
+              style: AppText.medium_12.copyWith(color: AppColors.error),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ImageThumb extends StatelessWidget {
+  final ImageProvider<Object>? imageProvider;
+  final VoidCallback? onRemove;
+  final bool canRemove;
+
+  const _ImageThumb({
+    required this.imageProvider,
+    required this.onRemove,
+    required this.canRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Container(
+          width: 76,
+          height: 76,
+          decoration: BoxDecoration(
+            color: AppColors.grey_light,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: imageProvider == null
+              ? const Icon(Icons.image_not_supported_outlined)
+              : ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image(
+                    image: imageProvider!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) =>
+                        const Icon(Icons.image_not_supported_outlined),
+                  ),
+                ),
+        ),
+        Positioned(
+          top: 2,
+          right: 2,
+          child: InkWell(
+            onTap: canRemove ? onRemove : null,
+            child: Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                color: canRemove ? AppColors.error : AppColors.grey,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.close, size: 14, color: Colors.white),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

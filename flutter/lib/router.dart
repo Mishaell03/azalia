@@ -13,6 +13,8 @@ import 'package:azalia/pages/payment/paymentpage.dart';
 import 'package:azalia/pages/plant/plant_details_page.dart';
 import 'package:azalia/pages/profile/orders/order_details_page.dart';
 import 'package:azalia/pages/profile/orders/order_history_page.dart';
+import 'package:azalia/pages/profile/subscriptions/subscription_checkout_page.dart';
+import 'package:azalia/pages/profile/subscriptions/subscriptions_page.dart';
 import 'package:azalia/pages/start/startpage.dart';
 import 'package:azalia/pages/wishlist/wishlistpage.dart';
 import 'package:azalia/components/colors.dart';
@@ -75,6 +77,25 @@ class AppRouter {
                 );
               }
               return OrderDetailsPage(orderId: orderId);
+            },
+          ),
+          GoRoute(
+            path: 'subscriptions',
+            name: 'profileSubscriptions',
+            builder: (context, state) => const SubscriptionsPage(),
+          ),
+          GoRoute(
+            path: 'subscriptions/checkout',
+            name: 'profileSubscriptionCheckout',
+            builder: (context, state) {
+              final args = state.extra as SubscriptionCheckoutPageArgs?;
+              if (args == null) {
+                return Scaffold(
+                  appBar: AppBar(title: const Text('Ошибка')),
+                  body: const Center(child: Text('Некорректные данные оплаты')),
+                );
+              }
+              return SubscriptionCheckoutPage(args: args);
             },
           ),
         ],

@@ -444,10 +444,8 @@ class _PlantDetailsPageState extends State<PlantDetailsPage> {
                           ),
                         ],
                         const SizedBox(height: 6),
-                        Text('Цена растения: ${_price(plant.basePrice)}', style: AppText.medium_14.copyWith(color: AppColors.black)),
-                        const SizedBox(height: 6),
                         Text(
-                          'Текущий выбор: ${_selectedMaterial ?? ''}, ${_selectedSize ?? ''}, ${_selectedColor ?? ''}',
+                          'Текущий выбор: ${_selectedMaterial ?? ''} ${_selectedSize ?? ''} ${_selectedColor ?? ''}',
                           style: AppText.medium_12.copyWith(color: AppColors.grey),
                         ),
                         const SizedBox(height: 12),

@@ -1,6 +1,6 @@
 flower_shop.db*
 __pycache__
 test/
-# avatars/
-# preview/
+avatars/
+preview/
 # img/

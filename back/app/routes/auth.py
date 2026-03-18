@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import random
 import re
 import secrets
@@ -8,10 +9,13 @@ import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
 from fastapi import APIRouter, Depends, File, HTTPException, Header, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.config import get_settings
 from app.config import BASE_DIR
 from app.db import get_db_connection
 from app.routes.utils import (
@@ -50,6 +54,19 @@ class UpdateProfileRequest(BaseModel):
 class ValidateTokenRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     token: str = Field(min_length=8, max_length=256)
+
+
+class SubscriptionCheckoutRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    plan_id: str = Field(min_length=1, max_length=64)
+    billing_period: str = Field(default="monthly", max_length=16)
+
+
+class SubscriptionPaymentCallbackRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    object: dict
 
 
 def _serialize_employee(cur, user_id: int):
@@ -156,6 +173,156 @@ def _extract_session_token(
     if not token:
         raise HTTPException(status_code=401, detail="Недействительная сессия")
     return token
+
+
+def _yookassa_enabled(settings) -> bool:
+    return bool(settings.YOOKASSA_SHOP_ID and settings.YOOKASSA_API_KEY)
+
+
+def _yookassa_request(settings, method: str, path: str, payload: Optional[dict] = None) -> dict:
+    credentials = f"{settings.YOOKASSA_SHOP_ID}:{settings.YOOKASSA_API_KEY}"
+    headers = {
+        "Authorization": f"Basic {base64.b64encode(credentials.encode('utf-8')).decode('utf-8')}",
+        "Content-Type": "application/json",
+    }
+    if method.upper() == "POST":
+        headers["Idempotence-Key"] = str(uuid.uuid4())
+
+    request_obj = urllib_request.Request(
+        url=f"https://api.yookassa.ru/v3/{path.lstrip('/')}",
+        data=json.dumps(payload).encode("utf-8") if payload is not None else None,
+        headers=headers,
+        method=method.upper(),
+    )
+
+    try:
+        with urllib_request.urlopen(request_obj, timeout=20) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib_error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="ignore")
+        raise HTTPException(
+            status_code=502,
+            detail=f"YooKassa error: {body or exc.reason}",
+        )
+    except urllib_error.URLError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"YooKassa unavailable: {exc.reason}",
+        )
+
+
+def _create_yookassa_subscription_payment(
+    settings,
+    *,
+    amount: float,
+    description: str,
+    return_url: str,
+    metadata: dict[str, str],
+) -> dict:
+    payload = {
+        "amount": {
+            "value": f"{amount:.2f}",
+            "currency": "RUB",
+        },
+        "capture": True,
+        "save_payment_method": True,
+        "confirmation": {
+            "type": "redirect",
+            "return_url": return_url,
+        },
+        "description": description,
+        "metadata": metadata,
+    }
+    return _yookassa_request(settings, "POST", "/payments", payload)
+
+
+def _fetch_yookassa_payment(settings, external_payment_id: str) -> dict:
+    return _yookassa_request(settings, "GET", f"/payments/{external_payment_id}")
+
+
+def _apply_subscription_payment_paid(cur, link_row) -> int:
+    link_id = int(link_row["id"])
+    if (link_row["status"] or "").lower() == "paid" and link_row["subscription_id"] is not None:
+        return int(link_row["subscription_id"])
+
+    plan_id = int(link_row["plan_id"])
+    user_id = int(link_row["user_id"])
+    billing_period = (link_row["billing_period"] or "monthly").lower()
+    auto_renew = int(link_row["auto_renew_enabled"] or 1)
+
+    now = datetime.utcnow()
+    starts_at = now.strftime("%Y-%m-%d %H:%M:%S")
+    days = 365 if billing_period == "yearly" else 30
+    expires_at = (now + timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+
+    existing = cur.execute(
+        """
+        SELECT id
+        FROM subscriptions
+        WHERE user_id = ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (user_id,),
+    ).fetchone()
+
+    if existing:
+        subscription_id = int(existing["id"])
+        cur.execute(
+            """
+            UPDATE subscriptions
+            SET plan_id = ?,
+                billing_period = ?,
+                status = 'active',
+                auto_renew = ?,
+                starts_at = ?,
+                expires_at = ?,
+                blocked_at = NULL,
+                delete_after_at = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (plan_id, billing_period, auto_renew, starts_at, expires_at, subscription_id),
+        )
+    else:
+        cur.execute(
+            """
+            INSERT INTO subscriptions (
+                plan_id, user_id, company_id, billing_period, status, auto_renew,
+                starts_at, expires_at, blocked_at, delete_after_at
+            )
+            VALUES (?, ?, NULL, ?, 'active', ?, ?, ?, NULL, NULL)
+            """,
+            (plan_id, user_id, billing_period, auto_renew, starts_at, expires_at),
+        )
+        subscription_id = int(cur.lastrowid)
+
+    cur.execute(
+        """
+        UPDATE subscription_payment_links
+        SET status = 'paid',
+            subscription_id = ?,
+            paid_at = COALESCE(paid_at, CURRENT_TIMESTAMP)
+        WHERE id = ?
+        """,
+        (subscription_id, link_id),
+    )
+    return subscription_id
+
+
+def _get_active_user_subscription(cur, user_id: int):
+    return cur.execute(
+        """
+        SELECT *
+        FROM subscriptions
+        WHERE user_id = ?
+          AND status = 'active'
+          AND datetime(expires_at) > datetime('now')
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (user_id,),
+    ).fetchone()
 
 
 @router.post("/validate_token", summary="Validate Session Token")
@@ -535,3 +702,358 @@ def get_avatar(user=Depends(get_current_user)):
         payload["avatar"] = base64.b64encode(file_path.read_bytes()).decode("utf-8")
 
     return payload
+
+
+@router.get("/subscription-plans", summary="Get Subscription Plans")
+def get_subscription_plans(user=Depends(get_current_user)):
+    """Возвращает активные тарифы подписки для мобильного приложения."""
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        active_subscription = _get_active_user_subscription(cur, int(user["id"]))
+        active_plan_id = int(active_subscription["plan_id"]) if active_subscription else None
+
+        if active_plan_id is None:
+            free_row = cur.execute(
+                """
+                SELECT id, code
+                FROM subscription_plans
+                WHERE LOWER(code) = 'free' AND is_active = 1
+                LIMIT 1
+                """
+            ).fetchone()
+            if free_row:
+                active_plan_id = int(free_row["id"])
+
+        rows = conn.execute(
+            """
+            SELECT
+                id,
+                code,
+                name,
+                monthly_price,
+                description,
+                features_json,
+                max_plants,
+                notifications,
+                has_corporate,
+                has_analytics,
+                is_active
+            FROM subscription_plans
+            WHERE is_active = 1
+            ORDER BY monthly_price ASC, id ASC
+            """
+        ).fetchall()
+    finally:
+        conn.close()
+
+    items = []
+    active_plan_code = None
+    for row in rows:
+        raw_features = row["features_json"] or "[]"
+        try:
+            features = json.loads(raw_features)
+            if not isinstance(features, list):
+                features = []
+        except Exception:
+            features = []
+
+        is_current = active_plan_id is not None and int(row["id"]) == int(active_plan_id)
+        if is_current:
+            active_plan_code = row["code"]
+        items.append(
+            {
+                "id": str(row["code"] or row["id"]),
+                "name": row["name"],
+                "price": float(row["monthly_price"] or 0),
+                "description": row["description"] or "",
+                "features": [str(f) for f in features],
+                "max_plants": int(row["max_plants"] or 1),
+                "notifications": row["notifications"] or "basic",
+                "has_corporate": bool(row["has_corporate"]),
+                "has_analytics": bool(row["has_analytics"]),
+                "is_current": is_current,
+            }
+        )
+
+    return {
+        "success": True,
+        "data": {
+            "items": items,
+            "count": len(items),
+            "current_plan_id": str(active_plan_code or "free"),
+        },
+    }
+
+
+@router.post("/subscription-plans/checkout", summary="Create Subscription Checkout Link")
+def create_subscription_checkout_link(
+    payload: SubscriptionCheckoutRequest,
+    user=Depends(get_current_user),
+):
+    settings = get_settings()
+    if not _yookassa_enabled(settings):
+        raise HTTPException(status_code=500, detail="YooKassa is not configured")
+
+    plan_code = clean_text(payload.plan_id, max_len=64).lower()
+    billing_period = clean_text(payload.billing_period, max_len=16).lower()
+    if billing_period not in {"monthly", "yearly"}:
+        raise HTTPException(status_code=400, detail="billing_period must be monthly or yearly")
+
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        plan = cur.execute(
+            """
+            SELECT id, code, name, monthly_price, yearly_price, is_active
+            FROM subscription_plans
+            WHERE (LOWER(code) = LOWER(?) OR CAST(id AS TEXT) = ?)
+            LIMIT 1
+            """,
+            (plan_code, plan_code),
+        ).fetchone()
+        if not plan or not bool(plan["is_active"]):
+            raise HTTPException(status_code=404, detail="Subscription plan not found")
+        if clean_text(plan["code"], max_len=64).lower() == "free":
+            raise HTTPException(status_code=400, detail="Free plan does not require payment")
+
+        amount = float(plan["yearly_price"] if billing_period == "yearly" else plan["monthly_price"])
+        if amount < 0:
+            raise HTTPException(status_code=400, detail="Invalid plan price")
+
+        return_url = f"{settings.API_BASE_URL}/auth/subscription-payment-return"
+        payment = _create_yookassa_subscription_payment(
+            settings,
+            amount=amount,
+            description=f"Подписка {plan['name']} ({billing_period})",
+            return_url=return_url,
+            metadata={
+                "scope": "subscription",
+                "user_id": str(user["id"]),
+                "plan_id": str(plan["id"]),
+                "billing_period": billing_period,
+            },
+        )
+
+        external_payment_id = payment.get("id")
+        payment_url = payment.get("confirmation", {}).get("confirmation_url") or ""
+        if not payment_url:
+            raise HTTPException(status_code=502, detail="YooKassa confirmation_url is missing")
+
+        cur.execute(
+            """
+            INSERT INTO subscription_payment_links (
+                user_id, plan_id, billing_period, amount, status, payment_url,
+                external_payment_id, auto_renew_enabled
+            )
+            VALUES (?, ?, ?, ?, 'pending', ?, ?, 1)
+            """,
+            (
+                int(user["id"]),
+                int(plan["id"]),
+                billing_period,
+                amount,
+                payment_url,
+                clean_text(str(external_payment_id), max_len=255),
+            ),
+        )
+        link_id = int(cur.lastrowid)
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "data": {
+            "checkout_id": link_id,
+            "payment_url": payment_url,
+            "status": "pending",
+            "auto_renew": True,
+        },
+    }
+
+
+@router.get("/subscription-plans/checkout/{checkout_id}/status", summary="Get Subscription Checkout Status")
+def get_subscription_checkout_status(checkout_id: int, user=Depends(get_current_user)):
+    settings = get_settings()
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        link = cur.execute(
+            """
+            SELECT *
+            FROM subscription_payment_links
+            WHERE id = ? AND user_id = ?
+            LIMIT 1
+            """,
+            (checkout_id, int(user["id"])),
+        ).fetchone()
+        if not link:
+            raise HTTPException(status_code=404, detail="Checkout not found")
+
+        status_code = clean_text(link["status"], max_len=32).lower()
+        if status_code not in {"paid", "failed", "cancelled"} and _yookassa_enabled(settings) and link["external_payment_id"]:
+            try:
+                remote = _fetch_yookassa_payment(settings, str(link["external_payment_id"]))
+                remote_status = clean_text(remote.get("status"), max_len=32).lower()
+                remote_paid = bool(remote.get("paid"))
+                if remote_paid or remote_status in {"succeeded", "paid"}:
+                    _apply_subscription_payment_paid(cur, link)
+                    status_code = "paid"
+                elif remote_status in {"canceled", "cancelled"}:
+                    cur.execute(
+                        """
+                        UPDATE subscription_payment_links
+                        SET status = 'cancelled',
+                            failed_at = COALESCE(failed_at, CURRENT_TIMESTAMP)
+                        WHERE id = ?
+                        """,
+                        (checkout_id,),
+                    )
+                    status_code = "cancelled"
+                conn.commit()
+                link = cur.execute(
+                    "SELECT * FROM subscription_payment_links WHERE id = ?",
+                    (checkout_id,),
+                ).fetchone()
+            except HTTPException:
+                pass
+
+        status_labels = {
+            "pending": "Ожидает оплату",
+            "paid": "Оплачен",
+            "failed": "Ошибка оплаты",
+            "cancelled": "Отменен",
+        }
+        return {
+            "success": True,
+            "data": {
+                "checkout_id": int(link["id"]),
+                "status_code": status_code,
+                "status": status_labels.get(status_code, status_code),
+                "auto_renew": bool(link["auto_renew_enabled"]),
+                "subscription_id": int(link["subscription_id"]) if link["subscription_id"] is not None else None,
+            },
+        }
+    finally:
+        conn.close()
+
+
+@router.get("/subscription-payment-return", summary="Subscription Payment Return")
+def subscription_payment_return():
+    return {
+        "success": True,
+        "message": "Оплата обработана. Можно вернуться в приложение.",
+    }
+
+
+@router.post("/subscription-plans/callback", summary="Subscription Payment Callback")
+def subscription_payment_callback(payload: SubscriptionPaymentCallbackRequest):
+    payment_data = payload.object or {}
+    external_payment_id = clean_text(payment_data.get("id"), max_len=255)
+    if not external_payment_id:
+        raise HTTPException(status_code=400, detail="Invalid callback payload")
+
+    incoming_status = clean_text(payment_data.get("status"), max_len=32).lower()
+    incoming_paid = bool(payment_data.get("paid"))
+
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        link = cur.execute(
+            """
+            SELECT *
+            FROM subscription_payment_links
+            WHERE external_payment_id = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (external_payment_id,),
+        ).fetchone()
+        if not link:
+            return {"success": True, "message": "Payment not related to subscriptions"}
+
+        if incoming_paid or incoming_status in {"succeeded", "paid"}:
+            subscription_id = _apply_subscription_payment_paid(cur, link)
+            conn.commit()
+            return {
+                "success": True,
+                "message": "Subscription paid",
+                "subscription_id": subscription_id,
+            }
+
+        if incoming_status in {"canceled", "cancelled"}:
+            cur.execute(
+                """
+                UPDATE subscription_payment_links
+                SET status = 'cancelled',
+                    failed_at = COALESCE(failed_at, CURRENT_TIMESTAMP)
+                WHERE id = ?
+                """,
+                (int(link["id"]),),
+            )
+            conn.commit()
+            return {"success": True, "message": "Subscription payment cancelled"}
+
+        if incoming_status in {"failed"}:
+            cur.execute(
+                """
+                UPDATE subscription_payment_links
+                SET status = 'failed',
+                    failed_at = COALESCE(failed_at, CURRENT_TIMESTAMP)
+                WHERE id = ?
+                """,
+                (int(link["id"]),),
+            )
+            conn.commit()
+            return {"success": True, "message": "Subscription payment failed"}
+    finally:
+        conn.close()
+
+    return {"success": True, "message": "Callback accepted"}
+
+
+@router.post("/subscription-plans/{plan_id}/cancel", summary="Cancel Active Subscription Plan")
+def cancel_subscription_plan(plan_id: str, user=Depends(get_current_user)):
+    requested_plan = clean_text(plan_id, max_len=64).lower()
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        active_subscription = _get_active_user_subscription(cur, int(user["id"]))
+        if not active_subscription:
+            return {"success": True, "message": "No active paid subscription", "data": {"current_plan_id": "free"}}
+
+        plan = cur.execute(
+            "SELECT id, code FROM subscription_plans WHERE id = ? LIMIT 1",
+            (int(active_subscription["plan_id"]),),
+        ).fetchone()
+        if not plan:
+            raise HTTPException(status_code=404, detail="Active plan not found")
+
+        active_plan_code = clean_text(plan["code"], max_len=64).lower()
+        if active_plan_code == "free":
+            return {"success": True, "message": "Free plan is always active", "data": {"current_plan_id": "free"}}
+
+        if requested_plan and requested_plan not in {active_plan_code, str(plan["id"])}:
+            raise HTTPException(status_code=400, detail="Requested plan is not active")
+
+        cur.execute(
+            """
+            UPDATE subscriptions
+            SET status = 'cancelled',
+                auto_renew = 0,
+                delete_after_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (int(active_subscription["id"]),),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "message": "Subscription cancelled. Free plan is active now.",
+        "data": {"current_plan_id": "free"},
+    }

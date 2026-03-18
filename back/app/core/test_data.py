@@ -130,13 +130,66 @@ def seed_reference_data(cur) -> None:
     cur.executemany(
         """
         INSERT OR IGNORE INTO subscription_plans
-        (id, code, name, monthly_price, yearly_price, max_members, can_create_company, has_extended_features, is_active)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (
+            id, code, name, monthly_price, yearly_price,
+            description, features_json, max_plants, notifications,
+            has_corporate, has_analytics,
+            max_members, can_create_company, has_extended_features, is_active
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
-            (1, "basic", "Обычная", 299.0, 2990.0, 1, 0, 0, 1),
-            (2, "standard", "Обычная+", 499.0, 4990.0, 1, 0, 1, 1),
-            (3, "corporate", "Корпоративная", 1990.0, 19990.0, 20, 1, 1, 1),
+            (
+                1,
+                "free",
+                "Free",
+                0.0,
+                0.0,
+                "Базовый уход за 1 растением и простые напоминания.",
+                '["1 растение в календаре","Уведомление за 1 день","Покупка растений","Telegram-бот (базовый)"]',
+                1,
+                "basic",
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+            ),
+            (
+                2,
+                "standard",
+                "Standard",
+                399.0,
+                3990.0,
+                "Основной тариф для регулярного ухода и покупок.",
+                '["До 30 растений в календаре","Расширенные напоминания","История ухода","Рекомендации по уходу","Telegram-бот (расширенный)"]',
+                30,
+                "extended",
+                0,
+                1,
+                1,
+                0,
+                1,
+                1,
+            ),
+            (
+                3,
+                "premium",
+                "Premium",
+                899.0,
+                8990.0,
+                "Максимум возможностей: безлимит, аналитика и корпоративные функции.",
+                '["Неограниченные растения","Умные уведомления","Продвинутая аналитика","Приоритетные рекомендации","Корпоративный аккаунт: организация и сотрудники","Общий календарь команды","Корпоративные события"]',
+                10000,
+                "smart",
+                1,
+                1,
+                50,
+                1,
+                1,
+                1,
+            ),
         ],
     )
 
