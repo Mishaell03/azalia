@@ -4,12 +4,18 @@ class WishlistItem {
   final int id;
   final int userId;
   final int plantId;
+  final String? potSize;
+  final String? potMaterial;
+  final String? potColor;
   final Plant plant;
 
   WishlistItem({
     required this.id,
     required this.userId,
     required this.plantId,
+    this.potSize,
+    this.potMaterial,
+    this.potColor,
     required this.plant,
   });
 
@@ -23,6 +29,9 @@ class WishlistItem {
       id: json['id'] ?? 0,
       userId: json['user_id'] ?? 0,
       plantId: productId,
+      potSize: json['pot_size']?.toString(),
+      potMaterial: json['pot_material']?.toString(),
+      potColor: json['pot_color']?.toString(),
       plant: json['plant'] is Map<String, dynamic>
           ? Plant.fromJson(json['plant'] as Map<String, dynamic>)
           : Plant.fromJson({
@@ -43,6 +52,9 @@ class WishlistItem {
       id: id,
       userId: userId,
       plantId: plantId,
+      potSize: potSize,
+      potMaterial: potMaterial,
+      potColor: potColor,
       plant: plant ?? this.plant,
     );
   }
@@ -76,10 +88,23 @@ class WishlistCheckResponse {
 
 class AddToWishlistRequest {
   final int plantId;
+  final String? potSize;
+  final String? potMaterial;
+  final String? potColor;
 
-  AddToWishlistRequest({required this.plantId});
+  AddToWishlistRequest({
+    required this.plantId,
+    this.potSize,
+    this.potMaterial,
+    this.potColor,
+  });
 
   Map<String, dynamic> toJson() {
-    return {'plant_id': plantId};
+    return {
+      'plant_id': plantId,
+      if (potSize != null && potSize!.trim().isNotEmpty) 'pot_size': potSize,
+      if (potMaterial != null && potMaterial!.trim().isNotEmpty) 'pot_material': potMaterial,
+      if (potColor != null && potColor!.trim().isNotEmpty) 'pot_color': potColor,
+    };
   }
 }

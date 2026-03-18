@@ -764,7 +764,8 @@ class _CreatePlantDialogState extends State<_CreatePlantDialog> {
   };
 
   final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _priceController = TextEditingController();
+  final TextEditingController _salePriceController = TextEditingController();
+  final TextEditingController _costPriceController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _careController = TextEditingController();
   final TextEditingController _wateringController = TextEditingController();
@@ -800,7 +801,8 @@ class _CreatePlantDialogState extends State<_CreatePlantDialog> {
   @override
   void dispose() {
     _nameController.dispose();
-    _priceController.dispose();
+    _salePriceController.dispose();
+    _costPriceController.dispose();
     _descriptionController.dispose();
     _careController.dispose();
     _wateringController.dispose();
@@ -842,7 +844,8 @@ class _CreatePlantDialogState extends State<_CreatePlantDialog> {
     if (_isSaving) return;
 
     final name = _norm(_nameController.text);
-    final price = _parseDouble(_priceController, -1);
+    final salePrice = _parseDouble(_salePriceController, -1);
+    final costPrice = _parseDouble(_costPriceController, -1);
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -855,12 +858,24 @@ class _CreatePlantDialogState extends State<_CreatePlantDialog> {
       );
       return;
     }
-    if (price < 0) {
+    if (salePrice < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.white,
           content: Text(
-            'Введите корректную цену',
+            'Введите корректную цену продажи',
+            style: AppText.medium_14.copyWith(color: AppColors.brown),
+          ),
+        ),
+      );
+      return;
+    }
+    if (costPrice < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.white,
+          content: Text(
+            'Введите корректную цену закупки',
             style: AppText.medium_14.copyWith(color: AppColors.brown),
           ),
         ),
@@ -909,8 +924,8 @@ class _CreatePlantDialogState extends State<_CreatePlantDialog> {
         'description': _norm(_descriptionController.text),
         'category_id': _selectedCategoryId,
         'plant_type_id': _selectedPlantTypeId,
-        'base_price': price,
-        'cost_price': 0,
+        'base_price': salePrice,
+        'cost_price': costPrice,
         'recommended_pot_size_id': _potSizeToId[_selectedPotSize],
         'height_cm': _parseOptionalInt(_heightController) ?? 0,
         'light_requirements': _lightValue,
@@ -994,8 +1009,13 @@ class _CreatePlantDialogState extends State<_CreatePlantDialog> {
                           labelText: 'Название товара',
                         ),
                         AppTextField(
-                          controller: _priceController,
-                          labelText: 'Цена рубли',
+                          controller: _salePriceController,
+                          labelText: 'Цена продажи, руб',
+                          isDouble: true,
+                        ),
+                        AppTextField(
+                          controller: _costPriceController,
+                          labelText: 'Цена закупки, руб',
                           isDouble: true,
                         ),
                       ],
@@ -1196,7 +1216,8 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
   File? _selectedImageFile;
 
   late TextEditingController nameController;
-  late TextEditingController priceController;
+  late TextEditingController salePriceController;
+  late TextEditingController costPriceController;
   late TextEditingController descriptionController;
   late TextEditingController careInstructionsController;
   late TextEditingController wateringFrequencyController;
@@ -1209,7 +1230,8 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
     final plant = widget.plant;
 
     nameController = TextEditingController(text: plant.name);
-    priceController = TextEditingController(text: plant.basePrice.toString());
+    salePriceController = TextEditingController(text: plant.basePrice.toString());
+    costPriceController = TextEditingController(text: plant.costPrice.toString());
     descriptionController = TextEditingController(text: plant.description);
     careInstructionsController = TextEditingController(
       text: plant.careInstructions,
@@ -1235,7 +1257,8 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
   @override
   void dispose() {
     nameController.dispose();
-    priceController.dispose();
+    salePriceController.dispose();
+    costPriceController.dispose();
     descriptionController.dispose();
     careInstructionsController.dispose();
     wateringFrequencyController.dispose();
@@ -1263,7 +1286,8 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
 
   List<String> _buildChanges({
     required String newName,
-    required double newPrice,
+    required double newSalePrice,
+    required double newCostPrice,
     required String newDescription,
     required String newCareInstructions,
     required String newWatering,
@@ -1280,8 +1304,11 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
     if (_norm(old.name) != _norm(newName)) {
       changes.add('Название: "${old.name}" -> "$newName"');
     }
-    if ((old.basePrice - newPrice).abs() > 0.0001) {
-      changes.add('Цена: ${old.basePrice} -> $newPrice');
+    if ((old.basePrice - newSalePrice).abs() > 0.0001) {
+      changes.add('Цена продажи: ${old.basePrice} -> $newSalePrice');
+    }
+    if ((old.costPrice - newCostPrice).abs() > 0.0001) {
+      changes.add('Цена закупки: ${old.costPrice} -> $newCostPrice');
     }
     if (_norm(old.description) != _norm(newDescription)) {
       changes.add(
@@ -1333,7 +1360,8 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
 
   List<String> _getCurrentChanges() {
     final newName = _norm(nameController.text);
-    final newPrice = _parseDouble(priceController, widget.plant.basePrice);
+    final newSalePrice = _parseDouble(salePriceController, widget.plant.basePrice);
+    final newCostPrice = _parseDouble(costPriceController, widget.plant.costPrice);
     final newDescription = _norm(descriptionController.text);
     final newCareInstructions = _norm(careInstructionsController.text);
     final newWatering = _norm(wateringFrequencyController.text);
@@ -1345,7 +1373,8 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
 
     return _buildChanges(
       newName: newName,
-      newPrice: newPrice,
+      newSalePrice: newSalePrice,
+      newCostPrice: newCostPrice,
       newDescription: newDescription,
       newCareInstructions: newCareInstructions,
       newWatering: newWatering,
@@ -1417,7 +1446,8 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
     if (_isSaving) return;
 
     final newName = _norm(nameController.text);
-    final newPrice = _parseDouble(priceController, widget.plant.basePrice);
+    final newSalePrice = _parseDouble(salePriceController, widget.plant.basePrice);
+    final newCostPrice = _parseDouble(costPriceController, widget.plant.costPrice);
     final newDescription = _norm(descriptionController.text);
     final newCareInstructions = _norm(careInstructionsController.text);
     final newWatering = _norm(wateringFrequencyController.text);
@@ -1426,6 +1456,19 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
     final newCategoryId = selectedCategoryId;
     final newLight = lightValue;
     final changes = _getCurrentChanges();
+
+    if (newSalePrice < 0 || newCostPrice < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.white,
+          content: Text(
+            'Цены не могут быть отрицательными',
+            style: AppText.medium_14.copyWith(color: AppColors.brown),
+          ),
+        ),
+      );
+      return;
+    }
 
     if (changes.isEmpty) {
       Navigator.of(context).pop();
@@ -1446,8 +1489,11 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
       if (_norm(old.name) != newName) {
         payload['name'] = newName;
       }
-      if ((old.basePrice - newPrice).abs() > 0.0001) {
-        payload['base_price'] = newPrice;
+      if ((old.basePrice - newSalePrice).abs() > 0.0001) {
+        payload['base_price'] = newSalePrice;
+      }
+      if ((old.costPrice - newCostPrice).abs() > 0.0001) {
+        payload['cost_price'] = newCostPrice;
       }
       if (_norm(old.description) != newDescription) {
         payload['description'] = newDescription;
@@ -1497,7 +1543,8 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
 
       final updatedPlant = widget.plant.copyWith(
         name: newName,
-        basePrice: newPrice,
+        basePrice: newSalePrice,
+        costPrice: newCostPrice,
         description: newDescription,
         careInstructions: newCareInstructions,
         lightRequirements: newLight,
@@ -1634,8 +1681,13 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
                               labelText: 'Название товара',
                             ),
                             AppTextField(
-                              controller: priceController,
-                              labelText: 'Цена рубли',
+                              controller: salePriceController,
+                              labelText: 'Цена продажи, руб',
+                              isDouble: true,
+                            ),
+                            AppTextField(
+                              controller: costPriceController,
+                              labelText: 'Цена закупки, руб',
                               isDouble: true,
                             ),
                           ],

@@ -13,6 +13,16 @@ class ApiConfig {
   static String updateAdmin(int userId) => '$baseURL/admins/$userId';
   static const String assignEmployee = '$baseURL/employees/assign';
   static String employeeDeactivate(int id) => '$baseURL/employees/$id/deactivate';
+  static String adminAnalytics({int? storeId, int days = 30, int top = 7}) {
+    final params = <String, String>{
+      'days': '$days',
+      'top': '$top',
+      if (storeId != null) 'store_id': '$storeId',
+    };
+    return Uri.parse('$baseURL/admin/analytics')
+        .replace(queryParameters: params)
+        .toString();
+  }
   static const String warehouseProducts = '$baseURL/warehouse/products';
   static String warehouseAdjustProduct(int productId) =>
       '$baseURL/warehouse/products/$productId/adjust';
@@ -32,10 +42,20 @@ class ApiConfig {
         .replace(queryParameters: params)
         .toString();
   }
+  static String procurementReceipts({int? storeId, int limit = 200}) {
+    final params = <String, String>{
+      'limit': '$limit',
+      if (storeId != null) 'store_id': '$storeId',
+    };
+    return Uri.parse('$baseURL/procurement/receipts')
+        .replace(queryParameters: params)
+        .toString();
+  }
   static const String procurementCartItems = '$baseURL/procurement/cart/items';
   static String procurementCartItemById(int cartItemId) =>
       '$baseURL/procurement/cart/items/$cartItemId';
   static const String procurementCheckout = '$baseURL/procurement/cart/checkout';
+  static const String procurementCreateReceipt = '$baseURL/procurement/receipts';
 
   // payments
   static String get paymentGenerateLink => '$baseURL/payments/generate-link';
@@ -119,9 +139,17 @@ class ApiConfig {
   static const String potMaterials = '$baseURL/pot/materials';
   static const String potSizes = '$baseURL/pot/sizes';
   static const String potColors = '$baseURL/pot/colors';
+  static const String potOptions = '$baseURL/pot/options';
+  static const String potVariants = '$baseURL/pot/variants';
   static const String potPrices = '$baseURL/pot/prices';
-  static String potPriceByParams(String material, String size) =>
-      '$baseURL/pot/price?material=$material&size=$size';
+  static String potPriceByParams(String material, String size, {String? color}) {
+    final params = <String, String>{
+      'material': material,
+      'size': size,
+      if (color != null && color.trim().isNotEmpty) 'color': color.trim(),
+    };
+    return Uri.parse('$baseURL/pot/price').replace(queryParameters: params).toString();
+  }
 
   // img
   static String imageUrl(String? imagePath) {

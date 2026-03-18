@@ -7,6 +7,8 @@ import 'package:flutter_svg/svg.dart';
 import 'package:azalia/pages/error/loading_error.dart';
 import 'package:azalia/components/widgets/love.dart';
 import 'package:azalia/components/widgets/cart.dart';
+import 'package:azalia/pages/plant/plant_details_page.dart';
+import 'package:go_router/go_router.dart';
 
 class HomeCard extends StatefulWidget {
   final Plant plant;
@@ -37,13 +39,24 @@ class _HomeCardState extends State<HomeCard> {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(right: 24, left: 24, top: 16),
-      child: Row(
-        children: [
-          _buildPlantImage(),
-          const SizedBox(width: 20),
-          _buildPlantInfo(),
-        ],
+      child: GestureDetector(
+        onTap: () => _openDetails(context),
+        child: Row(
+          children: [
+            _buildPlantImage(),
+            const SizedBox(width: 20),
+            _buildPlantInfo(),
+          ],
+        ),
       ),
+    );
+  }
+
+  void _openDetails(BuildContext context) {
+    context.pushNamed(
+      'plantDetails',
+      pathParameters: {'plantId': '${widget.plant.id}'},
+      extra: PlantDetailsRouteArgs(plantId: widget.plant.id),
     );
   }
 

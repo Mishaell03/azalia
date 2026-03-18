@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:azalia/components/text_styles.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:azalia/backend/models/plant.dart';
+import 'package:azalia/backend/models/wishlist.dart';
 import 'package:azalia/components/colors.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:azalia/components/widgets/love.dart';
 import 'package:azalia/components/widgets/cart.dart';
+import 'package:azalia/pages/plant/plant_details_page.dart';
+import 'package:go_router/go_router.dart';
 
 class WishlistCard extends StatefulWidget {
-  final Plant plant;
-  final Function(Plant)? onWishlistUpdated;
+  final WishlistItem item;
+  final Function(WishlistItem)? onWishlistUpdated;
   final Function(bool)? onCartUpdated;
 
   const WishlistCard({
     super.key,
-    required this.plant,
+    required this.item,
     this.onWishlistUpdated,
     this.onCartUpdated,
   });
@@ -32,7 +34,7 @@ class _WishlistCardState extends State<WishlistCard> {
       setState(() {
         _showCard = false;
       });
-      widget.onWishlistUpdated?.call(widget.plant);
+      widget.onWishlistUpdated?.call(widget.item);
     }
   }
 
@@ -43,11 +45,27 @@ class _WishlistCardState extends State<WishlistCard> {
     }
 
     final bool isOutOfStock =
-        !widget.plant.isActive || widget.plant.deletedAt != null;
+        !widget.item.plant.isActive || widget.item.plant.deletedAt != null;
 
     return Padding(
       padding: const EdgeInsets.only(right: 24, left: 24, top: 16),
-      child: isOutOfStock ? _buildOutOfStockCard() : _buildNormalCard(),
+      child: GestureDetector(
+        onTap: () => _openDetails(context),
+        child: isOutOfStock ? _buildOutOfStockCard() : _buildNormalCard(),
+      ),
+    );
+  }
+
+  void _openDetails(BuildContext context) {
+    context.pushNamed(
+      'plantDetails',
+      pathParameters: {'plantId': '${widget.item.plant.id}'},
+      extra: PlantDetailsRouteArgs(
+        plantId: widget.item.plant.id,
+        initialPotSize: widget.item.potSize,
+        initialPotMaterial: widget.item.potMaterial,
+        initialPotColor: widget.item.potColor,
+      ),
     );
   }
 
@@ -116,7 +134,7 @@ class _WishlistCardState extends State<WishlistCard> {
               bottom: 4,
               right: 4,
               child: FavoriteButton(
-                plant: widget.plant,
+                plant: widget.item.plant,
                 size: 24,
                 activeColor: AppColors.brown,
                 onStateChanged: _handleWishlistUpdate,
@@ -162,7 +180,7 @@ class _WishlistCardState extends State<WishlistCard> {
   }
 
   Widget _buildCachedImage({bool outOfStock = false}) {
-    final imageUrl = widget.plant.fullImageUrl.trim();
+    final imageUrl = widget.item.plant.fullImageUrl.trim();
     if (imageUrl.isEmpty) {
       return _buildEmptyPlaceholder(outOfStock: outOfStock);
     }
@@ -236,13 +254,13 @@ class _WishlistCardState extends State<WishlistCard> {
             children: [
               Expanded(
                 child: Text(
-                  widget.plant.name,
+                  widget.item.plant.name,
                   style: AppText.bold_18.copyWith(color: AppColors.black),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (widget.plant.rating != null) ...[
+              if (widget.item.plant.rating != null) ...[
                 const SizedBox(width: 8),
                 Row(
                   mainAxisSize: MainAxisSize.min,
@@ -250,7 +268,7 @@ class _WishlistCardState extends State<WishlistCard> {
                     SvgPicture.asset('assets/icons/Star.svg'),
                     const SizedBox(width: 4),
                     Text(
-                      '${widget.plant.rating}',
+                      '${widget.item.plant.rating}',
                       style: AppText.semibold_13.copyWith(
                         color: AppColors.star,
                       ),
@@ -263,7 +281,7 @@ class _WishlistCardState extends State<WishlistCard> {
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text(
-              'Высота до ${widget.plant.heightCm} см',
+              'Высота до ${widget.item.plant.heightCm} см',
               style: AppText.medium_14.copyWith(
                 color: AppColors.black_transparent,
               ),
@@ -273,12 +291,12 @@ class _WishlistCardState extends State<WishlistCard> {
           Row(
             children: [
               Text(
-                '${widget.plant.basePrice} ₽',
+                '${widget.item.plant.basePrice} ₽',
                 style: AppText.medium_16.copyWith(color: AppColors.black),
               ),
               const Spacer(),
               CartButton(
-                plant: widget.plant,
+                plant: widget.item.plant,
                 onStateChanged: widget.onCartUpdated,
                 size: 32,
                 showBackground: true,
@@ -297,7 +315,7 @@ class _WishlistCardState extends State<WishlistCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            widget.plant.name,
+            widget.item.plant.name,
             style: AppText.bold_20.copyWith(
               color: AppColors.grey,
               decoration: TextDecoration.lineThrough,
@@ -307,7 +325,7 @@ class _WishlistCardState extends State<WishlistCard> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Высота до ${widget.plant.heightCm} см',
+            'Высота до ${widget.item.plant.heightCm} см',
             style: AppText.medium_14.copyWith(
               color: AppColors.grey,
               decoration: TextDecoration.lineThrough,
@@ -315,7 +333,7 @@ class _WishlistCardState extends State<WishlistCard> {
           ),
           const SizedBox(height: 4),
           Text(
-            '${widget.plant.basePrice} ₽',
+            '${widget.item.plant.basePrice} ₽',
             style: AppText.medium_16.copyWith(
               color: AppColors.grey,
               decoration: TextDecoration.lineThrough,
@@ -344,7 +362,7 @@ class _WishlistCardState extends State<WishlistCard> {
         setState(() {
           _showCard = false;
         });
-        widget.onWishlistUpdated?.call(widget.plant);
+        widget.onWishlistUpdated?.call(widget.item);
       },
       icon: Icon(Icons.close, color: AppColors.grey, size: 20),
     );

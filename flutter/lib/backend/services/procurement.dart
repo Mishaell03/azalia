@@ -39,6 +39,27 @@ class ProcurementService {
     return response['data'] as Map<String, dynamic>? ?? const {};
   }
 
+  Future<Map<String, dynamic>> getReceipts({int? storeId, int limit = 200}) async {
+    final response = await _api.get(ApiConfig.procurementReceipts(storeId: storeId, limit: limit));
+    return response['data'] as Map<String, dynamic>? ?? const {};
+  }
+
+  Future<Map<String, dynamic>> createReceipt({
+    required int purchaseOrderId,
+    required List<Map<String, int>> items,
+    String? comment,
+  }) async {
+    final response = await _api.post(
+      ApiConfig.procurementCreateReceipt,
+      body: {
+        'purchase_order_id': purchaseOrderId,
+        'items': items,
+        if (comment != null && comment.trim().isNotEmpty) 'comment': comment.trim(),
+      },
+    );
+    return response['data'] as Map<String, dynamic>? ?? const {};
+  }
+
   Future<void> upsertCartItem({
     required int storeId,
     required int productId,

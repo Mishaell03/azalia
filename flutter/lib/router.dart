@@ -10,6 +10,7 @@ import 'package:azalia/pages/admin/widgets/products/cards/editor.dart';
 import 'package:azalia/pages/admin/widgets/products/cards/warehouse.dart';
 import 'package:azalia/pages/payment/payment_webview.dart';
 import 'package:azalia/pages/payment/paymentpage.dart';
+import 'package:azalia/pages/plant/plant_details_page.dart';
 import 'package:azalia/pages/profile/orders/order_details_page.dart';
 import 'package:azalia/pages/profile/orders/order_history_page.dart';
 import 'package:azalia/pages/start/startpage.dart';
@@ -87,6 +88,35 @@ class AppRouter {
         path: '/cart',
         name: 'cart',
         builder: (context, state) => const CartPage(),
+      ),
+      GoRoute(
+        path: '/plant/:plantId',
+        name: 'plantDetails',
+        builder: (context, state) {
+          final plantId = int.tryParse(state.pathParameters['plantId'] ?? '');
+          if (plantId == null || plantId <= 0) {
+            return Scaffold(
+              appBar: AppBar(title: const Text('Ошибка')),
+              body: const Center(child: Text('Некорректный товар')),
+            );
+          }
+
+          final extra = state.extra;
+          PlantDetailsRouteArgs args;
+          if (extra is PlantDetailsRouteArgs) {
+            args = PlantDetailsRouteArgs(
+              plantId: plantId,
+              initialPotSize: extra.initialPotSize,
+              initialPotMaterial: extra.initialPotMaterial,
+              initialPotColor: extra.initialPotColor,
+              initialQuantity: extra.initialQuantity,
+            );
+          } else {
+            args = PlantDetailsRouteArgs(plantId: plantId);
+          }
+
+          return PlantDetailsPage(args: args);
+        },
       ),
       GoRoute(
         path: '/payment',

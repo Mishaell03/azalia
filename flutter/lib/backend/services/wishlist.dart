@@ -30,10 +30,20 @@ class WishlistService {
   }
 
   /// Добавить товар в избранное
-  static Future<WishlistItem> addToWishlist(int plantId) async {
+  static Future<WishlistItem> addToWishlist(
+    int plantId, {
+    String? potSize,
+    String? potMaterial,
+    String? potColor,
+  }) async {
     final response = await _api.post(
       ApiConfig.wishlist,
-      body: {'plant_id': plantId},
+      body: {
+        'plant_id': plantId,
+        if (potSize != null && potSize.trim().isNotEmpty) 'pot_size': potSize.trim(),
+        if (potMaterial != null && potMaterial.trim().isNotEmpty) 'pot_material': potMaterial.trim(),
+        if (potColor != null && potColor.trim().isNotEmpty) 'pot_color': potColor.trim(),
+      },
     );
     if (response['success'] != true) {
       throw Exception(

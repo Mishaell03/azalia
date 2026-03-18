@@ -386,6 +386,7 @@ class _AdminProductsCartProcurementState
   @override
   Widget build(BuildContext context) {
     final canCheckout = _selectedCartIds.isNotEmpty && !_isActionLoading;
+    final allSelected = _cartItems.isNotEmpty && _selectedCartIds.length == _cartItems.length;
 
     return Scaffold(
       appBar: AppHeader(items: adminProductsHeaderItems),
@@ -524,6 +525,32 @@ class _AdminProductsCartProcurementState
                           ),
                       const SizedBox(height: 16),
                       Text('Корзина закупки (${_cartItems.length})', style: AppText.bold_18.copyWith(color: AppColors.black)),
+                      if (_cartItems.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Checkbox(
+                              value: allSelected,
+                              activeColor: AppColors.brown,
+                              onChanged: _isActionLoading
+                                  ? null
+                                  : (value) {
+                                      setState(() {
+                                        if (value == true) {
+                                          _selectedCartIds = _cartItems.map((e) => e.id).toSet();
+                                        } else {
+                                          _selectedCartIds = <int>{};
+                                        }
+                                      });
+                                    },
+                            ),
+                            Text(
+                              'Выбрать все',
+                              style: AppText.medium_14.copyWith(color: AppColors.black),
+                            ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 8),
                       if (_cartItems.isEmpty)
                         Text('Корзина пуста', style: AppText.medium_14.copyWith(color: AppColors.grey))

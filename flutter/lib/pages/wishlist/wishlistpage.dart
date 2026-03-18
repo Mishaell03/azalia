@@ -7,7 +7,7 @@ import 'package:azalia/components/text_styles.dart';
 import 'package:azalia/components/widgets/footer.dart';
 import 'package:azalia/pages/error/loading_error.dart';
 import 'package:azalia/pages/error/app_errors.dart';
-import 'package:azalia/backend/models/plant.dart';
+import 'package:azalia/backend/models/wishlist.dart';
 import 'package:azalia/backend/services/session.dart';
 import 'package:azalia/pages/wishlist/widgets/cards.dart';
 import 'package:azalia/pages/wishlist/widgets/header.dart';
@@ -23,8 +23,8 @@ class WishlistPage extends StatefulWidget {
 }
 
 class _WishlistPageState extends State<WishlistPage> {
-  List<Plant> _availablePlants = [];
-  List<Plant> _outOfStockPlants = [];
+  List<WishlistItem> _availableItems = [];
+  List<WishlistItem> _outOfStockItems = [];
   bool _isLoading = true;
   bool _isUnauthorized = false;
   String _error = '';
@@ -51,23 +51,22 @@ class _WishlistPageState extends State<WishlistPage> {
 
       final wishlistResponse = await WishlistService.getWishlist();
 
-      final plants = wishlistResponse.items.map((item) => item.plant).toList();
+      final List<WishlistItem> availableItems = [];
+      final List<WishlistItem> outOfStockItems = [];
 
-      final List<Plant> availablePlants = [];
-      final List<Plant> outOfStockPlants = [];
-
-      for (final plant in plants) {
+      for (final item in wishlistResponse.items) {
+        final plant = item.plant;
         final isRemovedFromSale = !plant.isActive || plant.deletedAt != null;
         if (isRemovedFromSale) {
-          outOfStockPlants.add(plant);
+          outOfStockItems.add(item);
         } else {
-          availablePlants.add(plant);
+          availableItems.add(item);
         }
       }
 
       setState(() {
-        _availablePlants = availablePlants;
-        _outOfStockPlants = outOfStockPlants;
+        _availableItems = availableItems;
+        _outOfStockItems = outOfStockItems;
         _isLoading = false;
       });
     } catch (e) {
@@ -103,10 +102,10 @@ class _WishlistPageState extends State<WishlistPage> {
     });
   }
 
-  void _onWishlistUpdated(Plant removedPlant) {
+  void _onWishlistUpdated(WishlistItem removedItem) {
     setState(() {
-      _availablePlants.removeWhere((plant) => plant.id == removedPlant.id);
-      _outOfStockPlants.removeWhere((plant) => plant.id == removedPlant.id);
+      _availableItems.removeWhere((item) => item.id == removedItem.id);
+      _outOfStockItems.removeWhere((item) => item.id == removedItem.id);
     });
   }
 
@@ -151,7 +150,7 @@ class _WishlistPageState extends State<WishlistPage> {
     }
     return Scaffold(
       appBar: WishlistHeader(
-        itemCount: _availablePlants.length + _outOfStockPlants.length,
+        itemCount: _availableItems.length + _outOfStockItems.length,
       ),
       bottomNavigationBar: const AppFooter(items: userFooterItems),
       body: _buildBody(),
@@ -170,7 +169,7 @@ class _WishlistPageState extends State<WishlistPage> {
       return GenericErrorWidget(onRetry: _loadWishlist);
     }
 
-    if (_availablePlants.isEmpty && _outOfStockPlants.isEmpty) {
+    if (_availableItems.isEmpty && _outOfStockItems.isEmpty) {
       return _buildEmptyState();
     }
 
@@ -180,26 +179,24 @@ class _WishlistPageState extends State<WishlistPage> {
         padding: const EdgeInsets.only(top: 16, bottom: 16),
         children: [
           // доступные товары
-          ..._availablePlants
-              .map(
-                (plant) => WishlistCard(
-                  key: Key('wishlist_${plant.id}'),
-                  plant: plant,
-                  onWishlistUpdated: _onWishlistUpdated,
-                ),
-              ),
+          ..._availableItems.map(
+            (item) => WishlistCard(
+              key: Key('wishlist_${item.id}'),
+              item: item,
+              onWishlistUpdated: _onWishlistUpdated,
+            ),
+          ),
 
           // недоступные товары с разделителем
-          if (_outOfStockPlants.isNotEmpty) ...[
+          if (_outOfStockItems.isNotEmpty) ...[
             _buildOutOfStockSection(),
-            ..._outOfStockPlants
-                .map(
-                  (plant) => WishlistCard(
-                    key: Key('wishlist_out_${plant.id}'),
-                    plant: plant,
-                    onWishlistUpdated: _onWishlistUpdated,
-                  ),
-                ),
+            ..._outOfStockItems.map(
+              (item) => WishlistCard(
+                key: Key('wishlist_out_${item.id}'),
+                item: item,
+                onWishlistUpdated: _onWishlistUpdated,
+              ),
+            ),
           ],
         ],
       ),

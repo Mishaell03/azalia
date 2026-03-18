@@ -3,6 +3,8 @@ import 'package:azalia/components/text_styles.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:azalia/components/colors.dart';
 import 'package:azalia/backend/models/cart.dart';
+import 'package:azalia/pages/plant/plant_details_page.dart';
+import 'package:go_router/go_router.dart';
 
 class OutOfStockCard extends StatelessWidget {
   final CartItemWithPot item;
@@ -18,23 +20,40 @@ class OutOfStockCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(right: 24, left: 24, top: 16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.grey_light.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.grey_light),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              _buildPlantImage(),
-              const SizedBox(width: 16),
-              _buildItemInfo(),
-              _buildRemoveButton(),
-            ],
+      child: GestureDetector(
+        onTap: () => _openDetails(context),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.grey_light.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.grey_light),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                _buildPlantImage(),
+                const SizedBox(width: 16),
+                _buildItemInfo(),
+                _buildRemoveButton(),
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+
+  void _openDetails(BuildContext context) {
+    context.pushNamed(
+      'plantDetails',
+      pathParameters: {'plantId': '${item.plant.id}'},
+      extra: PlantDetailsRouteArgs(
+        plantId: item.plant.id,
+        initialPotSize: item.potSize,
+        initialPotMaterial: item.potMaterial,
+        initialPotColor: item.potColor,
+        initialQuantity: item.quantity,
       ),
     );
   }

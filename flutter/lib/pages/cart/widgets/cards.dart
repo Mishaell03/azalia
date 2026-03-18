@@ -7,6 +7,8 @@ import 'package:azalia/components/widgets/love.dart';
 import 'package:azalia/backend/models/cart.dart';
 import 'package:azalia/backend/services/cart.dart';
 import 'package:azalia/backend/services/selected_items_service.dart';
+import 'package:azalia/pages/plant/plant_details_page.dart';
+import 'package:go_router/go_router.dart';
 
 class CartCard extends StatefulWidget {
   final CartItemWithPot item;
@@ -162,12 +164,29 @@ class _CartCardState extends State<CartCard> {
 
     return Padding(
       padding: const EdgeInsets.only(right: 24, left: 24, top: 16),
-      child: Row(
-        children: [
-          _buildPlantImage(),
-          const SizedBox(width: 20),
-          _buildItemInfo(),
-        ],
+      child: GestureDetector(
+        onTap: () => _openDetails(context),
+        child: Row(
+          children: [
+            _buildPlantImage(),
+            const SizedBox(width: 20),
+            _buildItemInfo(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openDetails(BuildContext context) {
+    context.pushNamed(
+      'plantDetails',
+      pathParameters: {'plantId': '${widget.item.plant.id}'},
+      extra: PlantDetailsRouteArgs(
+        plantId: widget.item.plant.id,
+        initialPotSize: widget.item.potSize,
+        initialPotMaterial: widget.item.potMaterial,
+        initialPotColor: widget.item.potColor,
+        initialQuantity: widget.item.quantity,
       ),
     );
   }

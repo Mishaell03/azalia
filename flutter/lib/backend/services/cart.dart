@@ -128,10 +128,14 @@ class PotService {
   }
 
   /// Получить цену горшка по материалу и размеру
-  static Future<double> getPotPrice(String material, String size) async {
+  static Future<double> getPotPrice(
+    String material,
+    String size, {
+    String? color,
+  }) async {
     try {
       final response = await _api.get(
-        ApiConfig.potPriceByParams(material, size),
+        ApiConfig.potPriceByParams(material, size, color: color),
       );
       if (response['success'] != true) {
         return 0.0;
@@ -150,5 +154,24 @@ class PotService {
     }
     final data = response['data'] as List;
     return data.map((item) => PotPrice.fromJson(item)).toList();
+  }
+
+  /// Получить доступность опций (для дизейбла несовместимых вариантов)
+  static Future<Map<String, dynamic>> getOptions({
+    String? material,
+    String? size,
+    String? color,
+  }) async {
+    final params = <String, String>{
+      if (material != null && material.trim().isNotEmpty) 'material': material.trim(),
+      if (size != null && size.trim().isNotEmpty) 'size': size.trim(),
+      if (color != null && color.trim().isNotEmpty) 'color': color.trim(),
+    };
+    final url = Uri.parse(ApiConfig.potOptions).replace(queryParameters: params).toString();
+    final response = await _api.get(url);
+    if (response['success'] != true) {
+      throw Exception(response['error'] ?? 'Не удалось загрузить доступность опций');
+    }
+    return response['data'] as Map<String, dynamic>? ?? const {};
   }
 }

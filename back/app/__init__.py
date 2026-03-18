@@ -12,6 +12,7 @@ from app.routes.categories import router as categories_router
 from app.routes.employees import router as employees_router
 from app.routes.payments import router as payments_router
 from app.routes.plants import router as plants_router
+from app.routes.pot import router as pot_router
 
 
 def create_app() -> FastAPI:
@@ -32,6 +33,7 @@ def create_app() -> FastAPI:
             {"name": "cart", "description": "Корзина и избранное"},
             {"name": "employees", "description": "Пользователи и сотрудники"},
             {"name": "payments", "description": "Оплата и статусы заказов"},
+            {"name": "pot", "description": "Справочники горшков и цены"},
         ],
     )
 
@@ -96,6 +98,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(cart_router)
     app.include_router(payments_router)
+    app.include_router(pot_router)
 
     @app.get("/")
     async def root():

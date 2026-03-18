@@ -305,6 +305,19 @@ def create_database() -> None:
             FOREIGN KEY (material_id) REFERENCES pot_materials(id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS pot_variant_prices (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            size_id             INTEGER NOT NULL,
+            material_id         INTEGER NOT NULL,
+            color_id            INTEGER NOT NULL,
+            price               REAL NOT NULL CHECK(price >= 0),
+            is_active           INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
+            UNIQUE(size_id, material_id, color_id),
+            FOREIGN KEY (size_id) REFERENCES pot_sizes(id) ON DELETE CASCADE,
+            FOREIGN KEY (material_id) REFERENCES pot_materials(id) ON DELETE CASCADE,
+            FOREIGN KEY (color_id) REFERENCES pot_colors(id) ON DELETE CASCADE
+        );
+
         
         -- ИЗБРАННОЕ / КОРЗИНА
         
@@ -312,6 +325,9 @@ def create_database() -> None:
             id                  INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id             INTEGER NOT NULL,
             product_id          INTEGER NOT NULL,
+            pot_size            TEXT,
+            pot_material        TEXT,
+            pot_color           TEXT,
             created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(user_id, product_id),
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -690,6 +706,71 @@ def create_database() -> None:
         """
     )
 
+    def _ensure_column(table: str, column: str, definition_sql: str) -> None:
+        cols = cur.execute(f"PRAGMA table_info({table})").fetchall()
+        existing = {row["name"] for row in cols}
+        if column not in existing:
+            cur.execute(f"ALTER TABLE {table} ADD COLUMN {definition_sql}")
+
+    # Backward-compatible migration for existing DBs.
+    _ensure_column("wishlist_items", "pot_size", "pot_size TEXT")
+    _ensure_column("wishlist_items", "pot_material", "pot_material TEXT")
+    _ensure_column("wishlist_items", "pot_color", "pot_color TEXT")
+
+    # Reference data for pots.
+    cur.execute("INSERT OR IGNORE INTO pot_materials(name) VALUES ('Пластик')")
+    cur.execute("INSERT OR IGNORE INTO pot_materials(name) VALUES ('Керамика')")
+    cur.execute("INSERT OR IGNORE INTO pot_colors(name, hex_code) VALUES ('Белый', '#FFFFFF')")
+    cur.execute("INSERT OR IGNORE INTO pot_colors(name, hex_code) VALUES ('Черный', '#000000')")
+    cur.execute("INSERT OR IGNORE INTO pot_colors(name, hex_code) VALUES ('Терракотовый', '#C26A3D')")
+
+    # If sizes are absent, create a minimal set.
+    sizes_count = cur.execute("SELECT COUNT(*) AS c FROM pot_sizes").fetchone()["c"]
+    if int(sizes_count or 0) == 0:
+        cur.execute("INSERT INTO pot_sizes(name, diameter_cm, height_cm) VALUES ('S', 10, 10)")
+        cur.execute("INSERT INTO pot_sizes(name, diameter_cm, height_cm) VALUES ('M', 14, 14)")
+        cur.execute("INSERT INTO pot_sizes(name, diameter_cm, height_cm) VALUES ('L', 18, 18)")
+
+    # Ensure base size+material prices exist.
+    size_ids = [int(r["id"]) for r in cur.execute("SELECT id FROM pot_sizes").fetchall()]
+    material_ids = [int(r["id"]) for r in cur.execute("SELECT id FROM pot_materials").fetchall()]
+    for size_id in size_ids:
+        for material_id in material_ids:
+            cur.execute(
+                """
+                INSERT OR IGNORE INTO pot_prices(size_id, material_id, price)
+                VALUES (?, ?, 0)
+                """,
+                (size_id, material_id),
+            )
+
+    # Fill variant matrix for all colors from pot_prices.
+    cur.execute(
+        """
+        INSERT OR IGNORE INTO pot_variant_prices(size_id, material_id, color_id, price, is_active)
+        SELECT pp.size_id, pp.material_id, pc.id, pp.price, 1
+        FROM pot_prices pp
+        CROSS JOIN pot_colors pc
+        """
+    )
+
+    # Default combo should be free: plastic + white (any size).
+    plastic = cur.execute(
+        "SELECT id FROM pot_materials WHERE LOWER(name) IN ('пластик', 'plastic') LIMIT 1"
+    ).fetchone()
+    white = cur.execute(
+        "SELECT id FROM pot_colors WHERE LOWER(name) IN ('белый', 'white') LIMIT 1"
+    ).fetchone()
+    if plastic and white:
+        cur.execute(
+            """
+            UPDATE pot_variant_prices
+            SET price = 0
+            WHERE material_id = ? AND color_id = ?
+            """,
+            (int(plastic["id"]), int(white["id"])),
+        )
+
     cur.executescript(
         """
         
@@ -724,6 +805,7 @@ def create_database() -> None:
 
         CREATE INDEX IF NOT EXISTS idx_product_images_product_id ON product_images(product_id);
         CREATE INDEX IF NOT EXISTS idx_product_images_product_id_id ON product_images(product_id, id);
+        CREATE INDEX IF NOT EXISTS idx_pot_variant_prices_smc ON pot_variant_prices(size_id, material_id, color_id);
 
         CREATE INDEX IF NOT EXISTS idx_wishlist_user_id ON wishlist_items(user_id);
         CREATE INDEX IF NOT EXISTS idx_cart_user_id ON cart_items(user_id);

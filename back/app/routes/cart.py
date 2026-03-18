@@ -44,6 +44,9 @@ class WishlistRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     product_id: Optional[int] = Field(default=None, ge=1)
     plant_id: Optional[int] = Field(default=None, ge=1)
+    pot_size: Optional[str] = Field(default=None, max_length=50)
+    pot_material: Optional[str] = Field(default=None, max_length=50)
+    pot_color: Optional[str] = Field(default=None, max_length=50)
 
     @model_validator(mode="after")
     def validate_product(self):
@@ -79,7 +82,7 @@ def _resolve_option_id(cur, table: str, id_value: Optional[int], name_value: Opt
 def _resolve_product(cur, product_id: int):
     row = cur.execute(
         """
-        SELECT p.id, p.name, p.base_price, p.is_active, p.deleted_at,
+        SELECT p.id, p.name, p.base_price, p.recommended_pot_size_id, p.is_active, p.deleted_at,
                COALESCE(SUM(i.quantity_available), 0) AS available_qty
         FROM products p
         LEFT JOIN inventory i ON i.product_id = p.id
@@ -99,11 +102,26 @@ def _resolve_pot_unit_price(
     cur,
     pot_size_id: Optional[int],
     pot_material_id: Optional[int],
+    pot_color_id: Optional[int],
 ) -> float:
-    if pot_size_id is None and pot_material_id is None:
+    if pot_size_id is None and pot_material_id is None and pot_color_id is None:
         return 0.0
     if pot_size_id is None or pot_material_id is None:
         raise HTTPException(status_code=400, detail="pot_size and pot_material must be provided together")
+
+    if pot_color_id is not None:
+        row = cur.execute(
+            """
+            SELECT price
+            FROM pot_variant_prices
+            WHERE size_id = ? AND material_id = ? AND color_id = ? AND is_active = 1
+            LIMIT 1
+            """,
+            (pot_size_id, pot_material_id, pot_color_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=400, detail="Selected pot combination not available")
+        return float(row["price"])
 
     row = cur.execute(
         "SELECT price FROM pot_prices WHERE size_id = ? AND material_id = ? LIMIT 1",
@@ -112,6 +130,18 @@ def _resolve_pot_unit_price(
     if not row:
         raise HTTPException(status_code=400, detail="Selected pot combination not available")
     return float(row["price"])
+
+
+def _default_option_id(cur, table: str, names: list[str]) -> Optional[int]:
+    lowered = [name.strip().lower() for name in names if name and name.strip()]
+    for name in lowered:
+        row = cur.execute(
+            f"SELECT id FROM {table} WHERE LOWER(name) = ? LIMIT 1",
+            (name,),
+        ).fetchone()
+        if row:
+            return int(row["id"])
+    return None
 
 
 def _cart_item_to_dict(cur, row):
@@ -224,7 +254,18 @@ def add_to_cart(payload: CartAddRequest, response: Response, user=Depends(get_cu
         pot_material_id = _resolve_option_id(cur, "pot_materials", payload.pot_material_id, payload.pot_material)
         pot_color_id = _resolve_option_id(cur, "pot_colors", payload.pot_color_id, payload.pot_color)
 
-        pot_unit_price = _resolve_pot_unit_price(cur, pot_size_id, pot_material_id)
+        if pot_size_id is None and pot_material_id is None and pot_color_id is None:
+            recommended_size_id = product["recommended_pot_size_id"]
+            if recommended_size_id is not None:
+                pot_size_id = int(recommended_size_id)
+            else:
+                fallback_size = cur.execute("SELECT id FROM pot_sizes ORDER BY id LIMIT 1").fetchone()
+                pot_size_id = int(fallback_size["id"]) if fallback_size else None
+
+            pot_material_id = _default_option_id(cur, "pot_materials", ["Пластик", "Plastic"])
+            pot_color_id = _default_option_id(cur, "pot_colors", ["Белый", "White"])
+
+        pot_unit_price = _resolve_pot_unit_price(cur, pot_size_id, pot_material_id, pot_color_id)
 
         existing = cur.execute(
             """
@@ -384,6 +425,9 @@ def get_wishlist(user=Depends(get_current_user)):
                 wi.id,
                 wi.user_id,
                 wi.product_id,
+                wi.pot_size,
+                wi.pot_material,
+                wi.pot_color,
                 wi.created_at,
                 p.name AS product_name,
                 p.image_url,
@@ -394,7 +438,8 @@ def get_wishlist(user=Depends(get_current_user)):
             JOIN products p ON p.id = wi.product_id
             LEFT JOIN inventory i ON i.product_id = p.id
             WHERE wi.user_id = ?
-            GROUP BY wi.id, wi.user_id, wi.product_id, wi.created_at, p.name, p.image_url, p.is_active, p.deleted_at
+            GROUP BY wi.id, wi.user_id, wi.product_id, wi.pot_size, wi.pot_material, wi.pot_color, wi.created_at,
+                     p.name, p.image_url, p.is_active, p.deleted_at
             ORDER BY wi.created_at DESC
             """,
             (user["id"],),
@@ -410,6 +455,9 @@ def get_wishlist(user=Depends(get_current_user)):
             "plant_id": row["product_id"],
             "product_name": row["product_name"],
             "image_url": row["image_url"],
+            "pot_size": row["pot_size"],
+            "pot_material": row["pot_material"],
+            "pot_color": row["pot_color"],
             "is_active": bool(row["is_active"]),
             "deleted_at": row["deleted_at"],
             "in_stock": bool((row["available_qty"] or 0) > 0),
@@ -430,17 +478,45 @@ def add_to_wishlist(payload: WishlistRequest, user=Depends(get_current_user)):
     try:
         cur = conn.cursor()
         _resolve_product(cur, product_id)
+        pot_size = clean_text(payload.pot_size, max_len=50) or None
+        pot_material = clean_text(payload.pot_material, max_len=50) or None
+        pot_color = clean_text(payload.pot_color, max_len=50) or None
 
         existing = cur.execute(
             "SELECT id FROM wishlist_items WHERE user_id = ? AND product_id = ?",
             (user["id"], product_id),
         ).fetchone()
         if existing:
-            raise HTTPException(status_code=400, detail="Item already in wishlist")
+            cur.execute(
+                """
+                UPDATE wishlist_items
+                SET pot_size = ?, pot_material = ?, pot_color = ?
+                WHERE id = ?
+                """,
+                (pot_size, pot_material, pot_color, int(existing["id"])),
+            )
+            item_id = int(existing["id"])
+            conn.commit()
+            return {
+                "success": True,
+                "message": "Wishlist item updated",
+                "data": {
+                    "id": item_id,
+                    "user_id": int(user["id"]),
+                    "product_id": int(product_id),
+                    "plant_id": int(product_id),
+                    "pot_size": pot_size,
+                    "pot_material": pot_material,
+                    "pot_color": pot_color,
+                },
+            }
 
         cur.execute(
-            "INSERT INTO wishlist_items (user_id, product_id) VALUES (?, ?)",
-            (user["id"], product_id),
+            """
+            INSERT INTO wishlist_items (user_id, product_id, pot_size, pot_material, pot_color)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (user["id"], product_id, pot_size, pot_material, pot_color),
         )
         item_id = cur.lastrowid
         conn.commit()
@@ -450,7 +526,15 @@ def add_to_wishlist(payload: WishlistRequest, user=Depends(get_current_user)):
     return {
         "success": True,
         "message": "Item added to wishlist",
-        "data": {"id": item_id, "user_id": int(user["id"]), "product_id": int(product_id), "plant_id": int(product_id)},
+        "data": {
+            "id": item_id,
+            "user_id": int(user["id"]),
+            "product_id": int(product_id),
+            "plant_id": int(product_id),
+            "pot_size": pot_size,
+            "pot_material": pot_material,
+            "pot_color": pot_color,
+        },
     }
 
 
@@ -494,8 +578,10 @@ def check_wishlist(plant_id: int, user=Depends(get_current_user)):
 def get_pot_price(
     material: Optional[str] = Query(default=None, max_length=50),
     size: Optional[str] = Query(default=None, max_length=50),
+    color: Optional[str] = Query(default=None, max_length=50),
     material_id: Optional[int] = Query(default=None, ge=1),
     size_id: Optional[int] = Query(default=None, ge=1),
+    color_id: Optional[int] = Query(default=None, ge=1),
     user=Depends(get_current_user),
 ):
     """Возвращает цену горшка по размеру и материалу."""
@@ -504,38 +590,28 @@ def get_pot_price(
         cur = conn.cursor()
         resolved_size_id = _resolve_option_id(cur, "pot_sizes", size_id, size)
         resolved_material_id = _resolve_option_id(cur, "pot_materials", material_id, material)
+        resolved_color_id = _resolve_option_id(cur, "pot_colors", color_id, color)
 
         if resolved_size_id is None or resolved_material_id is None:
             raise HTTPException(status_code=400, detail="Material and size are required")
-
-        row = cur.execute(
-            """
-            SELECT
-                pp.price,
-                ps.id AS size_id,
-                ps.name AS size_name,
-                pm.id AS material_id,
-                pm.name AS material_name
-            FROM pot_prices pp
-            JOIN pot_sizes ps ON ps.id = pp.size_id
-            JOIN pot_materials pm ON pm.id = pp.material_id
-            WHERE pp.size_id = ? AND pp.material_id = ?
-            LIMIT 1
-            """,
-            (resolved_size_id, resolved_material_id),
-        ).fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Price not found")
+        price = _resolve_pot_unit_price(cur, resolved_size_id, resolved_material_id, resolved_color_id)
+        size_row = cur.execute("SELECT id, name FROM pot_sizes WHERE id = ?", (resolved_size_id,)).fetchone()
+        material_row = cur.execute("SELECT id, name FROM pot_materials WHERE id = ?", (resolved_material_id,)).fetchone()
+        color_row = None
+        if resolved_color_id is not None:
+            color_row = cur.execute("SELECT id, name FROM pot_colors WHERE id = ?", (resolved_color_id,)).fetchone()
     finally:
         conn.close()
 
     return {
         "success": True,
         "data": {
-            "price": float(row["price"]),
-            "material_id": row["material_id"],
-            "material": row["material_name"],
-            "size_id": row["size_id"],
-            "size": row["size_name"],
+            "price": float(price),
+            "material_id": int(material_row["id"]) if material_row else None,
+            "material": material_row["name"] if material_row else None,
+            "size_id": int(size_row["id"]) if size_row else None,
+            "size": size_row["name"] if size_row else None,
+            "color_id": int(color_row["id"]) if color_row else None,
+            "color": color_row["name"] if color_row else None,
         },
     }

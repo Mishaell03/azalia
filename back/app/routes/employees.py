@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 import uuid
 from typing import Optional
 
@@ -98,6 +99,21 @@ class ProcurementCheckoutRequest(BaseModel):
     comment: Optional[str] = Field(default=None, max_length=500)
 
 
+class ProcurementReceiptItemRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    purchase_order_item_id: int = Field(ge=1)
+    accepted_quantity: int = Field(ge=0, le=100000)
+
+
+class ProcurementReceiptRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    purchase_order_id: int = Field(ge=1)
+    items: list[ProcurementReceiptItemRequest] = Field(min_length=1, max_length=500)
+    comment: Optional[str] = Field(default=None, max_length=500)
+
+
 def _procurement_status_label(status_code: Optional[str]) -> str:
     code = (status_code or "").strip().lower()
     if code == "received":
@@ -107,6 +123,25 @@ def _procurement_status_label(status_code: Optional[str]) -> str:
     if code == "cancelled":
         return "отменен"
     return "доставляется"
+
+
+def _procurement_order_status_from_rows(item_rows: list[object]) -> str:
+    if not item_rows:
+        return "sent"
+    has_any_received = False
+    all_received = True
+    for row in item_rows:
+        ordered = int(row["ordered_quantity"] or 0)
+        received = int(row["received_quantity"] or 0)
+        if received > 0:
+            has_any_received = True
+        if received < ordered:
+            all_received = False
+    if all_received:
+        return "received"
+    if has_any_received:
+        return "partially_received"
+    return "sent"
 
 
 def _resolve_user(cur, user_id: Optional[int], telegram_id: Optional[int]):
@@ -1871,7 +1906,13 @@ def procurement_history(
             sql += " AND po.store_id = ?"
             params.append(int(store_id))
         sql += """
-            ORDER BY datetime(COALESCE(po.ordered_at, po.created_at)) DESC, po.id DESC
+            ORDER BY
+                CASE
+                    WHEN po.status IN ('draft', 'sent', 'partially_received') THEN 0
+                    ELSE 1
+                END ASC,
+                datetime(COALESCE(po.ordered_at, po.created_at)) DESC,
+                po.id DESC
             LIMIT ?
         """
         params.append(int(limit))
@@ -1930,6 +1971,7 @@ def procurement_history(
                     "purchase_number": row["purchase_number"],
                     "status_code": row["status"],
                     "status": _procurement_status_label(row["status"]),
+                    "can_accept": row["status"] in {"draft", "sent", "partially_received"},
                     "total_amount": float(row["total_amount"] or 0),
                     "comment": row["comment"],
                     "ordered_at": row["ordered_at"],
@@ -1946,6 +1988,464 @@ def procurement_history(
                 for row in orders_rows
             ],
             "count": len(orders_rows),
+        },
+    }
+
+
+@router.get("/procurement/receipts", summary="Procurement: Supplies For Unloading")
+def procurement_receipts(
+    store_id: Optional[int] = Query(default=None, ge=1),
+    limit: int = Query(default=200, ge=1, le=1000),
+    user=Depends(get_current_user),
+):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        _require_employee_access(cur, int(user["id"]))
+        if store_id is not None:
+            _resolve_procurement_store(cur, int(store_id))
+
+        stores = _get_switchable_stores(cur)
+
+        params: list[object] = []
+        sql = """
+            SELECT
+                po.id,
+                po.purchase_number,
+                po.status,
+                po.total_amount,
+                po.comment,
+                po.ordered_at,
+                po.received_at,
+                po.created_at,
+                po.updated_at,
+                po.store_id,
+                s.name AS store_name,
+                s.address AS store_address
+            FROM purchase_orders po
+            JOIN stores s ON s.id = po.store_id
+            WHERE po.status IN ('draft', 'sent', 'partially_received', 'received', 'cancelled')
+        """
+        if store_id is not None:
+            sql += " AND po.store_id = ?"
+            params.append(int(store_id))
+        sql += """
+            ORDER BY
+                CASE
+                    WHEN po.status IN ('draft', 'sent', 'partially_received') THEN 0
+                    ELSE 1
+                END ASC,
+                datetime(COALESCE(po.ordered_at, po.created_at)) DESC,
+                po.id DESC
+            LIMIT ?
+        """
+        params.append(int(limit))
+        orders_rows = cur.execute(sql, tuple(params)).fetchall()
+
+        order_ids = [int(row["id"]) for row in orders_rows]
+        items_by_order: dict[int, list[dict[str, object]]] = {}
+        if order_ids:
+            placeholders = ",".join(["?"] * len(order_ids))
+            item_rows = cur.execute(
+                f"""
+                SELECT
+                    poi.purchase_order_id,
+                    poi.id,
+                    poi.product_id,
+                    poi.ordered_quantity,
+                    poi.received_quantity,
+                    poi.rejected_quantity,
+                    poi.unit_cost,
+                    poi.line_total,
+                    p.name AS product_name,
+                    p.image_url
+                FROM purchase_order_items poi
+                JOIN products p ON p.id = poi.product_id
+                WHERE poi.purchase_order_id IN ({placeholders})
+                ORDER BY poi.purchase_order_id DESC, p.name ASC, poi.id ASC
+                """,
+                tuple(order_ids),
+            ).fetchall()
+            for row in item_rows:
+                po_id = int(row["purchase_order_id"])
+                ordered_qty = int(row["ordered_quantity"] or 0)
+                received_qty = int(row["received_quantity"] or 0)
+                remaining_qty = max(ordered_qty - received_qty, 0)
+                items_by_order.setdefault(po_id, []).append(
+                    {
+                        "id": int(row["id"]),
+                        "product_id": int(row["product_id"]),
+                        "name": row["product_name"],
+                        "image_url": row["image_url"] or "img/none.png",
+                        "ordered_quantity": ordered_qty,
+                        "received_quantity": received_qty,
+                        "remaining_quantity": remaining_qty,
+                        "rejected_quantity": int(row["rejected_quantity"] or 0),
+                        "unit_cost": float(row["unit_cost"] or 0),
+                        "line_total": float(row["line_total"] or 0),
+                    }
+                )
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "data": {
+            "store_id": store_id,
+            "stores": stores,
+            "items": [
+                {
+                    "id": int(row["id"]),
+                    "purchase_number": row["purchase_number"],
+                    "status_code": row["status"],
+                    "status": _procurement_status_label(row["status"]),
+                    "can_accept": row["status"] in {"draft", "sent", "partially_received"},
+                    "total_amount": float(row["total_amount"] or 0),
+                    "comment": row["comment"],
+                    "ordered_at": row["ordered_at"],
+                    "received_at": row["received_at"],
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"],
+                    "store": {
+                        "id": int(row["store_id"]),
+                        "name": row["store_name"],
+                        "address": row["store_address"],
+                    },
+                    "items": items_by_order.get(int(row["id"]), []),
+                }
+                for row in orders_rows
+            ],
+            "count": len(orders_rows),
+        },
+    }
+
+
+@router.post("/procurement/receipts", summary="Procurement: Accept Unloading Quantities")
+def procurement_create_receipt(
+    payload: ProcurementReceiptRequest,
+    user=Depends(get_current_user),
+):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        employee = _resolve_active_employee_access(cur, int(user["id"]))
+        if not employee:
+            raise HTTPException(status_code=403, detail="Active employee access required")
+
+        purchase_order = cur.execute(
+            """
+            SELECT id, status, store_id
+            FROM purchase_orders
+            WHERE id = ?
+            LIMIT 1
+            """,
+            (int(payload.purchase_order_id),),
+        ).fetchone()
+        if not purchase_order:
+            raise HTTPException(status_code=404, detail="Purchase order not found")
+        if purchase_order["status"] in {"received", "cancelled"}:
+            raise HTTPException(status_code=400, detail="Purchase order is already closed")
+
+        requested_map = {
+            int(item.purchase_order_item_id): int(item.accepted_quantity)
+            for item in payload.items
+        }
+        placeholders = ",".join(["?"] * len(requested_map))
+        order_items = cur.execute(
+            f"""
+            SELECT
+                id,
+                purchase_order_id,
+                product_id,
+                ordered_quantity,
+                received_quantity,
+                unit_cost
+            FROM purchase_order_items
+            WHERE purchase_order_id = ?
+              AND id IN ({placeholders})
+            """,
+            (int(payload.purchase_order_id), *requested_map.keys()),
+        ).fetchall()
+        if len(order_items) != len(requested_map):
+            raise HTTPException(status_code=404, detail="Some purchase order items were not found")
+
+        for row in order_items:
+            row_id = int(row["id"])
+            ordered_qty = int(row["ordered_quantity"] or 0)
+            received_qty = int(row["received_quantity"] or 0)
+            accepted_qty = int(requested_map[row_id])
+            remaining_qty = max(ordered_qty - received_qty, 0)
+            if accepted_qty < 0:
+                raise HTTPException(status_code=400, detail=f"accepted_quantity for item {row_id} cannot be negative")
+            if accepted_qty > remaining_qty:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"accepted_quantity for item {row_id} cannot exceed remaining quantity {remaining_qty}",
+                )
+
+        cur.execute(
+            """
+            INSERT INTO purchase_receipts (purchase_order_id, received_by_employee_id, comment)
+            VALUES (?, ?, ?)
+            """,
+            (
+                int(payload.purchase_order_id),
+                int(employee["employee_id"]),
+                clean_optional_text(payload.comment, max_len=500),
+            ),
+        )
+        purchase_receipt_id = int(cur.lastrowid)
+
+        for row in order_items:
+            row_id = int(row["id"])
+            product_id = int(row["product_id"])
+            accepted_qty = int(requested_map[row_id])
+            if accepted_qty > 0:
+                cur.execute(
+                    """
+                    UPDATE purchase_order_items
+                    SET received_quantity = received_quantity + ?
+                    WHERE id = ?
+                    """,
+                    (accepted_qty, row_id),
+                )
+                cur.execute(
+                    """
+                    INSERT INTO purchase_receipt_items (
+                        purchase_receipt_id, purchase_order_item_id, accepted_quantity, rejected_quantity
+                    )
+                    VALUES (?, ?, ?, 0)
+                    """,
+                    (purchase_receipt_id, row_id, accepted_qty),
+                )
+                inv = cur.execute(
+                    """
+                    SELECT id, quantity_on_hand
+                    FROM inventory
+                    WHERE store_id = ? AND product_id = ?
+                    LIMIT 1
+                    """,
+                    (int(purchase_order["store_id"]), product_id),
+                ).fetchone()
+                if inv is None:
+                    cur.execute(
+                        """
+                        INSERT INTO inventory (
+                            store_id, product_id, quantity_on_hand, quantity_reserved, quantity_available, reorder_point
+                        )
+                        VALUES (?, ?, ?, 0, ?, 0)
+                        """,
+                        (
+                            int(purchase_order["store_id"]),
+                            product_id,
+                            accepted_qty,
+                            accepted_qty,
+                        ),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        UPDATE inventory
+                        SET quantity_on_hand = quantity_on_hand + ?,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                        """,
+                        (accepted_qty, int(inv["id"])),
+                    )
+
+                cur.execute(
+                    """
+                    INSERT INTO inventory_movements (
+                        store_id, product_id, movement_type, quantity, unit_cost,
+                        created_by_employee_id, comment
+                    )
+                    VALUES (?, ?, 'purchase_receipt', ?, ?, ?, ?)
+                    """,
+                    (
+                        int(purchase_order["store_id"]),
+                        product_id,
+                        accepted_qty,
+                        float(row["unit_cost"] or 0),
+                        int(employee["employee_id"]),
+                        f"Приемка поставки #{int(payload.purchase_order_id)}",
+                    ),
+                )
+
+        refreshed_items = cur.execute(
+            """
+            SELECT id, ordered_quantity, received_quantity
+            FROM purchase_order_items
+            WHERE purchase_order_id = ?
+            """,
+            (int(payload.purchase_order_id),),
+        ).fetchall()
+        next_status = _procurement_order_status_from_rows(refreshed_items)
+
+        if next_status == "received":
+            cur.execute(
+                """
+                UPDATE purchase_orders
+                SET status = 'received',
+                    received_at = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (int(payload.purchase_order_id),),
+            )
+        else:
+            cur.execute(
+                """
+                UPDATE purchase_orders
+                SET status = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (next_status, int(payload.purchase_order_id)),
+            )
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "data": {
+            "purchase_order_id": int(payload.purchase_order_id),
+            "purchase_receipt_id": purchase_receipt_id,
+            "status_code": next_status,
+            "status": _procurement_status_label(next_status),
+        },
+    }
+
+
+@router.get("/admin/analytics", summary="Admin: Sales Analytics")
+def admin_analytics(
+    store_id: Optional[int] = Query(default=None, ge=1),
+    days: int = Query(default=30, ge=7, le=365),
+    top: int = Query(default=7, ge=1, le=20),
+    user=Depends(get_current_user),
+):
+    require_admin(user)
+
+    today = datetime.now().date()
+    date_from = today - timedelta(days=days - 1)
+
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+
+        if store_id is not None:
+            exists = cur.execute(
+                "SELECT id FROM stores WHERE id = ? LIMIT 1",
+                (int(store_id),),
+            ).fetchone()
+            if not exists:
+                raise HTTPException(status_code=404, detail="Store not found")
+
+        stores = _get_switchable_stores(cur)
+
+        sales_statuses = ("delivered", "completed")
+        base_params: list[object] = [date_from.isoformat(), *sales_statuses]
+        store_filter_sql = ""
+        if store_id is not None:
+            store_filter_sql = " AND o.store_id = ?"
+            base_params.append(int(store_id))
+
+        daily_rows = cur.execute(
+            f"""
+            SELECT
+                date(o.created_at) AS sales_date,
+                COUNT(DISTINCT o.id) AS orders_count,
+                COALESCE(SUM(o.total_price), 0) AS revenue
+            FROM orders o
+            WHERE date(o.created_at) >= ?
+              AND o.status IN (?, ?)
+              {store_filter_sql}
+            GROUP BY date(o.created_at)
+            ORDER BY sales_date ASC
+            """,
+            tuple(base_params),
+        ).fetchall()
+
+        daily_map = {
+            row["sales_date"]: {
+                "orders_count": int(row["orders_count"] or 0),
+                "revenue": float(row["revenue"] or 0),
+            }
+            for row in daily_rows
+        }
+
+        daily_series = []
+        total_orders = 0
+        total_revenue = 0.0
+        for idx in range(days):
+            d = date_from + timedelta(days=idx)
+            key = d.isoformat()
+            entry = daily_map.get(key, {"orders_count": 0, "revenue": 0.0})
+            orders_count = int(entry["orders_count"])
+            revenue = float(entry["revenue"])
+            total_orders += orders_count
+            total_revenue += revenue
+            daily_series.append(
+                {
+                    "date": key,
+                    "orders_count": orders_count,
+                    "revenue": round(revenue, 2),
+                }
+            )
+
+        top_params: list[object] = [date_from.isoformat(), *sales_statuses]
+        if store_id is not None:
+            top_params.append(int(store_id))
+        top_params.append(int(top))
+
+        top_rows = cur.execute(
+            f"""
+            SELECT
+                oi.product_id,
+                COALESCE(p.name, oi.product_name_snapshot) AS product_name,
+                SUM(oi.quantity) AS total_sold,
+                COALESCE(SUM(oi.total_price), 0) AS total_revenue
+            FROM order_items oi
+            JOIN orders o ON o.id = oi.order_id
+            LEFT JOIN products p ON p.id = oi.product_id
+            WHERE date(o.created_at) >= ?
+              AND o.status IN (?, ?)
+              {"AND o.store_id = ?" if store_id is not None else ""}
+            GROUP BY oi.product_id, COALESCE(p.name, oi.product_name_snapshot)
+            ORDER BY total_sold DESC, total_revenue DESC
+            LIMIT ?
+            """,
+            tuple(top_params),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "data": {
+            "store_id": store_id,
+            "period_days": days,
+            "date_from": date_from.isoformat(),
+            "date_to": today.isoformat(),
+            "stores": stores,
+            "summary": {
+                "orders_count": int(total_orders),
+                "revenue": round(float(total_revenue), 2),
+                "average_order_value": round(float(total_revenue) / total_orders, 2)
+                if total_orders > 0
+                else 0.0,
+            },
+            "series": daily_series,
+            "popular_plants": [
+                {
+                    "product_id": int(row["product_id"]) if row["product_id"] is not None else None,
+                    "name": row["product_name"] or "Товар",
+                    "total_sold": int(row["total_sold"] or 0),
+                    "revenue": round(float(row["total_revenue"] or 0), 2),
+                }
+                for row in top_rows
+            ],
         },
     }
 
