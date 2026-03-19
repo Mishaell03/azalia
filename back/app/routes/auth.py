@@ -735,8 +735,10 @@ def get_subscription_plans(user=Depends(get_current_user)):
                 description,
                 features_json,
                 max_plants,
+                max_members,
                 notifications,
                 has_corporate,
+                can_create_company,
                 has_analytics,
                 is_active
             FROM subscription_plans
@@ -769,8 +771,10 @@ def get_subscription_plans(user=Depends(get_current_user)):
                 "description": row["description"] or "",
                 "features": [str(f) for f in features],
                 "max_plants": int(row["max_plants"] or 1),
+                "max_members": int(row["max_members"] or 1),
                 "notifications": row["notifications"] or "basic",
                 "has_corporate": bool(row["has_corporate"]),
+                "can_create_company": bool(row["can_create_company"]),
                 "has_analytics": bool(row["has_analytics"]),
                 "is_current": is_current,
             }

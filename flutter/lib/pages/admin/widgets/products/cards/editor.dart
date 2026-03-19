@@ -86,9 +86,7 @@ class _AdminProductsCartEditorState extends State<AdminProductsCartEditor> {
     });
     await showDialog<void>(
       context: context,
-      builder: (_) => _CreatePlantDialog(
-        onCreated: _addCreatedPlant,
-      ),
+      builder: (_) => _CreatePlantDialog(onCreated: _addCreatedPlant),
     );
   }
 
@@ -464,7 +462,7 @@ class _CreateCategoryDialogState extends State<_CreateCategoryDialog> {
                       onPressed: _isSaving ? null : _saveCategory,
                       style: OutlinedButton.styleFrom(
                         backgroundColor: AppColors.brown,
-                        side: BorderSide(color: AppColors.white),
+                        side: BorderSide(color: AppColors.brown),
                       ),
                       child: Text(
                         _isSaving ? 'Создание...' : 'Создать',
@@ -559,7 +557,9 @@ class _DeleteCategoryDialogState extends State<_DeleteCategoryDialog> {
     }
   }
 
-  Future<void> _showBlockedProductsDialog(List<Map<String, dynamic>> products) async {
+  Future<void> _showBlockedProductsDialog(
+    List<Map<String, dynamic>> products,
+  ) async {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -592,12 +592,12 @@ class _DeleteCategoryDialogState extends State<_DeleteCategoryDialog> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            style: TextButton.styleFrom(
-              backgroundColor: AppColors.brown,
-            ),
+            style: TextButton.styleFrom(backgroundColor: AppColors.brown),
             child: Text(
               'Ок',
-              style: AppText.medium_14.copyWith(color: AppColors.white_transparent),
+              style: AppText.medium_14.copyWith(
+                color: AppColors.white_transparent,
+              ),
             ),
           ),
         ],
@@ -606,7 +606,8 @@ class _DeleteCategoryDialogState extends State<_DeleteCategoryDialog> {
   }
 
   Future<void> _deleteCategory() async {
-    if (_isDeleting || _selectedCategoryId == null || !_canDeleteSelected) return;
+    if (_isDeleting || _selectedCategoryId == null || !_canDeleteSelected)
+      return;
     setState(() {
       _isDeleting = true;
     });
@@ -686,15 +687,17 @@ class _DeleteCategoryDialogState extends State<_DeleteCategoryDialog> {
                 const SizedBox(height: 8),
                 const CircularProgressIndicator(strokeWidth: 2),
               ],
-              if (_selectedCategoryId != null && !_isChecking && !_canDeleteSelected)
+              if (_selectedCategoryId != null &&
+                  !_isChecking &&
+                  !_canDeleteSelected)
                 Padding(
                   padding: const EdgeInsets.only(top: 10),
                   child: Text(
                     _blockedProducts.isNotEmpty
                         ? 'Категорию нельзя удалить: в ней есть товары (${_blockedProducts.length}).'
                         : (_blockedSubcategoriesCount > 0
-                            ? 'Категорию нельзя удалить: есть подкатегории ($_blockedSubcategoriesCount).'
-                            : 'Категорию нельзя удалить.'),
+                              ? 'Категорию нельзя удалить: есть подкатегории ($_blockedSubcategoriesCount).'
+                              : 'Категорию нельзя удалить.'),
                     style: AppText.medium_12.copyWith(color: AppColors.error),
                   ),
                 ),
@@ -720,7 +723,8 @@ class _DeleteCategoryDialogState extends State<_DeleteCategoryDialog> {
                   const SizedBox(width: 5),
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: _isDeleting ||
+                      onPressed:
+                          _isDeleting ||
                               _isChecking ||
                               _selectedCategoryId == null ||
                               !_canDeleteSelected
@@ -728,7 +732,7 @@ class _DeleteCategoryDialogState extends State<_DeleteCategoryDialog> {
                           : _deleteCategory,
                       style: OutlinedButton.styleFrom(
                         backgroundColor: AppColors.error,
-                        side: BorderSide(color: AppColors.white),
+                        side: BorderSide(color: AppColors.brown),
                       ),
                       child: Text(
                         _isDeleting ? 'Удаление...' : 'Удалить',
@@ -952,7 +956,10 @@ class _CreatePlantDialogState extends State<_CreatePlantDialog> {
 
       final createdId = await PlantService.createPlant(payload: payload);
       if (_selectedPreviewImageFile != null) {
-        await PlantService.uploadPlantImage(createdId, _selectedPreviewImageFile!);
+        await PlantService.uploadPlantImage(
+          createdId,
+          _selectedPreviewImageFile!,
+        );
       }
       if (_selectedDetailImageFiles.isEmpty) {
         throw Exception('Добавьте минимум 1 фото для подробной информации');
@@ -1078,7 +1085,9 @@ class _CreatePlantDialogState extends State<_CreatePlantDialog> {
                   }
                   if (snapshot.hasError) {
                     return Center(
-                      child: Text('Ошибка получения категорий: ${snapshot.error}'),
+                      child: Text(
+                        'Ошибка получения категорий: ${snapshot.error}',
+                      ),
                     );
                   }
                   final categories = snapshot.data ?? const <Category>[];
@@ -1205,7 +1214,7 @@ class _CreatePlantDialogState extends State<_CreatePlantDialog> {
                       onPressed: _isSaving ? null : _create,
                       style: OutlinedButton.styleFrom(
                         backgroundColor: AppColors.brown,
-                        side: BorderSide(color: AppColors.white),
+                        side: BorderSide(color: AppColors.brown),
                       ),
                       child: Text(
                         _isSaving ? 'Создание...' : 'Создать',
@@ -1276,8 +1285,12 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
     final plant = widget.plant;
 
     nameController = TextEditingController(text: plant.name);
-    salePriceController = TextEditingController(text: plant.basePrice.toString());
-    costPriceController = TextEditingController(text: plant.costPrice.toString());
+    salePriceController = TextEditingController(
+      text: plant.basePrice.toString(),
+    );
+    costPriceController = TextEditingController(
+      text: plant.costPrice.toString(),
+    );
     descriptionController = TextEditingController(text: plant.description);
     careInstructionsController = TextEditingController(
       text: plant.careInstructions,
@@ -1301,12 +1314,7 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
     _existingImages
       ..clear()
       ..addAll(
-        plant.productImages.map(
-          (url) => {
-            'id': null,
-            'image_url': url,
-          },
-        ),
+        plant.productImages.map((url) => {'id': null, 'image_url': url}),
       );
     _initialImageCount = _existingImages.length;
     _loadExistingImages();
@@ -1478,8 +1486,14 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
 
   List<String> _getCurrentChanges() {
     final newName = _norm(nameController.text);
-    final newSalePrice = _parseDouble(salePriceController, widget.plant.basePrice);
-    final newCostPrice = _parseDouble(costPriceController, widget.plant.costPrice);
+    final newSalePrice = _parseDouble(
+      salePriceController,
+      widget.plant.basePrice,
+    );
+    final newCostPrice = _parseDouble(
+      costPriceController,
+      widget.plant.costPrice,
+    );
     final newDescription = _norm(descriptionController.text);
     final newCareInstructions = _norm(careInstructionsController.text);
     final newWatering = _norm(wateringFrequencyController.text);
@@ -1487,7 +1501,10 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
     final newRating = _parseDouble(ratingController, widget.plant.rating ?? 0);
     final newCategoryId = selectedCategoryId;
     final newLight = lightValue;
-    final imageChanged = _selectedPreviewImageFile != null || _selectedImageFiles.isNotEmpty || _existingImages.length != _initialImageCount;
+    final imageChanged =
+        _selectedPreviewImageFile != null ||
+        _selectedImageFiles.isNotEmpty ||
+        _existingImages.length != _initialImageCount;
 
     return _buildChanges(
       newName: newName,
@@ -1564,8 +1581,14 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
     if (_isSaving) return;
 
     final newName = _norm(nameController.text);
-    final newSalePrice = _parseDouble(salePriceController, widget.plant.basePrice);
-    final newCostPrice = _parseDouble(costPriceController, widget.plant.costPrice);
+    final newSalePrice = _parseDouble(
+      salePriceController,
+      widget.plant.basePrice,
+    );
+    final newCostPrice = _parseDouble(
+      costPriceController,
+      widget.plant.costPrice,
+    );
     final newDescription = _norm(descriptionController.text);
     final newCareInstructions = _norm(careInstructionsController.text);
     final newWatering = _norm(wateringFrequencyController.text);
@@ -1691,7 +1714,11 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
         deletedAt: isActive
             ? null
             : (widget.plant.deletedAt ?? DateTime.now().toIso8601String()),
-        imageUrl: uploadedImagePath ?? (_existingImages.isNotEmpty ? _existingImages.first['image_url']?.toString() : widget.plant.imageUrl),
+        imageUrl:
+            uploadedImagePath ??
+            (_existingImages.isNotEmpty
+                ? _existingImages.first['image_url']?.toString()
+                : widget.plant.imageUrl),
       );
 
       widget.onSaved(updatedPlant);
@@ -1982,7 +2009,9 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
                             backgroundColor: Colors.white,
                             content: Text(
                               'Должна быть минимум 1 фотография',
-                              style: AppText.medium_14.copyWith(color: AppColors.brown),
+                              style: AppText.medium_14.copyWith(
+                                color: AppColors.brown,
+                              ),
                             ),
                           ),
                         );
@@ -2016,7 +2045,7 @@ class _EditPlantDialogState extends State<_EditPlantDialog> {
                           onPressed: _isSaving ? null : _save,
                           style: OutlinedButton.styleFrom(
                             backgroundColor: AppColors.brown,
-                            side: BorderSide(color: AppColors.white),
+                            side: BorderSide(color: AppColors.brown),
                           ),
                           child: Text(
                             _isSaving ? 'Сохранение...' : 'Сохранить',
@@ -2089,7 +2118,9 @@ class _AdminImageGalleryEditor extends StatelessWidget {
         children: [
           Text(
             'Фото ($total, минимум $minImages)',
-            style: AppText.medium_12.copyWith(color: AppColors.black_transparent),
+            style: AppText.medium_12.copyWith(
+              color: AppColors.black_transparent,
+            ),
           ),
           const SizedBox(height: 8),
           Wrap(
@@ -2100,8 +2131,12 @@ class _AdminImageGalleryEditor extends StatelessWidget {
                 final raw = existingImages[index].trim();
                 final resolved = ApiConfig.imageUrl(raw);
                 return _ImageThumb(
-                  imageProvider: (resolved.isNotEmpty ? NetworkImage(resolved) : null),
-                  onRemove: onRemoveExistingImage == null ? null : () => onRemoveExistingImage!(index),
+                  imageProvider: (resolved.isNotEmpty
+                      ? NetworkImage(resolved)
+                      : null),
+                  onRemove: onRemoveExistingImage == null
+                      ? null
+                      : () => onRemoveExistingImage!(index),
                   canRemove: total > minImages,
                 );
               }),
@@ -2121,7 +2156,10 @@ class _AdminImageGalleryEditor extends StatelessWidget {
                     border: Border.all(color: AppColors.brown),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.add_a_photo_outlined, color: AppColors.brown),
+                  child: const Icon(
+                    Icons.add_a_photo_outlined,
+                    color: AppColors.brown,
+                  ),
                 ),
               ),
             ],

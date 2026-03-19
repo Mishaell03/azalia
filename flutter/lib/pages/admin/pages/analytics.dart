@@ -44,7 +44,11 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
       _error = null;
     });
     try {
-      final data = await _service.getAnalytics(storeId: storeId, days: targetDays, top: 7);
+      final data = await _service.getAnalytics(
+        storeId: storeId,
+        days: targetDays,
+        top: 7,
+      );
       final storesRaw = data['stores'] as List? ?? const [];
       final seriesRaw = data['series'] as List? ?? const [];
       final popularRaw = data['popular_plants'] as List? ?? const [];
@@ -65,7 +69,8 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
             .toList();
         _ordersCount = (summary['orders_count'] as num?)?.toInt() ?? 0;
         _revenue = (summary['revenue'] as num?)?.toDouble() ?? 0;
-        _averageOrderValue = (summary['average_order_value'] as num?)?.toDouble() ?? 0;
+        _averageOrderValue =
+            (summary['average_order_value'] as num?)?.toDouble() ?? 0;
         _selectedStoreId = storeId;
         _selectedDays = targetDays;
       });
@@ -94,10 +99,7 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
     return DateFormat('dd.MM').format(dt);
   }
 
-  Widget _summaryCard({
-    required String title,
-    required String value,
-  }) {
+  Widget _summaryCard({required String title, required String value}) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -138,9 +140,16 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
 
   Widget _ordersChart() {
     if (_series.isEmpty) {
-      return Center(child: Text('Нет данных', style: AppText.medium_14.copyWith(color: AppColors.grey)));
+      return Center(
+        child: Text(
+          'Нет данных',
+          style: AppText.medium_14.copyWith(color: AppColors.grey),
+        ),
+      );
     }
-    final maxY = _series.map((e) => e.ordersCount).fold<int>(0, (a, b) => a > b ? a : b);
+    final maxY = _series
+        .map((e) => e.ordersCount)
+        .fold<int>(0, (a, b) => a > b ? a : b);
     final labelStep = (_series.length / 6).ceil().clamp(1, 10);
 
     return BarChart(
@@ -160,10 +169,18 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
           ),
         ),
         titlesData: FlTitlesData(
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
           leftTitles: AxisTitles(
-            sideTitles: SideTitles(showTitles: true, reservedSize: 28, interval: ((maxY + 1) / 4).clamp(1, 9999).toDouble()),
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 28,
+              interval: ((maxY + 1) / 4).clamp(1, 9999).toDouble(),
+            ),
           ),
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
@@ -202,9 +219,16 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
 
   Widget _revenueChart() {
     if (_series.isEmpty) {
-      return Center(child: Text('Нет данных', style: AppText.medium_14.copyWith(color: AppColors.grey)));
+      return Center(
+        child: Text(
+          'Нет данных',
+          style: AppText.medium_14.copyWith(color: AppColors.grey),
+        ),
+      );
     }
-    final maxY = _series.map((e) => e.revenue).fold<double>(0, (a, b) => a > b ? a : b);
+    final maxY = _series
+        .map((e) => e.revenue)
+        .fold<double>(0, (a, b) => a > b ? a : b);
     final labelStep = (_series.length / 6).ceil().clamp(1, 10);
     final interval = maxY <= 0 ? 1 : (maxY / 4);
 
@@ -233,8 +257,12 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
           ),
         ),
         titlesData: FlTitlesData(
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
@@ -286,9 +314,16 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
 
   Widget _popularPlantsChart() {
     if (_popularPlants.isEmpty) {
-      return Center(child: Text('Нет данных', style: AppText.medium_14.copyWith(color: AppColors.grey)));
+      return Center(
+        child: Text(
+          'Нет данных',
+          style: AppText.medium_14.copyWith(color: AppColors.grey),
+        ),
+      );
     }
-    final maxY = _popularPlants.map((e) => e.totalSold).fold<int>(0, (a, b) => a > b ? a : b);
+    final maxY = _popularPlants
+        .map((e) => e.totalSold)
+        .fold<int>(0, (a, b) => a > b ? a : b);
     return Column(
       children: [
         Expanded(
@@ -302,17 +337,26 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
                 enabled: true,
                 touchTooltipData: BarTouchTooltipData(
                   getTooltipColor: (_) => AppColors.grey,
-                  getTooltipItem: (group, groupIndex, rod, rodIndex) => BarTooltipItem(
-                    '${_popularPlants[group.x.toInt()].name}\n${rod.toY.toInt()} шт.',
-                    AppText.medium_12.copyWith(color: AppColors.white),
-                  ),
+                  getTooltipItem: (group, groupIndex, rod, rodIndex) =>
+                      BarTooltipItem(
+                        '${_popularPlants[group.x.toInt()].name}\n${rod.toY.toInt()} шт.',
+                        AppText.medium_12.copyWith(color: AppColors.white),
+                      ),
                 ),
               ),
               titlesData: FlTitlesData(
-                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                rightTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                topTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
                 leftTitles: AxisTitles(
-                  sideTitles: SideTitles(showTitles: true, reservedSize: 28, interval: ((maxY + 1) / 4).clamp(1, 9999).toDouble()),
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 28,
+                    interval: ((maxY + 1) / 4).clamp(1, 9999).toDouble(),
+                  ),
                 ),
                 bottomTitles: AxisTitles(
                   sideTitles: SideTitles(
@@ -347,7 +391,10 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
             padding: const EdgeInsets.only(bottom: 4),
             child: Row(
               children: [
-                Text('${entry.key + 1}. ', style: AppText.medium_12.copyWith(color: AppColors.grey)),
+                Text(
+                  '${entry.key + 1}. ',
+                  style: AppText.medium_12.copyWith(color: AppColors.grey),
+                ),
                 Expanded(
                   child: Text(
                     entry.value.name,
@@ -375,76 +422,97 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(
-                  child: Text(
-                    _error!,
-                    style: AppText.medium_14.copyWith(color: AppColors.error),
+          ? Center(
+              child: Text(
+                _error!,
+                style: AppText.medium_14.copyWith(color: AppColors.error),
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: () => _loadAnalytics(storeId: _selectedStoreId),
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  Text(
+                    'Админ-аналитика',
+                    style: AppText.bold_20.copyWith(color: AppColors.black),
                   ),
-                )
-              : RefreshIndicator(
-                  onRefresh: () => _loadAnalytics(storeId: _selectedStoreId),
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      Text('Админ-аналитика', style: AppText.bold_20.copyWith(color: AppColors.black)),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<int?>(
-                        isExpanded: true,
-                        initialValue: _selectedStoreId,
-                        decoration: const InputDecoration(
-                          border: OutlineInputBorder(),
-                          labelText: 'Фильтр по магазину',
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<int?>(
+                    isExpanded: true,
+                    initialValue: _selectedStoreId,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: 'Фильтр по магазину',
+                    ),
+                    items: [
+                      const DropdownMenuItem<int?>(
+                        value: null,
+                        child: Text('Все магазины'),
+                      ),
+                      ..._stores.map(
+                        (s) => DropdownMenuItem<int?>(
+                          value: s.id,
+                          child: Text('${s.name} • ${s.address}'),
                         ),
-                        items: [
-                          const DropdownMenuItem<int?>(
-                            value: null,
-                            child: Text('Все магазины'),
-                          ),
-                          ..._stores.map(
-                            (s) => DropdownMenuItem<int?>(
-                              value: s.id,
-                              child: Text('${s.name} • ${s.address}'),
-                            ),
-                          ),
-                        ],
-                        onChanged: (value) => _loadAnalytics(storeId: value, days: _selectedDays),
                       ),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: _periodOptions
-                            .map(
-                              (days) => ChoiceChip(
-                                label: Text('$days дней'),
-                                selected: _selectedDays == days,
-                                selectedColor: AppColors.brown,
-                                labelStyle: AppText.medium_12.copyWith(
-                                  color: _selectedDays == days ? AppColors.white : AppColors.black,
-                                ),
-                                side: const BorderSide(color: AppColors.grey_light),
-                                onSelected: _isLoading
-                                    ? null
-                                    : (_) => _loadAnalytics(
-                                          storeId: _selectedStoreId,
-                                          days: days,
-                                        ),
-                              ),
-                            )
-                            .toList(),
-                      ),
-                      const SizedBox(height: 12),
-                      _summaryCard(title: 'Количество заказов', value: '$_ordersCount'),
-                      const SizedBox(height: 8),
-                      _summaryCard(title: 'Выручка', value: _money(_revenue)),
-                      const SizedBox(height: 8),
-                      _summaryCard(title: 'Средний чек', value: _money(_averageOrderValue)),
-                      _chartContainer(title: 'График заказов', child: _ordersChart()),
-                      _chartContainer(title: 'График выручки', child: _revenueChart()),
-                      _chartContainer(title: 'Популярные растения', child: _popularPlantsChart()),
                     ],
+                    onChanged: (value) =>
+                        _loadAnalytics(storeId: value, days: _selectedDays),
                   ),
-                ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _periodOptions
+                        .map(
+                          (days) => ChoiceChip(
+                            label: Text('$days дней'),
+                            selected: _selectedDays == days,
+                            selectedColor: AppColors.brown,
+                            labelStyle: AppText.medium_12.copyWith(
+                              color: _selectedDays == days
+                                  ? AppColors.white
+                                  : AppColors.black,
+                            ),
+                            side: const BorderSide(color: AppColors.brown),
+                            onSelected: _isLoading
+                                ? null
+                                : (_) => _loadAnalytics(
+                                    storeId: _selectedStoreId,
+                                    days: days,
+                                  ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                  const SizedBox(height: 12),
+                  _summaryCard(
+                    title: 'Количество заказов',
+                    value: '$_ordersCount',
+                  ),
+                  const SizedBox(height: 8),
+                  _summaryCard(title: 'Выручка', value: _money(_revenue)),
+                  const SizedBox(height: 8),
+                  _summaryCard(
+                    title: 'Средний чек',
+                    value: _money(_averageOrderValue),
+                  ),
+                  _chartContainer(
+                    title: 'График заказов',
+                    child: _ordersChart(),
+                  ),
+                  _chartContainer(
+                    title: 'График выручки',
+                    child: _revenueChart(),
+                  ),
+                  _chartContainer(
+                    title: 'Популярные растения',
+                    child: _popularPlantsChart(),
+                  ),
+                ],
+              ),
+            ),
       bottomNavigationBar: AppFooter(items: adminFooterItems),
     );
   }

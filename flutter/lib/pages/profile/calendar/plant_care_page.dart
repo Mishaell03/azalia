@@ -94,11 +94,23 @@ class _PlantCarePageState extends State<PlantCarePage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Отмена'),
+            style: TextButton.styleFrom(
+              side: const BorderSide(color: AppColors.brown),
+            ),
+            child: Text(
+              'Отмена',
+              style: AppText.medium_14.copyWith(color: AppColors.brown),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Удалить'),
+            style: TextButton.styleFrom(backgroundColor: AppColors.brown),
+            child: Text(
+              'Удалить',
+              style: AppText.medium_14.copyWith(
+                color: AppColors.white_transparent,
+              ),
+            ),
           ),
         ],
       ),
@@ -131,14 +143,26 @@ class _PlantCarePageState extends State<PlantCarePage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Позже'),
+            style: TextButton.styleFrom(
+              side: const BorderSide(color: AppColors.brown),
+            ),
+            child: Text(
+              'Позже',
+              style: AppText.medium_14.copyWith(color: AppColors.brown),
+            ),
           ),
-          ElevatedButton(
+          TextButton(
             onPressed: () {
               Navigator.of(ctx).pop();
               context.push('/profile/subscriptions');
             },
-            child: const Text('Открыть подписки'),
+            style: TextButton.styleFrom(backgroundColor: AppColors.brown),
+            child: Text(
+              'Открыть подписки',
+              style: AppText.medium_14.copyWith(
+                color: AppColors.white_transparent,
+              ),
+            ),
           ),
         ],
       ),
@@ -306,11 +330,23 @@ class _PlantCarePageState extends State<PlantCarePage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Отмена'),
+              style: TextButton.styleFrom(
+                side: const BorderSide(color: AppColors.brown),
+              ),
+              child: Text(
+                'Отмена',
+                style: AppText.medium_14.copyWith(color: AppColors.brown),
+              ),
             ),
-            ElevatedButton(
+            TextButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Сохранить'),
+              style: TextButton.styleFrom(backgroundColor: AppColors.brown),
+              child: Text(
+                'Сохранить',
+                style: AppText.medium_14.copyWith(
+                  color: AppColors.white_transparent,
+                ),
+              ),
             ),
           ],
         ),
@@ -408,6 +444,9 @@ class _PlantCarePageState extends State<PlantCarePage> {
                       if (picked == null) return;
                       setLocal(() => photoFile = File(picked.path));
                     },
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: AppColors.brown),
+                    ),
                     icon: const Icon(Icons.photo_library_outlined),
                     label: Text(
                       photoFile == null ? 'Прикрепить фото' : 'Фото выбрано',
@@ -426,11 +465,23 @@ class _PlantCarePageState extends State<PlantCarePage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Отмена'),
+              style: TextButton.styleFrom(
+                side: const BorderSide(color: AppColors.brown),
+              ),
+              child: Text(
+                'Отмена',
+                style: AppText.medium_14.copyWith(color: AppColors.brown),
+              ),
             ),
-            ElevatedButton(
+            TextButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Добавить'),
+              style: TextButton.styleFrom(backgroundColor: AppColors.brown),
+              child: Text(
+                'Добавить',
+                style: AppText.medium_14.copyWith(
+                  color: AppColors.white_transparent,
+                ),
+              ),
             ),
           ],
         ),
@@ -594,6 +645,9 @@ class _PlantCarePageState extends State<PlantCarePage> {
                         await _showErrorMessage('Ошибка: $e');
                       }
                     },
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: AppColors.brown),
+                    ),
                     child: const Text('Не знаю'),
                   ),
                 ),
@@ -618,6 +672,11 @@ class _PlantCarePageState extends State<PlantCarePage> {
                     await _showErrorMessage('Ошибка: $e');
                   }
                 },
+                style: TextButton.styleFrom(
+                  side: BorderSide(
+                    color: AppColors.error
+                  )
+                ),
                 child: Text(
                   'Удалить цветок',
                   style: AppText.medium_12.copyWith(color: AppColors.error),
@@ -745,6 +804,9 @@ class _PlantCarePageState extends State<PlantCarePage> {
               width: double.infinity,
               child: OutlinedButton(
                 onPressed: () => Navigator.of(ctx).pop(),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.brown),
+                ),
                 child: const Text('Закрыть'),
               ),
             ),

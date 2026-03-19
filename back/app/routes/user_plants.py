@@ -196,6 +196,28 @@ def _calculate_schedule(
     return normalized_requirement, wf, sf, next_watering_at, next_soil_change_at
 
 
+def _clear_future_auto_tasks(
+    cur,
+    *,
+    user_id: int,
+    plant_id: int,
+    care_type: str,
+    from_date: str,
+) -> None:
+    cur.execute(
+        """
+        DELETE FROM user_plant_care_dates
+        WHERE user_id = ?
+          AND user_plant_id = ?
+          AND care_type = ?
+          AND is_done = 0
+          AND care_date >= ?
+          AND comment LIKE 'Авто:%'
+        """,
+        (user_id, plant_id, care_type, from_date),
+    )
+
+
 @router.get("", summary="User plants: list")
 def list_user_plants(user=Depends(get_current_user)):
     conn = get_db_connection()
@@ -637,6 +659,13 @@ def mark_user_plant_care(
 
         if care_type == "watering":
             wf = int(plant["watering_frequency_days"] or 7)
+            _clear_future_auto_tasks(
+                cur,
+                user_id=user_id,
+                plant_id=plant_id,
+                care_type="watering",
+                from_date=care_date,
+            )
             cur.execute(
                 """
                 UPDATE user_plants
@@ -648,16 +677,24 @@ def mark_user_plant_care(
                 (care_date, next_due_date(care_date, wf), plant_id, user_id),
             )
         elif care_type == "soil_change":
-            sf = int(plant["soil_change_frequency_days"] or 180)
+            sf = 180
+            _clear_future_auto_tasks(
+                cur,
+                user_id=user_id,
+                plant_id=plant_id,
+                care_type="soil_change",
+                from_date=care_date,
+            )
             cur.execute(
                 """
                 UPDATE user_plants
                 SET
+                    soil_change_frequency_days = ?,
                     last_soil_change_at = ?,
                     next_soil_change_at = ?
                 WHERE id = ? AND user_id = ?
                 """,
-                (care_date, next_due_date(care_date, sf), plant_id, user_id),
+                (sf, care_date, next_due_date(care_date, sf), plant_id, user_id),
             )
 
         refreshed = _fetch_user_plant(cur, user_id, plant_id)

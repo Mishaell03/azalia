@@ -29,6 +29,13 @@ class CompanyCalendarEventUpdateRequest(BaseModel):
     comment: Optional[str] = Field(default=None, max_length=1000)
 
 
+class CompanyCalendarPreferenceCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    category_id: Optional[int] = Field(default=None, ge=1)
+    product_id: Optional[int] = Field(default=None, ge=1)
+
+
 def _parse_iso_date(value: str, field_name: str) -> str:
     text = clean_text(value, max_len=16)
     try:
@@ -110,6 +117,52 @@ def _serialize(row) -> dict:
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
+
+
+def _validate_preference_refs(cur, *, category_id: Optional[int], product_id: Optional[int]) -> None:
+    if (category_id is None and product_id is None) or (category_id is not None and product_id is not None):
+        raise HTTPException(status_code=422, detail="Set either category_id or product_id")
+
+    if category_id is not None:
+        cat = cur.execute(
+            "SELECT id FROM categories WHERE id = ? LIMIT 1",
+            (category_id,),
+        ).fetchone()
+        if not cat:
+            raise HTTPException(status_code=404, detail="Category not found")
+
+    if product_id is not None:
+        prod = cur.execute(
+            """
+            SELECT id
+            FROM products
+            WHERE id = ? AND deleted_at IS NULL
+            LIMIT 1
+            """,
+            (product_id,),
+        ).fetchone()
+        if not prod:
+            raise HTTPException(status_code=404, detail="Product not found")
+
+
+def _ensure_event_access(cur, event_id: int, user_id: int):
+    row = cur.execute(
+        """
+        SELECT e.id, e.company_id, e.title
+        FROM company_calendar_events e
+        JOIN companies c ON c.id = e.company_id
+        JOIN company_members cm ON cm.company_id = e.company_id
+        WHERE e.id = ?
+          AND cm.user_id = ?
+          AND cm.is_active = 1
+          AND c.status = 'active'
+        LIMIT 1
+        """,
+        (event_id, user_id),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Company event not found")
+    return row
 
 
 @router.get("/organizations", summary="Company Calendar: My Organizations")
@@ -334,3 +387,211 @@ def delete_company_event(event_id: int, user=Depends(get_current_user)):
         conn.close()
 
     return {"success": True, "data": {"deleted": True, "id": event_id}}
+
+
+@router.get("/preferences/options", summary="Company Calendar: Preference Options")
+def company_event_preference_options(user=Depends(get_current_user)):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        memberships = _company_memberships(cur, int(user["id"]))
+        if not memberships:
+            return {
+                "success": True,
+                "data": {"categories": [], "products": []},
+            }
+
+        categories = cur.execute(
+            """
+            SELECT id, name
+            FROM categories
+            ORDER BY name ASC
+            LIMIT 200
+            """
+        ).fetchall()
+        products = cur.execute(
+            """
+            SELECT id, name
+            FROM products
+            WHERE deleted_at IS NULL
+              AND is_active = 1
+            ORDER BY name ASC
+            LIMIT 500
+            """
+        ).fetchall()
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "data": {
+            "categories": [{"id": int(row["id"]), "name": row["name"]} for row in categories],
+            "products": [{"id": int(row["id"]), "name": row["name"]} for row in products],
+        },
+    }
+
+
+@router.get("/{event_id}/preferences", summary="Company Calendar: List Event Preferences")
+def list_company_event_preferences(event_id: int, user=Depends(get_current_user)):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        event_row = _ensure_event_access(cur, event_id, int(user["id"]))
+        rows = cur.execute(
+            """
+            SELECT
+                p.id,
+                p.company_event_id,
+                p.category_id,
+                c.name AS category_name,
+                p.product_id,
+                pr.name AS product_name,
+                p.created_at
+            FROM company_calendar_event_preferences p
+            LEFT JOIN categories c ON c.id = p.category_id
+            LEFT JOIN products pr ON pr.id = p.product_id
+            WHERE p.user_id = ? AND p.company_event_id = ?
+            ORDER BY p.id DESC
+            """,
+            (int(user["id"]), event_id),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "data": {
+            "event": {
+                "id": int(event_row["id"]),
+                "company_id": int(event_row["company_id"]),
+                "title": event_row["title"],
+            },
+            "items": [
+                {
+                    "id": int(r["id"]),
+                    "company_event_id": int(r["company_event_id"]),
+                    "category_id": r["category_id"],
+                    "category_name": r["category_name"],
+                    "product_id": r["product_id"],
+                    "product_name": r["product_name"],
+                    "created_at": r["created_at"],
+                }
+                for r in rows
+            ],
+            "count": len(rows),
+        },
+    }
+
+
+@router.post("/{event_id}/preferences", summary="Company Calendar: Add Event Preference")
+def add_company_event_preference(
+    event_id: int,
+    payload: CompanyCalendarPreferenceCreateRequest,
+    user=Depends(get_current_user),
+):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        event_row = _ensure_event_access(cur, event_id, int(user["id"]))
+        if not _user_has_corporate_plan(cur, int(user["id"])):
+            raise HTTPException(
+                status_code=403,
+                detail="Предпочтения доступны только на расширенной подписке.",
+            )
+
+        _validate_preference_refs(
+            cur,
+            category_id=payload.category_id,
+            product_id=payload.product_id,
+        )
+        cur.execute(
+            """
+            INSERT INTO company_calendar_event_preferences (
+                user_id, company_event_id, category_id, product_id
+            )
+            VALUES (?, ?, ?, ?)
+            """,
+            (int(user["id"]), event_id, payload.category_id, payload.product_id),
+        )
+        pref_id = int(cur.lastrowid)
+        row = cur.execute(
+            """
+            SELECT
+                p.id,
+                p.company_event_id,
+                p.category_id,
+                c.name AS category_name,
+                p.product_id,
+                pr.name AS product_name,
+                p.created_at
+            FROM company_calendar_event_preferences p
+            LEFT JOIN categories c ON c.id = p.category_id
+            LEFT JOIN products pr ON pr.id = p.product_id
+            WHERE p.id = ?
+            LIMIT 1
+            """,
+            (pref_id,),
+        ).fetchone()
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "data": {
+            "event": {
+                "id": int(event_row["id"]),
+                "company_id": int(event_row["company_id"]),
+                "title": event_row["title"],
+            },
+            "preference": {
+                "id": int(row["id"]),
+                "company_event_id": int(row["company_event_id"]),
+                "category_id": row["category_id"],
+                "category_name": row["category_name"],
+                "product_id": row["product_id"],
+                "product_name": row["product_name"],
+                "created_at": row["created_at"],
+            },
+        },
+    }
+
+
+@router.delete("/preferences/{preference_id}", summary="Company Calendar: Delete Event Preference")
+def delete_company_event_preference(preference_id: int, user=Depends(get_current_user)):
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        exists = cur.execute(
+            """
+            SELECT p.id
+            FROM company_calendar_event_preferences p
+            JOIN company_calendar_events e ON e.id = p.company_event_id
+            JOIN company_members cm ON cm.company_id = e.company_id
+            JOIN companies c ON c.id = e.company_id
+            WHERE p.id = ?
+              AND p.user_id = ?
+              AND cm.user_id = ?
+              AND cm.is_active = 1
+              AND c.status = 'active'
+            LIMIT 1
+            """,
+            (preference_id, int(user["id"]), int(user["id"])),
+        ).fetchone()
+        if not exists:
+            raise HTTPException(status_code=404, detail="Event preference not found")
+        cur.execute(
+            "DELETE FROM company_calendar_event_preferences WHERE id = ? AND user_id = ?",
+            (preference_id, int(user["id"])),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+    return {"success": True, "data": {"deleted": True, "id": preference_id}}

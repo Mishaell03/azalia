@@ -238,6 +238,39 @@ class CompanyCalendarEventDto {
   }
 }
 
+class CompanyCalendarEventPreferenceDto {
+  final int id;
+  final int companyEventId;
+  final int? categoryId;
+  final String? categoryName;
+  final int? productId;
+  final String? productName;
+
+  CompanyCalendarEventPreferenceDto({
+    required this.id,
+    required this.companyEventId,
+    required this.categoryId,
+    required this.categoryName,
+    required this.productId,
+    required this.productName,
+  });
+
+  factory CompanyCalendarEventPreferenceDto.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return CompanyCalendarEventPreferenceDto(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      companyEventId: (json['company_event_id'] as num?)?.toInt() ?? 0,
+      categoryId: (json['category_id'] as num?)?.toInt(),
+      categoryName: json['category_name']?.toString(),
+      productId: (json['product_id'] as num?)?.toInt(),
+      productName: json['product_name']?.toString(),
+    );
+  }
+
+  String get displayName => categoryName ?? productName ?? 'Без названия';
+}
+
 class HolidayPreferenceDto {
   final int id;
   final String holidayCode;
@@ -665,6 +698,66 @@ class CalendarService {
     );
     final data = response['data'] as Map<String, dynamic>? ?? const {};
     return CompanyCalendarEventDto.fromJson(data);
+  }
+
+  static Future<List<CompanyCalendarEventPreferenceDto>>
+  getCompanyEventPreferences(int eventId) async {
+    final response = await _api.get(
+      ApiConfig.companyCalendarPreferences(eventId),
+    );
+    if (response['success'] != true) return const [];
+    final data = response['data'] as Map<String, dynamic>? ?? const {};
+    final items = data['items'] as List? ?? const [];
+    return items
+        .whereType<Map<String, dynamic>>()
+        .map(CompanyCalendarEventPreferenceDto.fromJson)
+        .toList();
+  }
+
+  static Future<CompanyCalendarEventPreferenceDto>
+  createCompanyEventPreference({
+    required int eventId,
+    int? categoryId,
+    int? productId,
+  }) async {
+    final response = await _api.post(
+      ApiConfig.companyCalendarPreferences(eventId),
+      body: {
+        if (categoryId != null) 'category_id': categoryId,
+        if (productId != null) 'product_id': productId,
+      },
+    );
+    final data = response['data'] as Map<String, dynamic>? ?? const {};
+    final pref = data['preference'] as Map<String, dynamic>? ?? const {};
+    return CompanyCalendarEventPreferenceDto.fromJson(pref);
+  }
+
+  static Future<void> deleteCompanyEventPreference(int preferenceId) async {
+    await _api.delete(ApiConfig.companyCalendarPreferenceById(preferenceId));
+  }
+
+  static Future<HolidayPreferenceOptionsResponse>
+  getCompanyEventPreferenceOptions() async {
+    final response = await _api.get(ApiConfig.companyCalendarPreferenceOptions);
+    if (response['success'] != true) {
+      return HolidayPreferenceOptionsResponse(
+        categories: const [],
+        products: const [],
+      );
+    }
+    final data = response['data'] as Map<String, dynamic>? ?? const {};
+    final categories = (data['categories'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(HolidayPreferenceOptionDto.fromJson)
+        .toList();
+    final products = (data['products'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(HolidayPreferenceOptionDto.fromJson)
+        .toList();
+    return HolidayPreferenceOptionsResponse(
+      categories: categories,
+      products: products,
+    );
   }
 
   static Future<List<HolidayPreferenceDto>> getHolidayPreferences({

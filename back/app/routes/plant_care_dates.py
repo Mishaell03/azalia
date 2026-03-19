@@ -157,6 +157,38 @@ def _iter_due_dates(next_due: Optional[str], frequency_days: Optional[int], wind
         guard += 1
 
 
+def _iter_pruning_dates(window_start: date, window_end: date):
+    # Twice a year: spring and autumn.
+    season_days = ((3, 15), (9, 15))
+    for year in range(window_start.year, window_end.year + 1):
+        for month, day in season_days:
+            dt = date(year, month, day)
+            if window_start <= dt <= window_end:
+                yield dt.strftime("%Y-%m-%d")
+
+
+def _clear_future_auto_tasks(
+    cur,
+    *,
+    user_id: int,
+    user_plant_id: int,
+    care_type: str,
+    from_date: str,
+) -> None:
+    cur.execute(
+        """
+        DELETE FROM user_plant_care_dates
+        WHERE user_id = ?
+          AND user_plant_id = ?
+          AND care_type = ?
+          AND is_done = 0
+          AND care_date >= ?
+          AND comment LIKE 'Авто:%'
+        """,
+        (user_id, user_plant_id, care_type, from_date),
+    )
+
+
 def _sync_auto_tasks(cur, user_id: int, window_start: str, window_end: str) -> None:
     start = _parse_date_obj(window_start)
     end = _parse_date_obj(window_end)
@@ -270,6 +302,39 @@ def _sync_auto_tasks(cur, user_id: int, window_start: str, window_end: str) -> N
             )
             existing.add(key)
 
+        for due in _iter_pruning_dates(start, end):
+            key = (user_plant_id, "pruning", due)
+            if key in existing:
+                continue
+            cur.execute(
+                """
+                INSERT INTO user_plant_care_dates (
+                    user_id,
+                    user_plant_id,
+                    product_id,
+                    plant_name,
+                    plant_photo_url,
+                    watering_requirement,
+                    care_type,
+                    care_date,
+                    comment,
+                    is_done
+                )
+                VALUES (?, ?, ?, ?, ?, ?, 'pruning', ?, ?, 0)
+                """,
+                (
+                    user_id,
+                    user_plant_id,
+                    row["product_id"],
+                    plant_name,
+                    photo,
+                    req,
+                    due,
+                    "Авто: сезонная подрезка (весна/осень)",
+                ),
+            )
+            existing.add(key)
+
 
 def _touch_user_plant_after_done(cur, user_id: int, task_row) -> None:
     user_plant_id = task_row["user_plant_id"]
@@ -284,6 +349,13 @@ def _touch_user_plant_after_done(cur, user_id: int, task_row) -> None:
         watering_requirement = normalize_watering_requirement(plant["watering_requirement"])
         wf = derive_watering_frequency_days(watering_requirement, plant["watering_frequency_days"])
         next_watering_at = next_due_date(care_date, wf)
+        _clear_future_auto_tasks(
+            cur,
+            user_id=user_id,
+            user_plant_id=int(user_plant_id),
+            care_type="watering",
+            from_date=care_date,
+        )
         cur.execute(
             """
             UPDATE user_plants
@@ -302,6 +374,13 @@ def _touch_user_plant_after_done(cur, user_id: int, task_row) -> None:
         wf = derive_watering_frequency_days(watering_requirement, plant["watering_frequency_days"])
         sf = derive_soil_change_frequency_days(wf, plant["soil_change_frequency_days"])
         next_soil_change_at = next_due_date(care_date, sf)
+        _clear_future_auto_tasks(
+            cur,
+            user_id=user_id,
+            user_plant_id=int(user_plant_id),
+            care_type="soil_change",
+            from_date=care_date,
+        )
         cur.execute(
             """
             UPDATE user_plants

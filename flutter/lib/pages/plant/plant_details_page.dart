@@ -57,7 +57,9 @@ class _PlantDetailsPageState extends State<PlantDetailsPage> {
   @override
   void initState() {
     super.initState();
-    _quantity = widget.args.initialQuantity < 1 ? 1 : widget.args.initialQuantity;
+    _quantity = widget.args.initialQuantity < 1
+        ? 1
+        : widget.args.initialQuantity;
     _selectedSize = widget.args.initialPotSize;
     _selectedMaterial = widget.args.initialPotMaterial;
     _selectedColor = widget.args.initialPotColor;
@@ -89,15 +91,21 @@ class _PlantDetailsPageState extends State<PlantDetailsPage> {
         _materials = materials;
         _colors = colors;
         if (_selectedSize != null &&
-            !_sizes.any((e) => e.name.toLowerCase() == _selectedSize!.toLowerCase())) {
+            !_sizes.any(
+              (e) => e.name.toLowerCase() == _selectedSize!.toLowerCase(),
+            )) {
           _selectedSize = null;
         }
         if (_selectedMaterial != null &&
-            !_materials.any((e) => e.name.toLowerCase() == _selectedMaterial!.toLowerCase())) {
+            !_materials.any(
+              (e) => e.name.toLowerCase() == _selectedMaterial!.toLowerCase(),
+            )) {
           _selectedMaterial = null;
         }
         if (_selectedColor != null &&
-            !_colors.any((e) => e.name.toLowerCase() == _selectedColor!.toLowerCase())) {
+            !_colors.any(
+              (e) => e.name.toLowerCase() == _selectedColor!.toLowerCase(),
+            )) {
           _selectedColor = null;
         }
       });
@@ -342,16 +350,14 @@ class _PlantDetailsPageState extends State<PlantDetailsPage> {
               selected: selected == null || selected.isEmpty,
               onSelected: (_) => onSelected(null),
             ),
-            ...items.map(
-              (item) {
-                final enabled = isEnabled(item);
-                return ChoiceChip(
-                  label: Text(item),
-                  selected: (selected ?? '') == item,
-                  onSelected: enabled ? (_) => onSelected(item) : null,
-                );
-              },
-            ),
+            ...items.map((item) {
+              final enabled = isEnabled(item);
+              return ChoiceChip(
+                label: Text(item),
+                selected: (selected ?? '') == item,
+                onSelected: enabled ? (_) => onSelected(item) : null,
+              );
+            }),
           ],
         ),
       ],
@@ -369,187 +375,227 @@ class _PlantDetailsPageState extends State<PlantDetailsPage> {
       appBar: AppBar(
         backgroundColor: AppColors.white,
         foregroundColor: AppColors.black,
-        title: Text('Товар', style: AppText.bold_18.copyWith(color: AppColors.black)),
+        title: Text(
+          'Товар',
+          style: AppText.bold_18.copyWith(color: AppColors.black),
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(_error!, style: AppText.medium_14.copyWith(color: AppColors.error)),
-                  ),
-                )
-              : plant == null
-                  ? Center(child: Text('Товар не найден', style: AppText.medium_14))
-                  : ListView(
-                      padding: const EdgeInsets.all(16),
-                      children: [
-                        if (gallery.isEmpty)
-                          Container(height: 240, color: AppColors.grey_light)
-                        else ...[
-                          SizedBox(
-                            height: 260,
-                            child: PageView.builder(
-                              itemCount: gallery.length,
-                              onPageChanged: (i) {
-                                setState(() {
-                                  _currentImageIndex = i;
-                                });
-                              },
-                              itemBuilder: (context, i) {
-                                final url = gallery[i];
-                                final resolved = ApiConfig.imageUrl(url).trim();
-                                if (resolved.isEmpty) {
-                                  return Container(color: AppColors.grey_light);
-                                }
-                                return ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: CachedNetworkImage(
-                                    imageUrl: resolved,
-                                    fit: BoxFit.contain,
-                                    placeholder: (context, imageUrl) =>
-                                        Container(color: AppColors.grey_light),
-                                    errorWidget: (context, imageUrl, error) =>
-                                        Container(color: AppColors.grey_light),
-                                  ),
-                                );
-                              },
-                            ),
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  _error!,
+                  style: AppText.medium_14.copyWith(color: AppColors.error),
+                ),
+              ),
+            )
+          : plant == null
+          ? Center(child: Text('Товар не найден', style: AppText.medium_14))
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                if (gallery.isEmpty)
+                  Container(height: 240, color: AppColors.grey_light)
+                else ...[
+                  SizedBox(
+                    height: 260,
+                    child: PageView.builder(
+                      itemCount: gallery.length,
+                      onPageChanged: (i) {
+                        setState(() {
+                          _currentImageIndex = i;
+                        });
+                      },
+                      itemBuilder: (context, i) {
+                        final url = gallery[i];
+                        final resolved = ApiConfig.imageUrl(url).trim();
+                        if (resolved.isEmpty) {
+                          return Container(color: AppColors.grey_light);
+                        }
+                        return ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: CachedNetworkImage(
+                            imageUrl: resolved,
+                            fit: BoxFit.contain,
+                            placeholder: (context, imageUrl) =>
+                                Container(color: AppColors.grey_light),
+                            errorWidget: (context, imageUrl, error) =>
+                                Container(color: AppColors.grey_light),
                           ),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: List.generate(
-                              gallery.length,
-                              (i) => Container(
-                                margin: const EdgeInsets.symmetric(horizontal: 3),
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  color: i == _currentImageIndex ? AppColors.brown : AppColors.grey_light,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 12),
-                        Text(plant.name, style: AppText.bold_20.copyWith(color: AppColors.black)),
-                        if (plant.description.trim().isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            plant.description,
-                            style: AppText.medium_14.copyWith(color: AppColors.black_transparent),
-                          ),
-                        ],
-                        const SizedBox(height: 6),
-                        Text(
-                          'Текущий выбор: ${_selectedMaterial ?? ''} ${_selectedSize ?? ''} ${_selectedColor ?? ''}',
-                          style: AppText.medium_12.copyWith(color: AppColors.grey),
-                        ),
-                        const SizedBox(height: 12),
-                        _selector(
-                          title: 'Размер горшка',
-                          items: _sizes.map((e) => e.name).toList(),
-                          selected: _selectedSize,
-                          isEnabled: (item) {
-                            final id = _sizeIdByName(item);
-                            return id == null || _availableSizeIds.contains(id);
-                          },
-                          onSelected: (value) async {
-                            setState(() {
-                              _selectedSize = value;
-                            });
-                            await _reloadOptionsAvailability();
-                            await _recalculatePotPrice();
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        _selector(
-                          title: 'Материал горшка',
-                          items: _materials.map((e) => e.name).toList(),
-                          selected: _selectedMaterial,
-                          isEnabled: (item) {
-                            final id = _materialIdByName(item);
-                            return id == null || _availableMaterialIds.contains(id);
-                          },
-                          onSelected: (value) async {
-                            setState(() {
-                              _selectedMaterial = value;
-                            });
-                            await _reloadOptionsAvailability();
-                            await _recalculatePotPrice();
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        _selector(
-                          title: 'Цвет горшка',
-                          items: _colors.map((e) => e.name).toList(),
-                          selected: _selectedColor,
-                          isEnabled: (item) {
-                            final id = _colorIdByName(item);
-                            return id == null || _availableColorIds.contains(id);
-                          },
-                          onSelected: (value) async {
-                            setState(() {
-                              _selectedColor = value;
-                            });
-                            await _reloadOptionsAvailability();
-                            await _recalculatePotPrice();
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Text('Количество', style: AppText.medium_14.copyWith(color: AppColors.black)),
-                            const Spacer(),
-                            IconButton(
-                              onPressed: _quantity > 1
-                                  ? () {
-                                      setState(() {
-                                        _quantity -= 1;
-                                      });
-                                    }
-                                  : null,
-                              icon: const Icon(Icons.remove_circle_outline),
-                            ),
-                            Text('$_quantity', style: AppText.medium_16.copyWith(color: AppColors.black)),
-                            IconButton(
-                              onPressed: () {
-                                setState(() {
-                                  _quantity += 1;
-                                });
-                              },
-                              icon: const Icon(Icons.add_circle_outline),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Text('Цена горшка: ${_price(_potPrice)}', style: AppText.medium_14.copyWith(color: AppColors.grey)),
-                        const SizedBox(height: 6),
-                        Text('Итого: ${_price(total)}', style: AppText.bold_18.copyWith(color: AppColors.brown)),
-                        const SizedBox(height: 14),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: _isActionLoading ? null : _addToWishlist,
-                                child: Text('В избранное', style: AppText.medium_14.copyWith(color: AppColors.brown)),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(backgroundColor: AppColors.brown),
-                                onPressed: _isActionLoading ? null : _addToCart,
-                                child: Text('В корзину', style: AppText.medium_14.copyWith(color: AppColors.white)),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                        );
+                      },
                     ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(
+                      gallery.length,
+                      (i) => Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: i == _currentImageIndex
+                              ? AppColors.brown
+                              : AppColors.grey_light,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                Text(
+                  plant.name,
+                  style: AppText.bold_20.copyWith(color: AppColors.black),
+                ),
+                if (plant.description.trim().isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    plant.description,
+                    style: AppText.medium_14.copyWith(
+                      color: AppColors.black_transparent,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 6),
+                Text(
+                  'Текущий выбор: ${_selectedMaterial ?? ''} ${_selectedSize ?? ''} ${_selectedColor ?? ''}',
+                  style: AppText.medium_12.copyWith(color: AppColors.grey),
+                ),
+                const SizedBox(height: 12),
+                _selector(
+                  title: 'Размер горшка',
+                  items: _sizes.map((e) => e.name).toList(),
+                  selected: _selectedSize,
+                  isEnabled: (item) {
+                    final id = _sizeIdByName(item);
+                    return id == null || _availableSizeIds.contains(id);
+                  },
+                  onSelected: (value) async {
+                    setState(() {
+                      _selectedSize = value;
+                    });
+                    await _reloadOptionsAvailability();
+                    await _recalculatePotPrice();
+                  },
+                ),
+                const SizedBox(height: 12),
+                _selector(
+                  title: 'Материал горшка',
+                  items: _materials.map((e) => e.name).toList(),
+                  selected: _selectedMaterial,
+                  isEnabled: (item) {
+                    final id = _materialIdByName(item);
+                    return id == null || _availableMaterialIds.contains(id);
+                  },
+                  onSelected: (value) async {
+                    setState(() {
+                      _selectedMaterial = value;
+                    });
+                    await _reloadOptionsAvailability();
+                    await _recalculatePotPrice();
+                  },
+                ),
+                const SizedBox(height: 12),
+                _selector(
+                  title: 'Цвет горшка',
+                  items: _colors.map((e) => e.name).toList(),
+                  selected: _selectedColor,
+                  isEnabled: (item) {
+                    final id = _colorIdByName(item);
+                    return id == null || _availableColorIds.contains(id);
+                  },
+                  onSelected: (value) async {
+                    setState(() {
+                      _selectedColor = value;
+                    });
+                    await _reloadOptionsAvailability();
+                    await _recalculatePotPrice();
+                  },
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Text(
+                      'Количество',
+                      style: AppText.medium_14.copyWith(color: AppColors.black),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: _quantity > 1
+                          ? () {
+                              setState(() {
+                                _quantity -= 1;
+                              });
+                            }
+                          : null,
+                      icon: const Icon(Icons.remove_circle_outline),
+                    ),
+                    Text(
+                      '$_quantity',
+                      style: AppText.medium_16.copyWith(color: AppColors.black),
+                    ),
+                    IconButton(
+                      onPressed: () {
+                        setState(() {
+                          _quantity += 1;
+                        });
+                      },
+                      icon: const Icon(Icons.add_circle_outline),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Цена горшка: ${_price(_potPrice)}',
+                  style: AppText.medium_14.copyWith(color: AppColors.grey),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Итого: ${_price(total)}',
+                  style: AppText.bold_18.copyWith(color: AppColors.brown),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _isActionLoading ? null : _addToWishlist,
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: AppColors.brown),
+                        ),
+                        child: Text(
+                          'В избранное',
+                          style: AppText.medium_14.copyWith(
+                            color: AppColors.brown,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.brown,
+                        ),
+                        onPressed: _isActionLoading ? null : _addToCart,
+                        child: Text(
+                          'В корзину',
+                          style: AppText.medium_14.copyWith(
+                            color: AppColors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
     );
   }
 }

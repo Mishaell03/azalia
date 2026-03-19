@@ -483,14 +483,21 @@ class _AdminProductsCartReceiptsState extends State<AdminProductsCartReceipts> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: _statusColor(order.statusCode).withValues(alpha: 0.12),
+                                    color: _statusColor(
+                                      order.statusCode,
+                                    ).withValues(alpha: 0.12),
                                     borderRadius: BorderRadius.circular(999),
                                   ),
                                   child: Text(
                                     order.status,
-                                    style: AppText.medium_12.copyWith(color: _statusColor(order.statusCode)),
+                                    style: AppText.medium_12.copyWith(
+                                      color: _statusColor(order.statusCode),
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(height: 10),
@@ -514,7 +521,7 @@ class _AdminProductsCartReceiptsState extends State<AdminProductsCartReceipts> {
                                   : () => _submitOrder(order),
                               style: OutlinedButton.styleFrom(
                                 backgroundColor: AppColors.brown,
-                                side: const BorderSide(color: AppColors.white),
+                                side: const BorderSide(color: AppColors.brown),
                               ),
                               child: Text(
                                 _isSaving

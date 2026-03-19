@@ -143,7 +143,7 @@ class _AppEditProfile extends State<AppEditProfile> {
 
     // Передаем обновленное фото обратно в ProfilePage
     widget.onImageUpdated(_currentImageFile);
-    
+
     Navigator.of(context).pop();
     widget.onUpdateProfile();
   }
@@ -187,9 +187,9 @@ class _AppEditProfile extends State<AppEditProfile> {
             AppProfileImage(
               selectedImageFile: _currentImageFile,
               // Если выбран новый файл, показываем его, иначе показываем текущую аватарку
-              avatarBase64: _currentImageFile == null 
-                  ? widget.avatarBase64 
-                  : null, 
+              avatarBase64: _currentImageFile == null
+                  ? widget.avatarBase64
+                  : null,
               onTap: _showImageSourceDialog,
               size: 100,
               cameraIconSize: 32,
@@ -237,16 +237,22 @@ class _AppEditProfile extends State<AppEditProfile> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
+          style: TextButton.styleFrom(
+            side: const BorderSide(color: AppColors.brown),
+          ),
           child: Text(
             'Отмена',
-            style: AppText.medium_16.copyWith(color: AppColors.grey),
+            style: AppText.medium_14.copyWith(color: AppColors.brown),
           ),
         ),
         TextButton(
           onPressed: _saveProfile,
+          style: TextButton.styleFrom(backgroundColor: AppColors.brown),
           child: Text(
             'Сохранить',
-            style: AppText.medium_16.copyWith(color: AppColors.brown),
+            style: AppText.medium_14.copyWith(
+              color: AppColors.white_transparent,
+            ),
           ),
         ),
       ],

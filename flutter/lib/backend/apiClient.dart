@@ -75,11 +75,13 @@ class ApiClient {
     final uri = Uri.parse(url);
     try {
       debugPrint('ApiClient: POST к $uri');
-      final response = await http.post(
-        uri,
-        headers: _headers,
-        body: body != null ? jsonEncode(body) : null,
-      ).timeout(const Duration(seconds: 10));
+      final response = await http
+          .post(
+            uri,
+            headers: _headers,
+            body: body != null ? jsonEncode(body) : null,
+          )
+          .timeout(const Duration(seconds: 10));
       _log('POST', uri, response, body: body);
       return _handleResponse(response);
     } on ApiException {
@@ -224,7 +226,9 @@ class ApiClient {
     }
 
     if (status == 401) {
-      throw UnauthorizedException(_extractErrorMessage(decoded) ?? 'Не авторизован');
+      throw UnauthorizedException(
+        _extractErrorMessage(decoded) ?? 'Не авторизован',
+      );
     }
 
     if (status == 403) {
@@ -282,17 +286,22 @@ class ApiClient {
       return detail;
     }
     if (detail is List && detail.isNotEmpty) {
-      final parts = detail.map((item) {
-        if (item is Map<String, dynamic>) {
-          final loc = item['loc'] is List ? (item['loc'] as List).join('.') : null;
-          final msg = item['msg']?.toString();
-          if (loc != null && msg != null) {
-            return '$loc: $msg';
-          }
-          return msg ?? item.toString();
-        }
-        return item.toString();
-      }).where((part) => part.isNotEmpty).toList();
+      final parts = detail
+          .map((item) {
+            if (item is Map<String, dynamic>) {
+              final loc = item['loc'] is List
+                  ? (item['loc'] as List).join('.')
+                  : null;
+              final msg = item['msg']?.toString();
+              if (loc != null && msg != null) {
+                return '$loc: $msg';
+              }
+              return msg ?? item.toString();
+            }
+            return item.toString();
+          })
+          .where((part) => part.isNotEmpty)
+          .toList();
 
       if (parts.isNotEmpty) {
         return parts.join('\n');

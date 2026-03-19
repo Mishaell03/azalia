@@ -152,6 +152,21 @@ class ApiConfig {
       '$baseURL/company-calendar-events';
   static const String companyCalendarOrganizations =
       '$baseURL/company-calendar-events/organizations';
+  static const String companyCalendarPreferenceOptions =
+      '$baseURL/company-calendar-events/preferences/options';
+  static String companyCalendarPreferences(int eventId) =>
+      '$baseURL/company-calendar-events/$eventId/preferences';
+  static String companyCalendarPreferenceById(int preferenceId) =>
+      '$baseURL/company-calendar-events/preferences/$preferenceId';
+  static const String corporateCompany =
+      '$baseURL/corporate-subscription/company';
+  static const String corporateCompanyMembers =
+      '$baseURL/corporate-subscription/company/members';
+  static String corporateCompanyMemberByUser(int userId, {int? companyId}) {
+    final base = '$baseURL/corporate-subscription/company/members/$userId';
+    if (companyId == null) return base;
+    return '$base?company_id=$companyId';
+  }
 
   // plants
   static const String plants = '$baseURL/plants/';

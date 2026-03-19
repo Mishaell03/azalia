@@ -204,6 +204,10 @@ def create_database() -> None:
             id                  INTEGER PRIMARY KEY AUTOINCREMENT,
             name                TEXT NOT NULL UNIQUE,
             owner_user_id       INTEGER NOT NULL,
+            description         TEXT,
+            contact_phone       TEXT,
+            contact_email       TEXT,
+            address             TEXT,
             status              TEXT NOT NULL DEFAULT 'active'
                                 CHECK(status IN ('active', 'blocked', 'deleted')),
             created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -673,6 +677,25 @@ def create_database() -> None:
             FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS company_calendar_event_preferences (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            company_event_id        INTEGER NOT NULL,
+            category_id             INTEGER,
+            product_id              INTEGER,
+            created_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CHECK (
+                (category_id IS NOT NULL AND product_id IS NULL)
+                OR
+                (category_id IS NULL AND product_id IS NOT NULL)
+            ),
+            UNIQUE(user_id, company_event_id, category_id, product_id),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (company_event_id) REFERENCES company_calendar_events(id) ON DELETE CASCADE,
+            FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE,
+            FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+        );
+
         
         -- СКЛАД / СПИСАНИЯ / ДВИЖЕНИЕ
         
@@ -837,6 +860,10 @@ def create_database() -> None:
     _ensure_column("subscription_plans", "notifications", "notifications TEXT NOT NULL DEFAULT 'basic'")
     _ensure_column("subscription_plans", "has_corporate", "has_corporate INTEGER NOT NULL DEFAULT 0")
     _ensure_column("subscription_plans", "has_analytics", "has_analytics INTEGER NOT NULL DEFAULT 0")
+    _ensure_column("companies", "description", "description TEXT")
+    _ensure_column("companies", "contact_phone", "contact_phone TEXT")
+    _ensure_column("companies", "contact_email", "contact_email TEXT")
+    _ensure_column("companies", "address", "address TEXT")
     _ensure_column("user_plants", "photo_url", "photo_url TEXT")
     _ensure_column("user_plants", "watering_requirement", "watering_requirement TEXT")
     _ensure_column("user_plants", "soil_change_frequency_days", "soil_change_frequency_days INTEGER")
@@ -1043,6 +1070,7 @@ def create_database() -> None:
         CREATE INDEX IF NOT EXISTS idx_user_plant_care_dates_user_type ON user_plant_care_dates(user_id, care_type);
         CREATE INDEX IF NOT EXISTS idx_user_plant_care_dates_plant_date ON user_plant_care_dates(user_plant_id, care_type, care_date);
         CREATE INDEX IF NOT EXISTS idx_company_calendar_events_company_date ON company_calendar_events(company_id, event_date);
+        CREATE INDEX IF NOT EXISTS idx_company_calendar_event_preferences_user_event ON company_calendar_event_preferences(user_id, company_event_id);
 
         CREATE INDEX IF NOT EXISTS idx_employees_store_id ON employees(store_id);
         CREATE INDEX IF NOT EXISTS idx_employees_active ON employees(is_active);
@@ -1504,6 +1532,7 @@ def validate_schema() -> None:
         "user_important_date_preferences",
         "user_plant_care_dates",
         "company_calendar_events",
+        "company_calendar_event_preferences",
         "stores",
         "employees",
         "inventory",

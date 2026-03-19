@@ -85,15 +85,8 @@ def derive_soil_change_frequency_days(
     watering_frequency_days: int,
     explicit_days: Optional[int],
 ) -> int:
-    if explicit_days is not None and explicit_days > 0:
-        return int(explicit_days)
-    if watering_frequency_days <= 2:
-        return 120
-    if watering_frequency_days <= 5:
-        return 160
-    if watering_frequency_days <= 8:
-        return 180
-    return 240
+    # Product requirement: soil replacement is always once per half-year.
+    return 180
 
 
 def next_due_date(last_action_date: Optional[str], frequency_days: int) -> str:

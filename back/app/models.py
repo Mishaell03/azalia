@@ -97,6 +97,10 @@ class Company:
     id: int
     name: str
     owner_user_id: int
+    description: Optional[str]
+    contact_phone: Optional[str]
+    contact_email: Optional[str]
+    address: Optional[str]
     status: str
     created_at: str
     updated_at: str

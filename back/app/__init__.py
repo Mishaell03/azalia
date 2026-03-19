@@ -17,6 +17,7 @@ from app.routes.important_dates import router as important_dates_router
 from app.routes.plant_care_dates import router as plant_care_dates_router
 from app.routes.company_calendar_events import router as company_calendar_events_router
 from app.routes.user_plants import router as user_plants_router
+from app.routes.corporate_subscription import router as corporate_subscription_router
 
 
 def create_app() -> FastAPI:
@@ -42,6 +43,7 @@ def create_app() -> FastAPI:
             {"name": "plant-care-dates", "description": "Даты ухода за растениями"},
             {"name": "user-plants", "description": "Растения пользователя и уход"},
             {"name": "company-calendar-events", "description": "Корпоративный календарь организаций"},
+            {"name": "corporate-subscription", "description": "Корпоративная подписка и участники компании"},
         ],
     )
 
@@ -111,6 +113,7 @@ def create_app() -> FastAPI:
     app.include_router(plant_care_dates_router)
     app.include_router(user_plants_router)
     app.include_router(company_calendar_events_router)
+    app.include_router(corporate_subscription_router)
 
     @app.get("/")
     async def root():

@@ -216,13 +216,23 @@ class _AdminProductsCartProcurementState
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            style: TextButton.styleFrom(side: const BorderSide(color: AppColors.brown)),
-            child: Text('Отмена', style: AppText.medium_14.copyWith(color: AppColors.brown)),
+            style: TextButton.styleFrom(
+              side: const BorderSide(color: AppColors.brown),
+            ),
+            child: Text(
+              'Отмена',
+              style: AppText.medium_14.copyWith(color: AppColors.brown),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(backgroundColor: AppColors.brown),
-            child: Text('Оформить', style: AppText.medium_14.copyWith(color: AppColors.white_transparent)),
+            child: Text(
+              'Оформить',
+              style: AppText.medium_14.copyWith(
+                color: AppColors.white_transparent,
+              ),
+            ),
           ),
         ],
       ),
@@ -288,8 +298,13 @@ class _AdminProductsCartProcurementState
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            style: TextButton.styleFrom(side: const BorderSide(color: AppColors.brown)),
-            child: Text('Отмена', style: AppText.medium_14.copyWith(color: AppColors.brown)),
+            style: TextButton.styleFrom(
+              side: const BorderSide(color: AppColors.brown),
+            ),
+            child: Text(
+              'Отмена',
+              style: AppText.medium_14.copyWith(color: AppColors.brown),
+            ),
           ),
           TextButton(
             onPressed: () {
@@ -298,7 +313,12 @@ class _AdminProductsCartProcurementState
               Navigator.of(ctx).pop(parsed);
             },
             style: TextButton.styleFrom(backgroundColor: AppColors.brown),
-            child: Text('Сохранить', style: AppText.medium_14.copyWith(color: AppColors.white_transparent)),
+            child: Text(
+              'Сохранить',
+              style: AppText.medium_14.copyWith(
+                color: AppColors.white_transparent,
+              ),
+            ),
           ),
         ],
       ),
@@ -348,8 +368,11 @@ class _AdminProductsCartProcurementState
                     width: 72,
                     height: 72,
                     fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) =>
-                        Container(width: 72, height: 72, color: AppColors.grey_light),
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      width: 72,
+                      height: 72,
+                      color: AppColors.grey_light,
+                    ),
                   ),
           ),
           const SizedBox(width: 10),
@@ -357,12 +380,17 @@ class _AdminProductsCartProcurementState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, style: AppText.medium_16.copyWith(color: AppColors.black)),
+                Text(
+                  name,
+                  style: AppText.medium_16.copyWith(color: AppColors.black),
+                ),
                 const SizedBox(height: 4),
                 Text(
                   'На складе: $quantityAvailable шт.',
                   style: AppText.medium_12.copyWith(
-                    color: quantityAvailable <= 0 ? AppColors.error : AppColors.grey,
+                    color: quantityAvailable <= 0
+                        ? AppColors.error
+                        : AppColors.grey,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -370,10 +398,7 @@ class _AdminProductsCartProcurementState
                   'Закуп: ${costPrice.toStringAsFixed(2)} ₽ • Продажа: ${basePrice.toStringAsFixed(2)} ₽',
                   style: AppText.medium_12.copyWith(color: AppColors.grey),
                 ),
-                if (bottom != null) ...[
-                  const SizedBox(height: 6),
-                  bottom,
-                ],
+                if (bottom != null) ...[const SizedBox(height: 6), bottom],
               ],
             ),
           ),
@@ -386,231 +411,290 @@ class _AdminProductsCartProcurementState
   @override
   Widget build(BuildContext context) {
     final canCheckout = _selectedCartIds.isNotEmpty && !_isActionLoading;
-    final allSelected = _cartItems.isNotEmpty && _selectedCartIds.length == _cartItems.length;
+    final allSelected =
+        _cartItems.isNotEmpty && _selectedCartIds.length == _cartItems.length;
 
     return Scaffold(
       appBar: AppHeader(items: adminProductsHeaderItems),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Text(_error!))
-              : RefreshIndicator(
-                  onRefresh: _reloadStoreData,
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      Text('Закупки', style: AppText.bold_18.copyWith(color: AppColors.black)),
-                      const SizedBox(height: 12),
-                      if (_stores.isNotEmpty)
-                        DropdownButtonFormField<int>(
-                          isExpanded: true,
-                          initialValue: _selectedStoreId,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            labelText: 'Выбор магазина',
-                          ),
-                          selectedItemBuilder: (context) {
-                            return _stores
-                                .map(
-                                  (s) => Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: SingleChildScrollView(
-                                      scrollDirection: Axis.horizontal,
-                                      child: Text(
-                                        '${s.name} • ${s.address}',
-                                        softWrap: false,
-                                      ),
-                                    ),
-                                  ),
-                                )
-                                .toList();
-                          },
-                          items: _stores
-                              .map(
-                                (s) => DropdownMenuItem<int>(
-                                  value: s.id,
-                                  child: SingleChildScrollView(
-                                    scrollDirection: Axis.horizontal,
-                                    child: Text(
-                                      '${s.name} • ${s.address}',
-                                      softWrap: false,
-                                    ),
+          ? Center(child: Text(_error!))
+          : RefreshIndicator(
+              onRefresh: _reloadStoreData,
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  Text(
+                    'Закупки',
+                    style: AppText.bold_18.copyWith(color: AppColors.black),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_stores.isNotEmpty)
+                    DropdownButtonFormField<int>(
+                      isExpanded: true,
+                      initialValue: _selectedStoreId,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        labelText: 'Выбор магазина',
+                      ),
+                      selectedItemBuilder: (context) {
+                        return _stores
+                            .map(
+                              (s) => Align(
+                                alignment: Alignment.centerLeft,
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Text(
+                                    '${s.name} • ${s.address}',
+                                    softWrap: false,
                                   ),
                                 ),
-                              )
-                              .toList(),
-                          onChanged: _isActionLoading ? null : _onStoreChanged,
-                        )
-                      else
-                        Text('Нет доступных магазинов', style: AppText.medium_14.copyWith(color: AppColors.error)),
-                      const SizedBox(height: 16),
-                      InkWell(
-                        onTap: () {
-                          setState(() {
-                            _missingExpanded = !_missingExpanded;
-                          });
-                        },
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                'Отсутствующие товары (${_missingItems.length})',
-                                style: AppText.bold_18.copyWith(color: AppColors.black),
+                              ),
+                            )
+                            .toList();
+                      },
+                      items: _stores
+                          .map(
+                            (s) => DropdownMenuItem<int>(
+                              value: s.id,
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Text(
+                                  '${s.name} • ${s.address}',
+                                  softWrap: false,
+                                ),
                               ),
                             ),
-                            Icon(
-                              _missingExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                              color: AppColors.brown,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      if (_missingExpanded)
-                        if (_missingItems.isEmpty)
-                          Text('Отсутствующих товаров нет', style: AppText.medium_14.copyWith(color: AppColors.grey))
-                        else
-                          ..._missingItems.map(
-                            (item) => _buildProductCard(
-                              name: item.name,
-                              quantityAvailable: item.quantityAvailable,
-                              costPrice: item.costPrice,
-                              basePrice: item.basePrice,
-                              imageUrl: item.imageUrl,
-                              trailing: IconButton(
-                                onPressed: _isActionLoading ? null : () => _addToCart(item),
-                                icon: const Icon(Icons.add_shopping_cart, color: AppColors.brown),
-                              ),
+                          )
+                          .toList(),
+                      onChanged: _isActionLoading ? null : _onStoreChanged,
+                    )
+                  else
+                    Text(
+                      'Нет доступных магазинов',
+                      style: AppText.medium_14.copyWith(color: AppColors.error),
+                    ),
+                  const SizedBox(height: 16),
+                  InkWell(
+                    onTap: () {
+                      setState(() {
+                        _missingExpanded = !_missingExpanded;
+                      });
+                    },
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Отсутствующие товары (${_missingItems.length})',
+                            style: AppText.bold_18.copyWith(
+                              color: AppColors.black,
                             ),
                           ),
-                      const SizedBox(height: 16),
-                      InkWell(
-                        onTap: () {
-                          setState(() {
-                            _catalogExpanded = !_catalogExpanded;
-                          });
-                        },
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                'Каталог (${_catalogItems.length})',
-                                style: AppText.bold_18.copyWith(color: AppColors.black),
-                              ),
-                            ),
-                            Icon(
-                              _catalogExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                        ),
+                        Icon(
+                          _missingExpanded
+                              ? Icons.keyboard_arrow_up
+                              : Icons.keyboard_arrow_down,
+                          color: AppColors.brown,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (_missingExpanded)
+                    if (_missingItems.isEmpty)
+                      Text(
+                        'Отсутствующих товаров нет',
+                        style: AppText.medium_14.copyWith(
+                          color: AppColors.grey,
+                        ),
+                      )
+                    else
+                      ..._missingItems.map(
+                        (item) => _buildProductCard(
+                          name: item.name,
+                          quantityAvailable: item.quantityAvailable,
+                          costPrice: item.costPrice,
+                          basePrice: item.basePrice,
+                          imageUrl: item.imageUrl,
+                          trailing: IconButton(
+                            onPressed: _isActionLoading
+                                ? null
+                                : () => _addToCart(item),
+                            icon: const Icon(
+                              Icons.add_shopping_cart,
                               color: AppColors.brown,
                             ),
-                          ],
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      if (_catalogExpanded)
-                        if (_catalogItems.isEmpty)
-                          Text('Доступных товаров нет', style: AppText.medium_14.copyWith(color: AppColors.grey))
-                        else
-                          ..._catalogItems.map(
-                            (item) => _buildProductCard(
-                              name: item.name,
-                              quantityAvailable: item.quantityAvailable,
-                              costPrice: item.costPrice,
-                              basePrice: item.basePrice,
-                              imageUrl: item.imageUrl,
-                              trailing: IconButton(
-                                onPressed: _isActionLoading ? null : () => _addToCart(item),
-                                icon: const Icon(Icons.add_shopping_cart, color: AppColors.brown),
-                              ),
+                  const SizedBox(height: 16),
+                  InkWell(
+                    onTap: () {
+                      setState(() {
+                        _catalogExpanded = !_catalogExpanded;
+                      });
+                    },
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Каталог (${_catalogItems.length})',
+                            style: AppText.bold_18.copyWith(
+                              color: AppColors.black,
                             ),
                           ),
-                      const SizedBox(height: 16),
-                      Text('Корзина закупки (${_cartItems.length})', style: AppText.bold_18.copyWith(color: AppColors.black)),
-                      if (_cartItems.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Row(
+                        ),
+                        Icon(
+                          _catalogExpanded
+                              ? Icons.keyboard_arrow_up
+                              : Icons.keyboard_arrow_down,
+                          color: AppColors.brown,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (_catalogExpanded)
+                    if (_catalogItems.isEmpty)
+                      Text(
+                        'Доступных товаров нет',
+                        style: AppText.medium_14.copyWith(
+                          color: AppColors.grey,
+                        ),
+                      )
+                    else
+                      ..._catalogItems.map(
+                        (item) => _buildProductCard(
+                          name: item.name,
+                          quantityAvailable: item.quantityAvailable,
+                          costPrice: item.costPrice,
+                          basePrice: item.basePrice,
+                          imageUrl: item.imageUrl,
+                          trailing: IconButton(
+                            onPressed: _isActionLoading
+                                ? null
+                                : () => _addToCart(item),
+                            icon: const Icon(
+                              Icons.add_shopping_cart,
+                              color: AppColors.brown,
+                            ),
+                          ),
+                        ),
+                      ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Корзина закупки (${_cartItems.length})',
+                    style: AppText.bold_18.copyWith(color: AppColors.black),
+                  ),
+                  if (_cartItems.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: allSelected,
+                          activeColor: AppColors.brown,
+                          onChanged: _isActionLoading
+                              ? null
+                              : (value) {
+                                  setState(() {
+                                    if (value == true) {
+                                      _selectedCartIds = _cartItems
+                                          .map((e) => e.id)
+                                          .toSet();
+                                    } else {
+                                      _selectedCartIds = <int>{};
+                                    }
+                                  });
+                                },
+                        ),
+                        Text(
+                          'Выбрать все',
+                          style: AppText.medium_14.copyWith(
+                            color: AppColors.black,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  if (_cartItems.isEmpty)
+                    Text(
+                      'Корзина пуста',
+                      style: AppText.medium_14.copyWith(color: AppColors.grey),
+                    )
+                  else
+                    ..._cartItems.map((item) {
+                      final isSelected = _selectedCartIds.contains(item.id);
+                      return _buildProductCard(
+                        name: item.name,
+                        quantityAvailable: item.quantityAvailable,
+                        costPrice: item.costPrice,
+                        basePrice: item.basePrice,
+                        imageUrl: item.imageUrl,
+                        bottom: Text(
+                          'Заказать: ${item.quantityToOrder} шт.',
+                          style: AppText.medium_12.copyWith(
+                            color: AppColors.brown,
+                          ),
+                        ),
+                        trailing: Column(
                           children: [
                             Checkbox(
-                              value: allSelected,
+                              value: isSelected,
                               activeColor: AppColors.brown,
                               onChanged: _isActionLoading
                                   ? null
                                   : (value) {
                                       setState(() {
                                         if (value == true) {
-                                          _selectedCartIds = _cartItems.map((e) => e.id).toSet();
+                                          _selectedCartIds.add(item.id);
                                         } else {
-                                          _selectedCartIds = <int>{};
+                                          _selectedCartIds.remove(item.id);
                                         }
                                       });
                                     },
                             ),
-                            Text(
-                              'Выбрать все',
-                              style: AppText.medium_14.copyWith(color: AppColors.black),
+                            IconButton(
+                              onPressed: _isActionLoading
+                                  ? null
+                                  : () => _changeCartQuantity(item),
+                              icon: const Icon(
+                                Icons.edit,
+                                color: AppColors.brown,
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: _isActionLoading
+                                  ? null
+                                  : () => _removeCartItem(item),
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: AppColors.error,
+                              ),
                             ),
                           ],
                         ),
-                      ],
-                      const SizedBox(height: 8),
-                      if (_cartItems.isEmpty)
-                        Text('Корзина пуста', style: AppText.medium_14.copyWith(color: AppColors.grey))
-                      else
-                        ..._cartItems.map((item) {
-                          final isSelected = _selectedCartIds.contains(item.id);
-                          return _buildProductCard(
-                            name: item.name,
-                            quantityAvailable: item.quantityAvailable,
-                            costPrice: item.costPrice,
-                            basePrice: item.basePrice,
-                            imageUrl: item.imageUrl,
-                            bottom: Text(
-                              'Заказать: ${item.quantityToOrder} шт.',
-                              style: AppText.medium_12.copyWith(color: AppColors.brown),
-                            ),
-                            trailing: Column(
-                              children: [
-                                Checkbox(
-                                  value: isSelected,
-                                  activeColor: AppColors.brown,
-                                  onChanged: _isActionLoading
-                                      ? null
-                                      : (value) {
-                                          setState(() {
-                                            if (value == true) {
-                                              _selectedCartIds.add(item.id);
-                                            } else {
-                                              _selectedCartIds.remove(item.id);
-                                            }
-                                          });
-                                        },
-                                ),
-                                IconButton(
-                                  onPressed: _isActionLoading ? null : () => _changeCartQuantity(item),
-                                  icon: const Icon(Icons.edit, color: AppColors.brown),
-                                ),
-                                IconButton(
-                                  onPressed: _isActionLoading ? null : () => _removeCartItem(item),
-                                  icon: const Icon(Icons.delete_outline, color: AppColors.error),
-                                ),
-                              ],
-                            ),
-                          );
-                        }),
-                      const SizedBox(height: 10),
-                      OutlinedButton(
-                        onPressed: canCheckout ? _checkout : null,
-                        style: OutlinedButton.styleFrom(
-                          backgroundColor: AppColors.brown,
-                          side: const BorderSide(color: AppColors.white),
-                        ),
-                        child: Text(
-                          _isActionLoading ? 'Обработка...' : 'Оформить заказ',
-                          style: AppText.medium_14.copyWith(color: AppColors.white_transparent),
-                        ),
+                      );
+                    }),
+                  const SizedBox(height: 10),
+                  OutlinedButton(
+                    onPressed: canCheckout ? _checkout : null,
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: AppColors.brown,
+                      side: const BorderSide(color: AppColors.brown),
+                    ),
+                    child: Text(
+                      _isActionLoading ? 'Обработка...' : 'Оформить заказ',
+                      style: AppText.medium_14.copyWith(
+                        color: AppColors.white_transparent,
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                ],
+              ),
+            ),
     );
   }
 }

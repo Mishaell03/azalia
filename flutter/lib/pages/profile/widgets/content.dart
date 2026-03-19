@@ -128,7 +128,7 @@ class AppProfileContent extends StatelessWidget {
                   AppProfileSetting(
                     icon: Icons.admin_panel_settings,
                     title: 'Админ-панель',
-                    onTap: (){
+                    onTap: () {
                       context.go('/admin');
                     },
                   ),
@@ -182,7 +182,7 @@ class AppProfileContent extends StatelessWidget {
               child: OutlinedButton(
                 onPressed: onLogout,
                 style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: AppColors.error, width: 2),
+                  side: const BorderSide(color: AppColors.brown, width: 2),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),

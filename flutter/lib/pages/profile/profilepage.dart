@@ -105,24 +105,22 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-
   void _showEditProfileDialog() {
     final user = _sessionService.currentUser;
     showDialog(
       context: context,
-      builder: (context) =>
-          AppEditProfile(
-            nameController: _nameController,
-            phoneController: _phoneController,
-            selectedImageFile: _selectedImageFile,
-            avatarBase64: user?.avatar,
-            onUpdateProfile: _updateUserProfile,
-            onImageUpdated: (File? newImage) {
-              setState(() {
-                _selectedImageFile = newImage;
-              });
-            },
-          ),
+      builder: (context) => AppEditProfile(
+        nameController: _nameController,
+        phoneController: _phoneController,
+        selectedImageFile: _selectedImageFile,
+        avatarBase64: user?.avatar,
+        onUpdateProfile: _updateUserProfile,
+        onImageUpdated: (File? newImage) {
+          setState(() {
+            _selectedImageFile = newImage;
+          });
+        },
+      ),
     );
   }
 
@@ -135,7 +133,8 @@ class _ProfilePageState extends State<ProfilePage> {
       if (_selectedImageFile != null) {
         try {
           final avatarResponse = await ProfileService.uploadAvatar(
-              _selectedImageFile!);
+            _selectedImageFile!,
+          );
           if (avatarResponse.success && avatarResponse.avatar != null) {
             newAvatarBase64 = avatarResponse.avatar;
           }
@@ -180,29 +179,28 @@ class _ProfilePageState extends State<ProfilePage> {
         if (!mounted) return;
         showDialog(
           context: context,
-          builder: (context) =>
-              AlertDialog(
-                title: Text(
-                  'Успешно',
-                  style: AppText.bold_18.copyWith(color: AppColors.black),
+          builder: (context) => AlertDialog(
+            title: Text(
+              'Успешно',
+              style: AppText.bold_18.copyWith(color: AppColors.black),
+            ),
+            content: Text(
+              'Данные профиля обновлены',
+              style: AppText.medium_16.copyWith(color: AppColors.grey),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  setState(() {});
+                },
+                child: Text(
+                  'OK',
+                  style: AppText.medium_16.copyWith(color: AppColors.brown),
                 ),
-                content: Text(
-                  'Данные профиля обновлены',
-                  style: AppText.medium_16.copyWith(color: AppColors.grey),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      setState(() {});
-                    },
-                    child: Text(
-                      'OK',
-                      style: AppText.medium_16.copyWith(color: AppColors.brown),
-                    ),
-                  ),
-                ],
               ),
+            ],
+          ),
         );
       } else {
         _showErrorDialog('Не удалось обновить профиль');
@@ -217,133 +215,135 @@ class _ProfilePageState extends State<ProfilePage> {
   void _showErrorDialog(String message) {
     showDialog(
       context: context,
-      builder: (context) =>
-          AlertDialog(
-            title: Text(
-              'Ошибка',
-              style: AppText.bold_18.copyWith(color: AppColors.error),
+      builder: (context) => AlertDialog(
+        title: Text(
+          'Ошибка',
+          style: AppText.bold_18.copyWith(color: AppColors.error),
+        ),
+        content: Text(
+          message,
+          style: AppText.medium_16.copyWith(color: AppColors.grey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(
+              'OK',
+              style: AppText.medium_16.copyWith(color: AppColors.brown),
             ),
-            content: Text(
-              message,
-              style: AppText.medium_16.copyWith(color: AppColors.grey),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text(
-                  'OK',
-                  style: AppText.medium_16.copyWith(color: AppColors.brown),
-                ),
-              ),
-            ],
           ),
+        ],
+      ),
     );
   }
 
   void _logout() async {
     showDialog(
       context: context,
-      builder: (context) =>
-          AlertDialog(
-            title: Text(
-              'Выход',
-              style: AppText.bold_18.copyWith(color: AppColors.black),
+      builder: (context) => AlertDialog(
+        title: Text(
+          'Выход',
+          style: AppText.bold_18.copyWith(color: AppColors.black),
+        ),
+        content: Text(
+          'Вы уверены, что хотите выйти?',
+          style: AppText.medium_16.copyWith(color: AppColors.grey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            style: TextButton.styleFrom(
+              side: const BorderSide(color: AppColors.brown),
             ),
-            content: Text(
-              'Вы уверены, что хотите выйти?',
-              style: AppText.medium_16.copyWith(color: AppColors.grey),
+            child: Text(
+              'Отмена',
+              style: AppText.medium_14.copyWith(color: AppColors.brown),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text(
-                  'Отмена',
-                  style: AppText.medium_16.copyWith(color: AppColors.grey),
-                ),
-              ),
-              TextButton(
-                onPressed: () async {
-                  Navigator.of(context).pop();
-                  await _sessionService.clearSession();
-                  if (!context.mounted) return;
-                  context.go('/auth');
-                },
-                child: Text(
-                  'Выйти',
-                  style: AppText.medium_16.copyWith(color: AppColors.error),
-                ),
-              ),
-            ],
           ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await _sessionService.clearSession();
+              if (!context.mounted) return;
+              context.go('/auth');
+            },
+            style: TextButton.styleFrom(backgroundColor: AppColors.brown),
+            child: Text(
+              'Выйти',
+              style: AppText.medium_14.copyWith(
+                color: AppColors.white_transparent,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   void _showSettings(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) =>
-          AlertDialog(
-            title: Text(
-              'Настройки',
-              style: AppText.bold_18.copyWith(color: AppColors.black),
+      builder: (context) => AlertDialog(
+        title: Text(
+          'Настройки',
+          style: AppText.bold_18.copyWith(color: AppColors.black),
+        ),
+        content: Text(
+          'Раздел настроек в разработке',
+          style: AppText.medium_16.copyWith(color: AppColors.grey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(
+              'Закрыть',
+              style: AppText.medium_16.copyWith(color: AppColors.brown),
             ),
-            content: Text(
-              'Раздел настроек в разработке',
-              style: AppText.medium_16.copyWith(color: AppColors.grey),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text(
-                  'Закрыть',
-                  style: AppText.medium_16.copyWith(color: AppColors.brown),
-                ),
-              ),
-            ],
           ),
+        ],
+      ),
     );
   }
 
   void _showHelp(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) =>
-          AlertDialog(
-            title: Text(
-              'Помощь',
-              style: AppText.bold_18.copyWith(color: AppColors.black),
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Если у вас возникли проблемы:',
-                    style: AppText.medium_16.copyWith(color: AppColors.grey),
-                  ),
-                  const SizedBox(height: 10),
-                  _buildHelpItem('• Проверьте подключение к интернету'),
-                  _buildHelpItem('• Перезапустите приложение'),
-                  _buildHelpItem('• Обратитесь в службу поддержки'),
-                  const SizedBox(height: 20),
-                  Text(
-                    'Телефон поддержки:\n +7 (800) 555-35-35',
-                    style: AppText.medium_16.copyWith(color: AppColors.brown),
-                  ),
-                ],
+      builder: (context) => AlertDialog(
+        title: Text(
+          'Помощь',
+          style: AppText.bold_18.copyWith(color: AppColors.black),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Если у вас возникли проблемы:',
+                style: AppText.medium_16.copyWith(color: AppColors.grey),
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text(
-                  'Закрыть',
-                  style: AppText.medium_16.copyWith(color: AppColors.brown),
-                ),
+              const SizedBox(height: 10),
+              _buildHelpItem('• Проверьте подключение к интернету'),
+              _buildHelpItem('• Перезапустите приложение'),
+              _buildHelpItem('• Обратитесь в службу поддержки'),
+              const SizedBox(height: 20),
+              Text(
+                'Телефон поддержки:\n +7 (800) 555-35-35',
+                style: AppText.medium_16.copyWith(color: AppColors.brown),
               ),
             ],
           ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(
+              'Закрыть',
+              style: AppText.medium_16.copyWith(color: AppColors.brown),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -360,44 +360,43 @@ class _ProfilePageState extends State<ProfilePage> {
   void _showAbout(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) =>
-          AlertDialog(
-            title: Text(
-              'О приложении',
-              style: AppText.bold_18.copyWith(color: AppColors.black),
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Azalia Flower Shop App',
-                    style: AppText.bold_15.copyWith(color: AppColors.brown),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Версия 1.0.0',
-                    style: AppText.medium_14.copyWith(color: AppColors.grey),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Приложение для заказа комнатных растений.',
-                    style: AppText.medium_14.copyWith(color: AppColors.grey),
-                  ),
-                ],
+      builder: (context) => AlertDialog(
+        title: Text(
+          'О приложении',
+          style: AppText.bold_18.copyWith(color: AppColors.black),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Azalia Flower Shop App',
+                style: AppText.bold_15.copyWith(color: AppColors.brown),
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text(
-                  'Закрыть',
-                  style: AppText.medium_16.copyWith(color: AppColors.brown),
-                ),
+              const SizedBox(height: 10),
+              Text(
+                'Версия 1.0.0',
+                style: AppText.medium_14.copyWith(color: AppColors.grey),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Приложение для заказа комнатных растений.',
+                style: AppText.medium_14.copyWith(color: AppColors.grey),
               ),
             ],
           ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(
+              'Закрыть',
+              style: AppText.medium_16.copyWith(color: AppColors.brown),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -415,9 +414,11 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildProfileWithCollapsingHeader(User user,
-      bool isEmployee,
-      Position? position,) {
+  Widget _buildProfileWithCollapsingHeader(
+    User user,
+    bool isEmployee,
+    Position? position,
+  ) {
     return RefreshIndicator(
       onRefresh: _refreshProfile,
       child: CustomScrollView(
@@ -454,5 +455,4 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
   }
-
 }

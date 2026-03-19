@@ -186,11 +186,23 @@ class _AdminUserViewDialogState extends State<AdminUserViewDialog> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Отмена'),
+            style: TextButton.styleFrom(
+              side: const BorderSide(color: AppColors.brown),
+            ),
+            child: Text(
+              'Отмена',
+              style: AppText.medium_14.copyWith(color: AppColors.brown),
+            ),
           ),
-          FilledButton(
+          TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Удалить'),
+            style: TextButton.styleFrom(backgroundColor: AppColors.brown),
+            child: Text(
+              'Удалить',
+              style: AppText.medium_14.copyWith(
+                color: AppColors.white_transparent,
+              ),
+            ),
           ),
         ],
       ),
@@ -223,9 +235,15 @@ class _AdminUserViewDialogState extends State<AdminUserViewDialog> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Отмена'),
+              style: TextButton.styleFrom(
+                side: const BorderSide(color: AppColors.brown),
+              ),
+              child: Text(
+                'Отмена',
+                style: AppText.medium_14.copyWith(color: AppColors.brown),
+              ),
             ),
-            FilledButton(
+            TextButton(
               onPressed: () {
                 final value = controller.text.trim();
                 if (value.isEmpty) {
@@ -236,7 +254,13 @@ class _AdminUserViewDialogState extends State<AdminUserViewDialog> {
                 }
                 Navigator.of(context).pop(value);
               },
-              child: const Text('Деактивировать'),
+              style: TextButton.styleFrom(backgroundColor: AppColors.brown),
+              child: Text(
+                'Деактивировать',
+                style: AppText.medium_14.copyWith(
+                  color: AppColors.white_transparent,
+                ),
+              ),
             ),
           ],
         ),
@@ -246,10 +270,7 @@ class _AdminUserViewDialogState extends State<AdminUserViewDialog> {
     if (!mounted || reason == null) return;
 
     await _runAction(
-      () => _service.deactivateUser(
-        userId: details.id,
-        reason: reason,
-      ),
+      () => _service.deactivateUser(userId: details.id, reason: reason),
     );
   }
 
@@ -349,11 +370,23 @@ class _AdminUserViewDialogState extends State<AdminUserViewDialog> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Отмена'),
+              style: TextButton.styleFrom(
+                side: const BorderSide(color: AppColors.brown),
+              ),
+              child: Text(
+                'Отмена',
+                style: AppText.medium_14.copyWith(color: AppColors.brown),
+              ),
             ),
-            FilledButton(
+            TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Далее'),
+              style: TextButton.styleFrom(backgroundColor: AppColors.brown),
+              child: Text(
+                'Далее',
+                style: AppText.medium_14.copyWith(
+                  color: AppColors.white_transparent,
+                ),
+              ),
             ),
           ],
         ),
@@ -400,11 +433,23 @@ class _AdminUserViewDialogState extends State<AdminUserViewDialog> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Нет'),
+            style: TextButton.styleFrom(
+              side: const BorderSide(color: AppColors.brown),
+            ),
+            child: Text(
+              'Нет',
+              style: AppText.medium_14.copyWith(color: AppColors.brown),
+            ),
           ),
-          FilledButton(
+          TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Подтвердить'),
+            style: TextButton.styleFrom(backgroundColor: AppColors.brown),
+            child: Text(
+              'Подтвердить',
+              style: AppText.medium_14.copyWith(
+                color: AppColors.white_transparent,
+              ),
+            ),
           ),
         ],
       ),
@@ -518,15 +563,14 @@ class _AdminUserViewDialogState extends State<AdminUserViewDialog> {
                           : () => _editEmployee(details),
                       style: OutlinedButton.styleFrom(
                         backgroundColor: AppColors.white,
-                        side: BorderSide(color: AppColors.grey_light),
+                        side: const BorderSide(color: AppColors.brown),
                       ),
                       child: const Text(
                         'Редактировать сотрудника',
                         style: AppText.medium_12,
                       ),
                     ),
-                  if(isEmployee)
-                    SizedBox(height: 70),
+                  if (isEmployee) SizedBox(height: 70),
 
                   OutlinedButton(
                     onPressed: _isSaving
@@ -536,7 +580,7 @@ class _AdminUserViewDialogState extends State<AdminUserViewDialog> {
                         : () => _hire(details),
                     style: OutlinedButton.styleFrom(
                       backgroundColor: AppColors.white,
-                      side: BorderSide(color: AppColors.grey_light),
+                      side: const BorderSide(color: AppColors.brown),
                     ),
                     child: Text(
                       isEmployeeActive ? 'Уволить' : 'Нанять',
@@ -561,7 +605,7 @@ class _AdminUserViewDialogState extends State<AdminUserViewDialog> {
                               ),
                         style: OutlinedButton.styleFrom(
                           backgroundColor: AppColors.white,
-                          side: BorderSide(color: AppColors.grey_light),
+                          side: const BorderSide(color: AppColors.brown),
                         ),
                         child: const Text(
                           'Активировать',
@@ -577,7 +621,7 @@ class _AdminUserViewDialogState extends State<AdminUserViewDialog> {
                             : () => _deactivateWithReason(details),
                         style: OutlinedButton.styleFrom(
                           backgroundColor: AppColors.white,
-                          side: BorderSide(color: AppColors.grey_light),
+                          side: const BorderSide(color: AppColors.brown),
                         ),
                         child: const Text(
                           'Деактивировать',

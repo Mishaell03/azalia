@@ -78,15 +78,14 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
         color: color.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(
-        text,
-        style: AppText.medium_12.copyWith(color: color),
-      ),
+      child: Text(text, style: AppText.medium_12.copyWith(color: color)),
     );
   }
 
   bool _canCancelOrder(OrderHistoryDetail order) {
-    final statusCode = order.statusCode.isNotEmpty ? order.statusCode : order.status;
+    final statusCode = order.statusCode.isNotEmpty
+        ? order.statusCode
+        : order.status;
     return statusCode != 'completed' && statusCode != 'cancelled';
   }
 
@@ -99,11 +98,23 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Нет'),
+            style: TextButton.styleFrom(
+              side: const BorderSide(color: AppColors.brown),
+            ),
+            child: Text(
+              'Нет',
+              style: AppText.medium_14.copyWith(color: AppColors.brown),
+            ),
           ),
-          ElevatedButton(
+          TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Да, отменить'),
+            style: TextButton.styleFrom(backgroundColor: AppColors.brown),
+            child: Text(
+              'Да, отменить',
+              style: AppText.medium_14.copyWith(
+                color: AppColors.white_transparent,
+              ),
+            ),
           ),
         ],
       ),
@@ -138,10 +149,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
     }
   }
 
-  Widget _buildSection({
-    required String title,
-    required Widget child,
-  }) {
+  Widget _buildSection({required String title, required Widget child}) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -153,10 +161,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: AppText.bold_18.copyWith(color: AppColors.black),
-          ),
+          Text(title, style: AppText.bold_18.copyWith(color: AppColors.black)),
           const SizedBox(height: 12),
           child,
         ],
@@ -235,9 +240,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                   ),
                   Text(
                     _formatPrice(item.totalPrice),
-                    style: AppText.semibold_15.copyWith(
-                      color: AppColors.brown,
-                    ),
+                    style: AppText.semibold_15.copyWith(color: AppColors.brown),
                   ),
                 ],
               ),
@@ -294,9 +297,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                             ? event.newStatusCode
                             : event.newStatus,
                       ),
-                      style: AppText.medium_14.copyWith(
-                        color: AppColors.black,
-                      ),
+                      style: AppText.medium_14.copyWith(color: AppColors.black),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -387,7 +388,9 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                         _buildInfoRow('Обновлен', _formatDate(order.updatedAt)),
                         _buildInfoRow(
                           'Тип заказа',
-                          order.orderType == 'pickup' ? 'Самовывоз' : 'Доставка',
+                          order.orderType == 'pickup'
+                              ? 'Самовывоз'
+                              : 'Доставка',
                         ),
                         if (order.address != null && order.address!.isNotEmpty)
                           _buildInfoRow('Адрес', order.address!),
@@ -400,7 +403,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                             child: OutlinedButton(
                               onPressed: () => _cancelOrder(order),
                               style: OutlinedButton.styleFrom(
-                                side: const BorderSide(color: AppColors.error),
+                                side: const BorderSide(color: AppColors.brown),
                                 foregroundColor: AppColors.error,
                               ),
                               child: const Text('Отменить заказ'),
@@ -441,7 +444,9 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                         children: [
                           _buildInfoRow(
                             'Статус',
-                            OrderPaymentStatusConfig.paymentLabel(order.payment!.status),
+                            OrderPaymentStatusConfig.paymentLabel(
+                              order.payment!.status,
+                            ),
                           ),
                           _buildInfoRow(
                             'Способ',

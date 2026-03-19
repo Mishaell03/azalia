@@ -21,13 +21,13 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
   DateTime _focusMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
   List<ImportantDateDto> _items = const [];
   Map<int, List<ImportantDatePreferenceDto>> _prefsByDateId = const {};
-  HolidayPreferenceOptionsResponse _options =
-      HolidayPreferenceOptionsResponse(categories: const [], products: const []);
+  HolidayPreferenceOptionsResponse _options = HolidayPreferenceOptionsResponse(
+    categories: const [],
+    products: const [],
+  );
 
-  static const Map<String, (int month, int day, String title)> _fixedHolidays = {
-    'new_year': (1, 1, 'Новый год'),
-    'march_8': (3, 8, '8 марта'),
-  };
+  static const Map<String, (int month, int day, String title)> _fixedHolidays =
+      {'new_year': (1, 1, 'Новый год'), 'march_8': (3, 8, '8 марта')};
 
   @override
   void initState() {
@@ -52,7 +52,8 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
       final options = await CalendarService.getImportantDatePreferenceOptions();
       final prefsByDate = <int, List<ImportantDatePreferenceDto>>{};
       for (final item in items) {
-        prefsByDate[item.id] = await CalendarService.getImportantDatePreferences(item.id);
+        prefsByDate[item.id] =
+            await CalendarService.getImportantDatePreferences(item.id);
       }
       if (!mounted) return;
       setState(() {
@@ -99,7 +100,11 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
     }
     for (final e in _items) {
       if (_focusMonth.year >= e.eventDate.year) {
-        final key = DateTime(_focusMonth.year, e.eventDate.month, e.eventDate.day);
+        final key = DateTime(
+          _focusMonth.year,
+          e.eventDate.month,
+          e.eventDate.day,
+        );
         map[key] = (map[key] ?? 0) + 1;
       }
     }
@@ -113,10 +118,25 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
         title: const Text('Подтверждение'),
         content: const Text('Вы точно хотите удалить эту дату?'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Отмена')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            style: TextButton.styleFrom(
+              side: const BorderSide(color: AppColors.brown),
+            ),
+            child: Text(
+              'Отмена',
+              style: AppText.medium_14.copyWith(color: AppColors.brown),
+            ),
+          ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('Удалить', style: AppText.medium_14.copyWith(color: AppColors.error)),
+            style: TextButton.styleFrom(backgroundColor: AppColors.brown),
+            child: Text(
+              'Удалить',
+              style: AppText.medium_14.copyWith(
+                color: AppColors.white_transparent,
+              ),
+            ),
           ),
         ],
       ),
@@ -168,11 +188,17 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Text('Любимый вариант для "${dateItem.title}"', style: AppText.bold_18),
+                  Text(
+                    'Любимый вариант для "${dateItem.title}"',
+                    style: AppText.bold_18,
+                  ),
                   const SizedBox(height: 8),
                   SegmentedButton<String>(
                     segments: const [
-                      ButtonSegment(value: 'category', label: Text('Категория')),
+                      ButtonSegment(
+                        value: 'category',
+                        label: Text('Категория'),
+                      ),
                       ButtonSegment(value: 'product', label: Text('Цветок')),
                     ],
                     selected: {mode},
@@ -195,13 +221,16 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
                         ? Center(
                             child: Text(
                               'Ничего не найдено',
-                              style: AppText.medium_14.copyWith(color: AppColors.grey),
+                              style: AppText.medium_14.copyWith(
+                                color: AppColors.grey,
+                              ),
                             ),
                           )
                         : ListView.separated(
                             controller: controller,
                             itemCount: filtered.length,
-                            separatorBuilder: (context, index) => const SizedBox(height: 8),
+                            separatorBuilder: (context, index) =>
+                                const SizedBox(height: 8),
                             itemBuilder: (_, i) {
                               final option = filtered[i];
                               return InkWell(
@@ -209,8 +238,12 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
                                   final navigator = Navigator.of(ctx);
                                   await CalendarService.createImportantDatePreference(
                                     importantDateId: dateItem.id,
-                                    categoryId: mode == 'category' ? option.id : null,
-                                    productId: mode == 'product' ? option.id : null,
+                                    categoryId: mode == 'category'
+                                        ? option.id
+                                        : null,
+                                    productId: mode == 'product'
+                                        ? option.id
+                                        : null,
                                   );
                                   if (!mounted) return;
                                   navigator.pop();
@@ -222,7 +255,9 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
                                   decoration: BoxDecoration(
                                     color: AppColors.white_dark,
                                     borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(color: AppColors.grey_light),
+                                    border: Border.all(
+                                      color: AppColors.grey_light,
+                                    ),
                                   ),
                                   child: Row(
                                     children: [
@@ -234,9 +269,15 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
                                       ),
                                       const SizedBox(width: 10),
                                       Expanded(
-                                        child: Text(option.name, style: AppText.medium_14),
+                                        child: Text(
+                                          option.name,
+                                          style: AppText.medium_14,
+                                        ),
                                       ),
-                                      const Icon(Icons.add_circle_outline, color: AppColors.brown),
+                                      const Icon(
+                                        Icons.add_circle_outline,
+                                        color: AppColors.brown,
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -257,16 +298,31 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Нужна подписка', style: AppText.bold_18.copyWith(color: AppColors.error)),
+        title: Text(
+          'Нужна подписка',
+          style: AppText.bold_18.copyWith(color: AppColors.error),
+        ),
         content: Text(message),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Отмена')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            style: TextButton.styleFrom(
+              side: BorderSide(color: AppColors.brown),
+            ),
+            child: Text(
+              'Отмена',
+              style: AppText.medium_14.copyWith(color: AppColors.brown),
+            ),
+          ),
           TextButton(
             onPressed: () {
               Navigator.of(ctx).pop();
               context.push('/profile/subscriptions');
             },
-            child: Text('Подписки', style: AppText.medium_14.copyWith(color: AppColors.brown)),
+            child: Text(
+              'Подписки',
+              style: AppText.medium_14.copyWith(color: AppColors.brown),
+            ),
           ),
         ],
       ),
@@ -317,14 +373,14 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Text(
-                    title ?? 'Выбор предпочтения',
-                    style: AppText.bold_18,
-                  ),
+                  Text(title ?? 'Выбор предпочтения', style: AppText.bold_18),
                   const SizedBox(height: 8),
                   SegmentedButton<String>(
                     segments: const [
-                      ButtonSegment(value: 'category', label: Text('Категория')),
+                      ButtonSegment(
+                        value: 'category',
+                        label: Text('Категория'),
+                      ),
                       ButtonSegment(value: 'product', label: Text('Цветок')),
                     ],
                     selected: {mode},
@@ -347,24 +403,25 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
                         ? Center(
                             child: Text(
                               'Ничего не найдено',
-                              style: AppText.medium_14.copyWith(color: AppColors.grey),
+                              style: AppText.medium_14.copyWith(
+                                color: AppColors.grey,
+                              ),
                             ),
                           )
                         : ListView.separated(
                             controller: controller,
                             itemCount: filtered.length,
-                            separatorBuilder: (context, index) => const SizedBox(height: 8),
+                            separatorBuilder: (context, index) =>
+                                const SizedBox(height: 8),
                             itemBuilder: (_, i) {
                               final option = filtered[i];
                               return InkWell(
                                 onTap: () {
-                                  Navigator.of(ctx).pop(
-                                    <String, dynamic>{
-                                      'mode': mode,
-                                      'id': option.id,
-                                      'name': option.name,
-                                    },
-                                  );
+                                  Navigator.of(ctx).pop(<String, dynamic>{
+                                    'mode': mode,
+                                    'id': option.id,
+                                    'name': option.name,
+                                  });
                                 },
                                 borderRadius: BorderRadius.circular(14),
                                 child: Container(
@@ -372,7 +429,9 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
                                   decoration: BoxDecoration(
                                     color: AppColors.white_dark,
                                     borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(color: AppColors.grey_light),
+                                    border: Border.all(
+                                      color: AppColors.grey_light,
+                                    ),
                                   ),
                                   child: Row(
                                     children: [
@@ -384,9 +443,15 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
                                       ),
                                       const SizedBox(width: 10),
                                       Expanded(
-                                        child: Text(option.name, style: AppText.medium_14),
+                                        child: Text(
+                                          option.name,
+                                          style: AppText.medium_14,
+                                        ),
                                       ),
-                                      const Icon(Icons.add_circle_outline, color: AppColors.brown),
+                                      const Icon(
+                                        Icons.add_circle_outline,
+                                        color: AppColors.brown,
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -403,7 +468,10 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
     );
   }
 
-  Future<void> _openEditDialog({ImportantDateDto? item, DateTime? selectedDay}) async {
+  Future<void> _openEditDialog({
+    ImportantDateDto? item,
+    DateTime? selectedDay,
+  }) async {
     final titleCtrl = TextEditingController(text: item?.title ?? '');
     final commentCtrl = TextEditingController(text: item?.comment ?? '');
     DateTime date = item?.eventDate ?? selectedDay ?? DateTime.now();
@@ -412,12 +480,17 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setLocal) => AlertDialog(
-          title: Text(item == null ? 'Новая памятная дата' : 'Редактировать дату'),
+          title: Text(
+            item == null ? 'Новая памятная дата' : 'Редактировать дату',
+          ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Название')),
+                TextField(
+                  controller: titleCtrl,
+                  decoration: const InputDecoration(labelText: 'Название'),
+                ),
                 const SizedBox(height: 8),
                 TextField(
                   controller: commentCtrl,
@@ -442,7 +515,9 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
                       if (pendingPreference == null)
                         Text(
                           'Не выбрано',
-                          style: AppText.medium_12.copyWith(color: AppColors.grey),
+                          style: AppText.medium_12.copyWith(
+                            color: AppColors.grey,
+                          ),
                         )
                       else
                         Row(
@@ -462,8 +537,13 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
                               ),
                             ),
                             IconButton(
-                              onPressed: () => setLocal(() => pendingPreference = null),
-                              icon: const Icon(Icons.close, size: 18, color: AppColors.error),
+                              onPressed: () =>
+                                  setLocal(() => pendingPreference = null),
+                              icon: const Icon(
+                                Icons.close,
+                                size: 18,
+                                color: AppColors.error,
+                              ),
                             ),
                           ],
                         ),
@@ -476,7 +556,13 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
                           if (selected == null) return;
                           setLocal(() => pendingPreference = selected);
                         },
-                        icon: const Icon(Icons.favorite_border, color: AppColors.brown),
+                        icon: const Icon(
+                          Icons.favorite_border,
+                          color: AppColors.brown,
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: AppColors.brown),
+                        ),
                         label: const Text('Добавить предпочтение'),
                       ),
                     ],
@@ -501,8 +587,26 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Отмена')),
-            ElevatedButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Сохранить')),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              style: TextButton.styleFrom(
+                side: const BorderSide(color: AppColors.brown),
+              ),
+              child: Text(
+                'Отмена',
+                style: AppText.medium_14.copyWith(color: AppColors.brown),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: TextButton.styleFrom(backgroundColor: AppColors.brown),
+              child: Text(
+                'Сохранить',
+                style: AppText.medium_14.copyWith(
+                  color: AppColors.white_transparent,
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -513,7 +617,9 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
         final created = await CalendarService.createImportantDate(
           title: titleCtrl.text.trim(),
           date: date,
-          comment: commentCtrl.text.trim().isEmpty ? null : commentCtrl.text.trim(),
+          comment: commentCtrl.text.trim().isEmpty
+              ? null
+              : commentCtrl.text.trim(),
         );
         if (pendingPreference != null) {
           await CalendarService.createImportantDatePreference(
@@ -551,7 +657,9 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
         await _showUpgrade(e.message);
       } else {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: ${e.message}')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Ошибка: ${e.message}')));
       }
     }
   }
@@ -568,14 +676,19 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
     if (events.isEmpty && holidayInfo == null) return;
     await showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
       builder: (ctx) => Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(DateFormat('dd MMMM yyyy', 'ru').format(selected), style: AppText.bold_18),
+            Text(
+              DateFormat('dd MMMM yyyy', 'ru').format(selected),
+              style: AppText.bold_18,
+            ),
             const SizedBox(height: 10),
             if (holidayInfo != null)
               Container(
@@ -591,51 +704,64 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
                     Expanded(
                       child: Text(
                         'Праздник: ${holidayInfo.$3}',
-                        style: AppText.medium_14.copyWith(color: AppColors.black),
+                        style: AppText.medium_14.copyWith(
+                          color: AppColors.black,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-            ...events.map((e) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(e.title),
-                  subtitle: Text(
-                    '${_yearsSinceText(e, selected)}'
-                    '${(e.comment ?? '').isEmpty ? '' : ' • ${e.comment!}'}',
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.favorite_border, color: AppColors.brown),
-                        onPressed: () async {
-                          Navigator.of(ctx).pop();
-                          await _addDatePreference(e);
-                        },
+            ...events.map(
+              (e) => ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(e.title),
+                subtitle: Text(
+                  '${_yearsSinceText(e, selected)}'
+                  '${(e.comment ?? '').isEmpty ? '' : ' • ${e.comment!}'}',
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(
+                        Icons.favorite_border,
+                        color: AppColors.brown,
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.edit_outlined, color: AppColors.brown),
-                        onPressed: () async {
-                          Navigator.of(ctx).pop();
-                          await _openEditDialog(item: e);
-                        },
+                      onPressed: () async {
+                        Navigator.of(ctx).pop();
+                        await _addDatePreference(e);
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.edit_outlined,
+                        color: AppColors.brown,
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline, color: AppColors.error),
-                        onPressed: () async {
-                          final navigator = Navigator.of(ctx);
-                          final ok = await _confirmDelete();
-                          if (!ok) return;
-                          await CalendarService.deleteImportantDate(e.id);
-                          if (!mounted) return;
-                          navigator.pop();
-                          await _load();
-                        },
+                      onPressed: () async {
+                        Navigator.of(ctx).pop();
+                        await _openEditDialog(item: e);
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: AppColors.error,
                       ),
-                    ],
-                  ),
-                )),
+                      onPressed: () async {
+                        final navigator = Navigator.of(ctx);
+                        final ok = await _confirmDelete();
+                        if (!ok) return;
+                        await CalendarService.deleteImportantDate(e.id);
+                        if (!mounted) return;
+                        navigator.pop();
+                        await _load();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(height: 6),
             SizedBox(
               width: double.infinity,
@@ -655,7 +781,8 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
               ),
             ),
             ...events.map((e) {
-              final prefs = _prefsByDateId[e.id] ?? const <ImportantDatePreferenceDto>[];
+              final prefs =
+                  _prefsByDateId[e.id] ?? const <ImportantDatePreferenceDto>[];
               if (prefs.isEmpty) {
                 return const SizedBox.shrink();
               }
@@ -669,7 +796,10 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Предпочтения для "${e.title}"', style: AppText.medium_12),
+                    Text(
+                      'Предпочтения для "${e.title}"',
+                      style: AppText.medium_12,
+                    ),
                     const SizedBox(height: 6),
                     Wrap(
                       spacing: 6,
@@ -684,7 +814,9 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
                                 final navigator = Navigator.of(ctx);
                                 final ok = await _confirmDelete();
                                 if (!ok) return;
-                                await CalendarService.deleteImportantDatePreference(p.id);
+                                await CalendarService.deleteImportantDatePreference(
+                                  p.id,
+                                );
                                 if (!mounted) return;
                                 navigator.pop();
                                 await _load();
@@ -700,9 +832,15 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
             const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
-              child: OutlinedButton(
+              child: TextButton(
                 onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('Отмена'),
+                style: TextButton.styleFrom(
+                  side: const BorderSide(color: AppColors.brown),
+                ),
+                child: Text(
+                  'Отмена',
+                  style: AppText.medium_14.copyWith(color: AppColors.brown),
+                ),
               ),
             ),
           ],
@@ -730,31 +868,54 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
           Row(
             children: [
               IconButton(
-                onPressed: () => setState(() => _focusMonth = DateTime(_focusMonth.year, _focusMonth.month - 1, 1)),
+                onPressed: () => setState(
+                  () => _focusMonth = DateTime(
+                    _focusMonth.year,
+                    _focusMonth.month - 1,
+                    1,
+                  ),
+                ),
                 icon: const Icon(Icons.chevron_left),
               ),
               Expanded(
                 child: Center(
-                  child: Text(DateFormat('LLLL yyyy', 'ru').format(_focusMonth), style: AppText.medium_16),
+                  child: Text(
+                    DateFormat('LLLL yyyy', 'ru').format(_focusMonth),
+                    style: AppText.medium_16,
+                  ),
                 ),
               ),
               IconButton(
-                onPressed: () => setState(() => _focusMonth = DateTime(_focusMonth.year, _focusMonth.month + 1, 1)),
+                onPressed: () => setState(
+                  () => _focusMonth = DateTime(
+                    _focusMonth.year,
+                    _focusMonth.month + 1,
+                    1,
+                  ),
+                ),
                 icon: const Icon(Icons.chevron_right),
               ),
             ],
           ),
           Row(
-            children: const ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
-                .map((d) => Expanded(child: Center(child: Text(d))))
-                .toList(),
+            children: const [
+              'Пн',
+              'Вт',
+              'Ср',
+              'Чт',
+              'Пт',
+              'Сб',
+              'Вс',
+            ].map((d) => Expanded(child: Center(child: Text(d)))).toList(),
           ),
           const SizedBox(height: 8),
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: 42,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 7,
+            ),
             itemBuilder: (context, i) {
               final day = days[i];
               final key = _dayKey(day);
@@ -775,7 +936,10 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
                     borderRadius: BorderRadius.circular(12),
                     border: marked
                         ? Border.all(color: AppColors.brown, width: 1.8)
-                        : Border.all(color: AppColors.white_transparent, width: 1.2),
+                        : Border.all(
+                            color: AppColors.white_transparent,
+                            width: 1.2,
+                          ),
                   ),
                   child: Stack(
                     clipBehavior: Clip.none,
@@ -784,7 +948,9 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
                         child: Text(
                           '${day.day}',
                           style: AppText.medium_14.copyWith(
-                            color: day.month == _focusMonth.month ? AppColors.black : AppColors.grey_light,
+                            color: day.month == _focusMonth.month
+                                ? AppColors.black
+                                : AppColors.grey_light,
                           ),
                         ),
                       ),
@@ -793,14 +959,19 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
                           right: -6,
                           top: -6,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1,
+                            ),
                             decoration: BoxDecoration(
                               color: AppColors.brown,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
                               '$count',
-                              style: AppText.medium_8.copyWith(color: AppColors.white),
+                              style: AppText.medium_8.copyWith(
+                                color: AppColors.white,
+                              ),
                             ),
                           ),
                         ),
@@ -814,6 +985,7 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
       ),
     );
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -826,23 +998,29 @@ class _ImportantDatesPageState extends State<ImportantDatesPage> {
         onPressed: () => _openEditDialog(),
         backgroundColor: AppColors.brown,
         icon: const Icon(Icons.add, color: AppColors.white),
-        label: Text('Добавить', style: AppText.medium_14.copyWith(color: AppColors.white)),
+        label: Text(
+          'Добавить',
+          style: AppText.medium_14.copyWith(color: AppColors.white),
+        ),
       ),
       body: !_ready
           ? const Center(child: CircularProgressIndicator())
           : _loading
-              ? const Center(child: CircularProgressIndicator())
-              : _error != null
-                  ? Center(child: Text(_error!, style: AppText.medium_14.copyWith(color: AppColors.error)))
-                  : RefreshIndicator(
-                      onRefresh: _load,
-                      child: ListView(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 92),
-                        children: [
-                          _calendar(),
-                        ],
-                      ),
-                    ),
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+          ? Center(
+              child: Text(
+                _error!,
+                style: AppText.medium_14.copyWith(color: AppColors.error),
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 92),
+                children: [_calendar()],
+              ),
+            ),
     );
   }
 }
