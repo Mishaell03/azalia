@@ -16,6 +16,7 @@ class AppProfileContent extends StatelessWidget {
   final VoidCallback onSettings;
   final VoidCallback onOrderHistory;
   final VoidCallback onSubscriptions;
+  final VoidCallback onEventCalendar;
   final VoidCallback onHelp;
   final VoidCallback onAbout;
 
@@ -30,6 +31,7 @@ class AppProfileContent extends StatelessWidget {
     required this.onSettings,
     required this.onOrderHistory,
     required this.onSubscriptions,
+    required this.onEventCalendar,
     required this.onHelp,
     required this.onAbout,
   });
@@ -142,6 +144,12 @@ class AppProfileContent extends StatelessWidget {
                   icon: Icons.workspace_premium_outlined,
                   title: 'Подписки',
                   onTap: onSubscriptions,
+                ),
+                _buildDivider(),
+                AppProfileSetting(
+                  icon: Icons.event_note_outlined,
+                  title: 'Календарь событий',
+                  onTap: onEventCalendar,
                 ),
                 _buildDivider(),
                 AppProfileSetting(

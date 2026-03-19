@@ -13,6 +13,10 @@ from app.routes.employees import router as employees_router
 from app.routes.payments import router as payments_router
 from app.routes.plants import router as plants_router
 from app.routes.pot import router as pot_router
+from app.routes.important_dates import router as important_dates_router
+from app.routes.plant_care_dates import router as plant_care_dates_router
+from app.routes.company_calendar_events import router as company_calendar_events_router
+from app.routes.user_plants import router as user_plants_router
 
 
 def create_app() -> FastAPI:
@@ -34,6 +38,10 @@ def create_app() -> FastAPI:
             {"name": "employees", "description": "Пользователи и сотрудники"},
             {"name": "payments", "description": "Оплата и статусы заказов"},
             {"name": "pot", "description": "Справочники горшков и цены"},
+            {"name": "important-dates", "description": "Важные даты пользователя"},
+            {"name": "plant-care-dates", "description": "Даты ухода за растениями"},
+            {"name": "user-plants", "description": "Растения пользователя и уход"},
+            {"name": "company-calendar-events", "description": "Корпоративный календарь организаций"},
         ],
     )
 
@@ -99,6 +107,10 @@ def create_app() -> FastAPI:
     app.include_router(cart_router)
     app.include_router(payments_router)
     app.include_router(pot_router)
+    app.include_router(important_dates_router)
+    app.include_router(plant_care_dates_router)
+    app.include_router(user_plants_router)
+    app.include_router(company_calendar_events_router)
 
     @app.get("/")
     async def root():

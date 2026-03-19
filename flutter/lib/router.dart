@@ -13,6 +13,10 @@ import 'package:azalia/pages/payment/paymentpage.dart';
 import 'package:azalia/pages/plant/plant_details_page.dart';
 import 'package:azalia/pages/profile/orders/order_details_page.dart';
 import 'package:azalia/pages/profile/orders/order_history_page.dart';
+import 'package:azalia/pages/profile/calendar/corporate_calendar_page.dart';
+import 'package:azalia/pages/profile/calendar/important_dates_page.dart';
+import 'package:azalia/pages/profile/calendar/plant_care_page.dart';
+import 'package:azalia/pages/profile/calendar/profile_calendar_page.dart';
 import 'package:azalia/pages/profile/subscriptions/subscription_checkout_page.dart';
 import 'package:azalia/pages/profile/subscriptions/subscriptions_page.dart';
 import 'package:azalia/pages/start/startpage.dart';
@@ -97,6 +101,28 @@ class AppRouter {
               }
               return SubscriptionCheckoutPage(args: args);
             },
+          ),
+          GoRoute(
+            path: 'calendar',
+            name: 'profileCalendar',
+            builder: (context, state) => const ProfileCalendarPage(),
+            routes: [
+              GoRoute(
+                path: 'important',
+                name: 'profileCalendarImportant',
+                builder: (context, state) => const ImportantDatesPage(),
+              ),
+              GoRoute(
+                path: 'care',
+                name: 'profileCalendarCare',
+                builder: (context, state) => const PlantCarePage(),
+              ),
+              GoRoute(
+                path: 'corporate',
+                name: 'profileCalendarCorporate',
+                builder: (context, state) => const CorporateCalendarPage(),
+              ),
+            ],
           ),
         ],
       ),

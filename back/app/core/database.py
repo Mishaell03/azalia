@@ -558,8 +558,10 @@ def create_database() -> None:
             custom_name                 TEXT,
             plant_name                  TEXT NOT NULL,
             photo_url                   TEXT,
+            watering_requirement        TEXT,
             light_requirements          TEXT CHECK(light_requirements IN ('full_sun', 'partial_shade', 'shade')),
             watering_frequency_days     INTEGER,
+            soil_change_frequency_days  INTEGER,
             pot_size_text               TEXT,
             notes                       TEXT,
             last_watered_at             TEXT,
@@ -582,6 +584,93 @@ def create_database() -> None:
             notes               TEXT,
             created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_plant_id) REFERENCES user_plants(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS user_important_dates (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            title                   TEXT NOT NULL,
+            event_date              TEXT NOT NULL,
+            comment                 TEXT,
+            created_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS user_holiday_preferences (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            holiday_code            TEXT NOT NULL
+                                    CHECK(holiday_code IN ('new_year', 'march_8')),
+            category_id             INTEGER,
+            product_id              INTEGER,
+            created_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CHECK (
+                (category_id IS NOT NULL AND product_id IS NULL)
+                OR
+                (category_id IS NULL AND product_id IS NOT NULL)
+            ),
+            UNIQUE(user_id, holiday_code, category_id, product_id),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE,
+            FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS user_important_date_preferences (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            important_date_id       INTEGER NOT NULL,
+            category_id             INTEGER,
+            product_id              INTEGER,
+            created_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CHECK (
+                (category_id IS NOT NULL AND product_id IS NULL)
+                OR
+                (category_id IS NULL AND product_id IS NOT NULL)
+            ),
+            UNIQUE(user_id, important_date_id, category_id, product_id),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (important_date_id) REFERENCES user_important_dates(id) ON DELETE CASCADE,
+            FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE,
+            FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS user_plant_care_dates (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            user_plant_id           INTEGER,
+            product_id              INTEGER,
+            plant_name              TEXT NOT NULL,
+            plant_photo_url         TEXT,
+            watering_requirement    TEXT,
+            care_type               TEXT NOT NULL CHECK(care_type IN (
+                                        'watering',
+                                        'soil_change',
+                                        'fertilizing',
+                                        'repotting',
+                                        'pruning'
+                                    )),
+            care_date               TEXT NOT NULL,
+            comment                 TEXT,
+            is_done                 INTEGER NOT NULL DEFAULT 0 CHECK(is_done IN (0, 1)),
+            created_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_plant_id) REFERENCES user_plants(id) ON DELETE SET NULL,
+            FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS company_calendar_events (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_id              INTEGER NOT NULL,
+            title                   TEXT NOT NULL,
+            event_date              TEXT NOT NULL,
+            comment                 TEXT,
+            created_by_user_id      INTEGER NOT NULL,
+            created_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+            FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE CASCADE
         );
 
         
@@ -748,6 +837,12 @@ def create_database() -> None:
     _ensure_column("subscription_plans", "notifications", "notifications TEXT NOT NULL DEFAULT 'basic'")
     _ensure_column("subscription_plans", "has_corporate", "has_corporate INTEGER NOT NULL DEFAULT 0")
     _ensure_column("subscription_plans", "has_analytics", "has_analytics INTEGER NOT NULL DEFAULT 0")
+    _ensure_column("user_plants", "photo_url", "photo_url TEXT")
+    _ensure_column("user_plants", "watering_requirement", "watering_requirement TEXT")
+    _ensure_column("user_plants", "soil_change_frequency_days", "soil_change_frequency_days INTEGER")
+    _ensure_column("user_plant_care_dates", "user_plant_id", "user_plant_id INTEGER")
+    _ensure_column("user_plant_care_dates", "plant_photo_url", "plant_photo_url TEXT")
+    _ensure_column("user_plant_care_dates", "watering_requirement", "watering_requirement TEXT")
 
     # Subscription plans for mobile app (Free / Standard / Premium).
     cur.executemany(
@@ -941,6 +1036,13 @@ def create_database() -> None:
         CREATE INDEX IF NOT EXISTS idx_user_plants_next_watering ON user_plants(next_watering_at);
         CREATE INDEX IF NOT EXISTS idx_user_plant_logs_user_plant_id ON user_plant_care_logs(user_plant_id);
         CREATE INDEX IF NOT EXISTS idx_user_plant_logs_care_at ON user_plant_care_logs(care_at);
+        CREATE INDEX IF NOT EXISTS idx_user_important_dates_user_date ON user_important_dates(user_id, event_date);
+        CREATE INDEX IF NOT EXISTS idx_user_holiday_preferences_user_holiday ON user_holiday_preferences(user_id, holiday_code);
+        CREATE INDEX IF NOT EXISTS idx_user_important_date_preferences_user_date ON user_important_date_preferences(user_id, important_date_id);
+        CREATE INDEX IF NOT EXISTS idx_user_plant_care_dates_user_date ON user_plant_care_dates(user_id, care_date);
+        CREATE INDEX IF NOT EXISTS idx_user_plant_care_dates_user_type ON user_plant_care_dates(user_id, care_type);
+        CREATE INDEX IF NOT EXISTS idx_user_plant_care_dates_plant_date ON user_plant_care_dates(user_plant_id, care_type, care_date);
+        CREATE INDEX IF NOT EXISTS idx_company_calendar_events_company_date ON company_calendar_events(company_id, event_date);
 
         CREATE INDEX IF NOT EXISTS idx_employees_store_id ON employees(store_id);
         CREATE INDEX IF NOT EXISTS idx_employees_active ON employees(is_active);
@@ -1049,6 +1151,30 @@ def create_database() -> None:
         WHEN NEW.updated_at = OLD.updated_at
         BEGIN
             UPDATE user_plants SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_user_important_dates_updated_at
+        AFTER UPDATE ON user_important_dates
+        FOR EACH ROW
+        WHEN NEW.updated_at = OLD.updated_at
+        BEGIN
+            UPDATE user_important_dates SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_user_plant_care_dates_updated_at
+        AFTER UPDATE ON user_plant_care_dates
+        FOR EACH ROW
+        WHEN NEW.updated_at = OLD.updated_at
+        BEGIN
+            UPDATE user_plant_care_dates SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_company_calendar_events_updated_at
+        AFTER UPDATE ON company_calendar_events
+        FOR EACH ROW
+        WHEN NEW.updated_at = OLD.updated_at
+        BEGIN
+            UPDATE company_calendar_events SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
         END;
 
         CREATE TRIGGER IF NOT EXISTS trg_employees_updated_at
@@ -1373,6 +1499,11 @@ def validate_schema() -> None:
         "calendar_events",
         "user_plants",
         "user_plant_care_logs",
+        "user_important_dates",
+        "user_holiday_preferences",
+        "user_important_date_preferences",
+        "user_plant_care_dates",
+        "company_calendar_events",
         "stores",
         "employees",
         "inventory",

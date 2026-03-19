@@ -362,7 +362,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
                             ),
                             backgroundColor: isActive
                                 ? (isFree
-                                      ? AppColors.grey_light
+                                      ? AppColors.white_transparent
                                       : AppColors.white_transparent)
                                 : (isFree
                                       ? AppColors.grey_light

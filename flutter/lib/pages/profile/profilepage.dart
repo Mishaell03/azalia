@@ -444,6 +444,7 @@ class _ProfilePageState extends State<ProfilePage> {
               onLogout: _logout,
               onOrderHistory: () => context.push('/profile/orders'),
               onSubscriptions: () => context.push('/profile/subscriptions'),
+              onEventCalendar: () => context.push('/profile/calendar'),
               onSettings: () => _showSettings(context),
               onHelp: () => _showHelp(context),
               onAbout: () => _showAbout(context),
@@ -453,4 +454,5 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
   }
+
 }

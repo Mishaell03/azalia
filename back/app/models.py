@@ -267,6 +267,7 @@ class UserPlant:
     photo_url: Optional[str]
     light_requirements: Optional[str]
     watering_frequency_days: Optional[int]
+    soil_change_frequency_days: Optional[int]
     pot_size_text: Optional[str]
     notes: Optional[str]
     last_watered_at: Optional[str]
