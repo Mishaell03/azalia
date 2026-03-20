@@ -189,7 +189,16 @@ class AppRouter {
         path: '/payment/webview',
         name: 'payment_webview',
         builder: (context, state) {
-          final args = state.extra as PaymentWebViewArgs;
+          final extra = state.extra;
+          if (extra is! PaymentWebViewArgs) {
+            return Scaffold(
+              appBar: AppBar(title: const Text('Ошибка')),
+              body: const Center(
+                child: Text('Некорректные данные для страницы оплаты'),
+              ),
+            );
+          }
+          final args = extra;
           return PaymentWebViewPage(
             paymentUrl: args.paymentUrl,
             paymentLinkId: args.paymentLinkId,

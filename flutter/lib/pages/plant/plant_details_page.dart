@@ -35,6 +35,15 @@ class PlantDetailsPage extends StatefulWidget {
 }
 
 class _PlantDetailsPageState extends State<PlantDetailsPage> {
+  static const List<String> _defaultSizeNames = [
+    'S',
+    'Small',
+    'Маленький',
+    'Малый',
+  ];
+  static const List<String> _defaultMaterialNames = ['Пластик', 'Plastic'];
+  static const List<String> _defaultColorNames = ['Белый', 'White'];
+
   Plant? _plant;
   bool _isLoading = true;
   bool _isActionLoading = false;
@@ -108,6 +117,7 @@ class _PlantDetailsPageState extends State<PlantDetailsPage> {
             )) {
           _selectedColor = null;
         }
+        _applyDefaultSelectionIfNeeded();
       });
       await _reloadOptionsAvailability();
       await _recalculatePotPrice();
@@ -167,6 +177,84 @@ class _PlantDetailsPageState extends State<PlantDetailsPage> {
     return null;
   }
 
+  String? _findPreferredName(
+    List<String> preferredNames,
+    List<String> allNames,
+  ) {
+    for (final preferred in preferredNames) {
+      for (final name in allNames) {
+        if (name.toLowerCase() == preferred.toLowerCase()) {
+          return name;
+        }
+      }
+    }
+    return null;
+  }
+
+  String? _findPreferredSizeName(Set<int> availableSizeIds) {
+    final names = _sizes
+        .where((e) => availableSizeIds.contains(e.id))
+        .map((e) => e.name)
+        .toList();
+    return _findPreferredName(_defaultSizeNames, names);
+  }
+
+  String? _findPreferredMaterialName(Set<int> availableMaterialIds) {
+    final names = _materials
+        .where((e) => availableMaterialIds.contains(e.id))
+        .map((e) => e.name)
+        .toList();
+    return _findPreferredName(_defaultMaterialNames, names);
+  }
+
+  String? _findPreferredColorName(Set<int> availableColorIds) {
+    final names = _colors
+        .where((e) => availableColorIds.contains(e.id))
+        .map((e) => e.name)
+        .toList();
+    return _findPreferredName(_defaultColorNames, names);
+  }
+
+  String? _firstAvailableSizeName(Set<int> availableSizeIds) {
+    for (final size in _sizes) {
+      if (availableSizeIds.contains(size.id)) return size.name;
+    }
+    return _sizes.isNotEmpty ? _sizes.first.name : null;
+  }
+
+  String? _firstAvailableMaterialName(Set<int> availableMaterialIds) {
+    for (final material in _materials) {
+      if (availableMaterialIds.contains(material.id)) return material.name;
+    }
+    return _materials.isNotEmpty ? _materials.first.name : null;
+  }
+
+  String? _firstAvailableColorName(Set<int> availableColorIds) {
+    for (final color in _colors) {
+      if (availableColorIds.contains(color.id)) return color.name;
+    }
+    return _colors.isNotEmpty ? _colors.first.name : null;
+  }
+
+  void _applyDefaultSelectionIfNeeded({
+    Set<int>? availableSizeIds,
+    Set<int>? availableMaterialIds,
+    Set<int>? availableColorIds,
+  }) {
+    final sizeIds = availableSizeIds ?? _sizes.map((e) => e.id).toSet();
+    final materialIds =
+        availableMaterialIds ?? _materials.map((e) => e.id).toSet();
+    final colorIds = availableColorIds ?? _colors.map((e) => e.id).toSet();
+
+    _selectedSize ??=
+        _findPreferredSizeName(sizeIds) ?? _firstAvailableSizeName(sizeIds);
+    _selectedMaterial ??=
+        _findPreferredMaterialName(materialIds) ??
+        _firstAvailableMaterialName(materialIds);
+    _selectedColor ??=
+        _findPreferredColorName(colorIds) ?? _firstAvailableColorName(colorIds);
+  }
+
   Future<void> _reloadOptionsAvailability() async {
     try {
       final data = await PotService.getOptions(
@@ -221,6 +309,11 @@ class _PlantDetailsPageState extends State<PlantDetailsPage> {
             _selectedColor = null;
           }
         }
+        _applyDefaultSelectionIfNeeded(
+          availableSizeIds: availableSizeIds,
+          availableMaterialIds: availableMaterialIds,
+          availableColorIds: availableColorIds,
+        );
       });
     } catch (_) {
       // Keep previous state if options endpoint is temporarily unavailable.
@@ -334,7 +427,7 @@ class _PlantDetailsPageState extends State<PlantDetailsPage> {
     required List<String> items,
     required String? selected,
     required bool Function(String item) isEnabled,
-    required ValueChanged<String?> onSelected,
+    required ValueChanged<String> onSelected,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -345,11 +438,6 @@ class _PlantDetailsPageState extends State<PlantDetailsPage> {
           spacing: 8,
           runSpacing: 8,
           children: [
-            ChoiceChip(
-              label: const Text('Не выбрано'),
-              selected: selected == null || selected.isEmpty,
-              onSelected: (_) => onSelected(null),
-            ),
             ...items.map((item) {
               final enabled = isEnabled(item);
               return ChoiceChip(

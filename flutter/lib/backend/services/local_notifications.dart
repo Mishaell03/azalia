@@ -17,6 +17,8 @@ class LocalNotificationsService {
       FlutterLocalNotificationsPlugin();
   static final ApiClient _api = ApiClient();
   static const String _orderStatusesKey = 'cached_order_statuses_v1';
+  static const String _seenServerNotificationIdsKey =
+      'seen_server_notification_ids_v1';
 
   bool _initialized = false;
 
@@ -95,6 +97,8 @@ class LocalNotificationsService {
     final session = SessionService();
     if (!session.hasActiveSession) return;
 
+    await _syncServerOrderNotifications();
+
     final orders = await _loadOrders();
     if (orders.isEmpty) return;
 
@@ -136,6 +140,40 @@ class LocalNotificationsService {
     await prefs.setString(_orderStatusesKey, _encodeJson(next));
   }
 
+  Future<void> _syncServerOrderNotifications() async {
+    final notifications = await _loadServerOrderNotifications();
+    if (notifications.isEmpty) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final seenRaw =
+        prefs.getStringList(_seenServerNotificationIdsKey) ?? const [];
+    final seen = seenRaw.toSet();
+
+    bool changed = false;
+    for (final item in notifications) {
+      final id = (item['id'] as num?)?.toInt();
+      if (id == null || id <= 0) continue;
+      final key = '$id';
+      if (seen.contains(key)) continue;
+
+      final title = item['title']?.toString().trim();
+      final body = item['body']?.toString().trim();
+      if (title == null || title.isEmpty) continue;
+
+      await _showNow(
+        id: 400000 + id,
+        title: title,
+        body: (body == null || body.isEmpty) ? 'Обновление заказа' : body,
+      );
+      seen.add(key);
+      changed = true;
+    }
+
+    if (changed) {
+      await prefs.setStringList(_seenServerNotificationIdsKey, seen.toList());
+    }
+  }
+
   Future<List<Map<String, dynamic>>> _loadImportantDates() async {
     try {
       final response = await _api.get(ApiConfig.importantDates);
@@ -163,6 +201,25 @@ class LocalNotificationsService {
   Future<List<Map<String, dynamic>>> _loadOrders() async {
     try {
       final response = await _api.get(ApiConfig.orders(limit: 50, offset: 0));
+      if (response['success'] != true) return const [];
+      final data = response['data'] as Map<String, dynamic>? ?? const {};
+      final items = data['items'] as List? ?? const [];
+      return items.whereType<Map<String, dynamic>>().toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _loadServerOrderNotifications() async {
+    try {
+      final response = await _api.get(
+        ApiConfig.notifications(
+          status: 'pending',
+          type: 'order',
+          channel: 'telegram',
+          limit: 100,
+        ),
+      );
       if (response['success'] != true) return const [];
       final data = response['data'] as Map<String, dynamic>? ?? const {};
       final items = data['items'] as List? ?? const [];

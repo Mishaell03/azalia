@@ -525,7 +525,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
 
   Future<void> _openAddMemberDialog(CorporateCompanyDto company) async {
     final phoneCtrl = TextEditingController();
-    final userIdCtrl = TextEditingController();
+    final telegramIdCtrl = TextEditingController();
     String addMode = 'phone';
     String role = 'member';
     final save = await showDialog<bool>(
@@ -545,7 +545,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
                   ),
                   DropdownMenuItem(
                     value: 'id',
-                    child: Text('По ID пользователя'),
+                    child: Text('По Telegram ID'),
                   ),
                 ],
                 onChanged: (v) {
@@ -569,11 +569,11 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
                 )
               else
                 TextField(
-                  controller: userIdCtrl,
+                  controller: telegramIdCtrl,
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   decoration: const InputDecoration(
-                    labelText: 'ID пользователя',
+                    labelText: 'Telegram ID',
                   ),
                 ),
               const SizedBox(height: 8),
@@ -622,7 +622,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
     if (save != true) return;
 
     final normalizedPhone = _normalizePhoneForApi(phoneCtrl.text.trim());
-    final userId = int.tryParse(userIdCtrl.text.trim());
+    final telegramId = int.tryParse(telegramIdCtrl.text.trim());
 
     if (addMode == 'phone' && normalizedPhone == null) {
       if (!mounted) return;
@@ -637,13 +637,13 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
       );
       return;
     }
-    if (addMode == 'id' && (userId == null || userId <= 0)) {
+    if (addMode == 'id' && (telegramId == null || telegramId <= 0)) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: AppColors.white,
           content: Text(
-            'Введите корректный ID пользователя',
+            'Введите корректный Telegram ID',
             style: AppText.medium_14.copyWith(color: AppColors.error),
           ),
         ),
@@ -654,7 +654,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
     try {
       final state = await SubscriptionService.addCorporateMember(
         companyId: company.id,
-        userId: addMode == 'id' ? userId : null,
+        telegramId: addMode == 'id' ? telegramId : null,
         userPhone: addMode == 'phone' ? normalizedPhone : null,
         role: role,
       );

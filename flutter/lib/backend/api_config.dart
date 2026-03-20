@@ -1,6 +1,10 @@
 class ApiConfig {
+  static const String baseURL = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://127.0.0.1:5000/api',
+  );
   // static const String baseURL = 'https://www.nebinance.ru/api';
-  static const String baseURL = 'http://127.0.0.1:5000/api';
+  // static const String baseURL = 'http://127.0.0.1:5000/api';
   static const Duration timeout = Duration(seconds: 10);
   static final Uri _baseUri = Uri.parse(baseURL);
 
@@ -198,6 +202,25 @@ class ApiConfig {
       '$baseURL/cart/wishlist/check/$plantId';
   static String wishlistRemove(int plantId) =>
       '$baseURL/cart/wishlist/$plantId';
+
+  // notifications
+  static String notifications({
+    String status = 'pending',
+    String? type,
+    String? channel,
+    int limit = 50,
+  }) {
+    final params = <String, String>{
+      'status': status,
+      'limit': '$limit',
+      if (type != null && type.trim().isNotEmpty) 'type': type.trim(),
+      if (channel != null && channel.trim().isNotEmpty)
+        'channel': channel.trim(),
+    };
+    return Uri.parse(
+      '$baseURL/notifications/items',
+    ).replace(queryParameters: params).toString();
+  }
 
   // configuration
   static const String potMaterials = '$baseURL/pot/materials';

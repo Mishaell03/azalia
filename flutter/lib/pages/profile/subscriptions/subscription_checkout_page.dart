@@ -30,7 +30,7 @@ class SubscriptionCheckoutPage extends StatefulWidget {
 }
 
 class _SubscriptionCheckoutPageState extends State<SubscriptionCheckoutPage> {
-  static const Duration _webViewFallbackTimeout = Duration(seconds: 8);
+  static const Duration _webViewFallbackTimeout = Duration(seconds: 20);
 
   late final WebViewController _controller;
   Timer? _fallbackTimer;
@@ -39,6 +39,7 @@ class _SubscriptionCheckoutPageState extends State<SubscriptionCheckoutPage> {
   String _error = '';
   bool _isLaunchingExternal = false;
   bool _isErrorDialogVisible = false;
+  bool _autoBrowserFallbackTried = false;
 
   @override
   void initState() {
@@ -62,7 +63,14 @@ class _SubscriptionCheckoutPageState extends State<SubscriptionCheckoutPage> {
               _loading = false;
             });
           },
-          onWebResourceError: (_) {
+          onWebResourceError: (error) {
+            if (_isDnsLookupError(error)) {
+              _showWebViewError(
+                'Не удалось открыть оплату во встроенном окне: ошибка DNS',
+              );
+              _tryAutoOpenInBrowser();
+              return;
+            }
             _showWebViewError('Не удалось открыть страницу оплаты');
           },
         ),
@@ -85,12 +93,29 @@ class _SubscriptionCheckoutPageState extends State<SubscriptionCheckoutPage> {
     });
   }
 
+  bool _isDnsLookupError(WebResourceError error) {
+    final description = error.description.toLowerCase();
+    return error.errorType == WebResourceErrorType.hostLookup ||
+        error.errorCode == -2 ||
+        description.contains('host') ||
+        description.contains('hostname') ||
+        description.contains('имени хоста') ||
+        description.contains('err_name_not_resolved');
+  }
+
+  Future<void> _tryAutoOpenInBrowser() async {
+    if (_autoBrowserFallbackTried || _isLaunchingExternal) return;
+    _autoBrowserFallbackTried = true;
+    await _openInBrowser();
+  }
+
   void _showWebViewError(String message) {
     _fallbackTimer?.cancel();
     if (!mounted) return;
     setState(() {
       _loading = false;
-      _error = '$message\n\nПопробуйте оплатить через браузер';
+      _error =
+          '$message\n\nПопробуйте оплатить через браузер или сменить сервер VPN.';
     });
     _showBrowserFallbackDialog();
   }

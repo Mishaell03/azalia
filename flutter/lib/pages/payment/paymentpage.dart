@@ -84,7 +84,7 @@ class _PaymentPageState extends State<PaymentPage> {
         message.contains('Timeout') ||
         message.contains('connection') ||
         message.contains('Ошибка сети')) {
-      return '$message\n\nПроверьте интернет и отключите VPN.';
+      return '$message\n\nПроверьте интернет, попробуйте другой сервер VPN или откройте оплату во внешнем браузере.';
     }
 
     return message;
@@ -304,8 +304,11 @@ class _PaymentPageState extends State<PaymentPage> {
         ),
         content: Text(
           '${quantityChangedNote != null && quantityChangedNote.isNotEmpty ? '$quantityChangedNote\n\n' : ''}'
-          'Если вы используете VPN, оплата может работать некорректно.\n\n'
-          'Рекомендуем временно отключить VPN для успешного завершения платежа.',
+          'При активном VPN платёжная страница может открываться дольше или блокироваться по IP.\n\n'
+          'Если VPN нужен для работы приложения, попробуйте:\n'
+          '• другой сервер VPN;\n'
+          '• открыть оплату во внешнем браузере;\n'
+          '• split tunneling для домена оплаты/банка.',
           style: AppText.medium_14.copyWith(color: AppColors.grey),
         ),
         actions: [

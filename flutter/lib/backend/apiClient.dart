@@ -35,6 +35,7 @@ class ForbiddenAccountException extends ApiException {
 /// Клиент для HTTP-запросов, автоматически подставляет заголовки авторизации
 class ApiClient {
   final SessionService _session = SessionService();
+  static const Duration _requestTimeout = Duration(seconds: 10);
 
   ApiClient();
 
@@ -54,17 +55,7 @@ class ApiClient {
 
   /// GET
   Future<Map<String, dynamic>> get(String url) async {
-    final uri = Uri.parse(url);
-    try {
-      final response = await http.get(uri, headers: _headers);
-      _log('GET', uri, response);
-      return _handleResponse(response);
-    } on ApiException {
-      rethrow;
-    } catch (e) {
-      debugPrint('ApiException get error: $e');
-      throw 'Ошибка сети';
-    }
+    return _request('GET', url);
   }
 
   /// POST (body nullable)
@@ -72,30 +63,7 @@ class ApiClient {
     String url, {
     Map<String, dynamic>? body,
   }) async {
-    final uri = Uri.parse(url);
-    try {
-      debugPrint('ApiClient: POST к $uri');
-      final response = await http
-          .post(
-            uri,
-            headers: _headers,
-            body: body != null ? jsonEncode(body) : null,
-          )
-          .timeout(const Duration(seconds: 10));
-      _log('POST', uri, response, body: body);
-      return _handleResponse(response);
-    } on ApiException {
-      rethrow;
-    } on TimeoutException {
-      debugPrint('ApiClient: Timeout при POST $uri');
-      throw ApiException('Timeout - сервер не отвечает', 0);
-    } on SocketException catch (e) {
-      debugPrint('ApiClient: SocketException при POST $uri: $e');
-      throw ApiException('Не удалось подключиться к серверу: $e', 0);
-    } catch (e) {
-      debugPrint('ApiClient: Неожиданная ошибка при POST $uri: $e');
-      throw ApiException('Ошибка сети: $e', 0);
-    }
+    return _request('POST', url, body: body);
   }
 
   /// PUT (body nullable)
@@ -103,21 +71,7 @@ class ApiClient {
     String url, {
     Map<String, dynamic>? body,
   }) async {
-    final uri = Uri.parse(url);
-    try {
-      final response = await http.put(
-        uri,
-        headers: _headers,
-        body: body != null ? jsonEncode(body) : null,
-      );
-      _log('PUT', uri, response, body: body);
-      return _handleResponse(response);
-    } on ApiException {
-      rethrow;
-    } catch (e) {
-      debugPrint('ApiException put error: $e');
-      throw 'Ошибка сети';
-    }
+    return _request('PUT', url, body: body);
   }
 
   /// PATCH (body nullable)
@@ -125,21 +79,7 @@ class ApiClient {
     String url, {
     Map<String, dynamic>? body,
   }) async {
-    final uri = Uri.parse(url);
-    try {
-      final response = await http.patch(
-        uri,
-        headers: _headers,
-        body: body != null ? jsonEncode(body) : null,
-      );
-      _log('PATCH', uri, response, body: body);
-      return _handleResponse(response);
-    } on ApiException {
-      rethrow;
-    } catch (e) {
-      debugPrint('ApiException patch error: $e');
-      throw 'Ошибка сети';
-    }
+    return _request('PATCH', url, body: body);
   }
 
   /// DELETE (body nullable)
@@ -147,21 +87,7 @@ class ApiClient {
     String url, {
     Map<String, dynamic>? body,
   }) async {
-    final uri = Uri.parse(url);
-    try {
-      final response = await http.delete(
-        uri,
-        headers: _headers,
-        body: body != null ? jsonEncode(body) : null,
-      );
-      _log('DELETE', uri, response, body: body);
-      return _handleResponse(response);
-    } on ApiException {
-      rethrow;
-    } catch (e) {
-      debugPrint('ApiException delete error: $e');
-      throw 'Ошибка сети';
-    }
+    return _request('DELETE', url, body: body);
   }
 
   /// Загрузка файлов
@@ -190,16 +116,66 @@ class ApiClient {
       request.files.add(multipartFile);
 
       // Отправляем запрос
-      final streamedResponse = await request.send();
+      final streamedResponse = await request.send().timeout(_requestTimeout);
       final response = await http.Response.fromStream(streamedResponse);
 
       _log('POST (multipart)', uri, response);
       return _handleResponse(response);
     } on ApiException {
       rethrow;
+    } on TimeoutException {
+      throw ApiException('Timeout - сервер не отвечает', 0);
+    } on SocketException catch (e) {
+      throw ApiException('Не удалось подключиться к серверу: $e', 0);
     } catch (e) {
-      debugPrint('ApiException postMultipart error: $e');
-      throw 'Ошибка сети';
+      throw ApiException('Ошибка сети: $e', 0);
+    }
+  }
+
+  Future<Map<String, dynamic>> _request(
+    String method,
+    String url, {
+    Map<String, dynamic>? body,
+  }) async {
+    final uri = Uri.parse(url);
+    try {
+      final response = await _sendRequest(
+        method,
+        uri,
+        body: body,
+      ).timeout(_requestTimeout);
+      _log(method, uri, response, body: body);
+      return _handleResponse(response);
+    } on ApiException {
+      rethrow;
+    } on TimeoutException {
+      throw ApiException('Timeout - сервер не отвечает', 0);
+    } on SocketException catch (e) {
+      throw ApiException('Не удалось подключиться к серверу: $e', 0);
+    } catch (e) {
+      throw ApiException('Ошибка сети: $e', 0);
+    }
+  }
+
+  Future<http.Response> _sendRequest(
+    String method,
+    Uri uri, {
+    Map<String, dynamic>? body,
+  }) {
+    final encodedBody = body != null ? jsonEncode(body) : null;
+    switch (method) {
+      case 'GET':
+        return http.get(uri, headers: _headers);
+      case 'POST':
+        return http.post(uri, headers: _headers, body: encodedBody);
+      case 'PUT':
+        return http.put(uri, headers: _headers, body: encodedBody);
+      case 'PATCH':
+        return http.patch(uri, headers: _headers, body: encodedBody);
+      case 'DELETE':
+        return http.delete(uri, headers: _headers, body: encodedBody);
+      default:
+        throw ApiException('Неподдерживаемый HTTP-метод: $method');
     }
   }
 
@@ -221,7 +197,7 @@ class ApiClient {
           decoded = {'data': parsed};
         }
       } catch (e) {
-        throw 'Ошибка обработки ответа';
+        throw ApiException('Ошибка обработки ответа', status);
       }
     }
 

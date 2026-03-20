@@ -7,7 +7,6 @@ import 'package:azalia/components/text_styles.dart';
 import 'package:azalia/components/widgets/footer.dart';
 import 'package:azalia/pages/error/loading_error.dart';
 import 'package:azalia/backend/services/cart.dart';
-import 'package:azalia/backend/services/session.dart';
 import 'package:azalia/backend/services/selected_items_service.dart';
 import 'package:azalia/pages/cart/widgets/cards.dart';
 import 'package:azalia/pages/cart/widgets/out_of_stock.dart';
@@ -15,6 +14,7 @@ import 'package:azalia/pages/cart/widgets/header.dart';
 import 'package:azalia/pages/error/app_errors.dart';
 import 'package:azalia/backend/models/cart.dart';
 import 'package:azalia/router.dart';
+import 'package:azalia/components/state/auth_guarded_state.dart';
 import 'package:go_router/go_router.dart';
 
 class CartPage extends StatefulWidget {
@@ -24,7 +24,7 @@ class CartPage extends StatefulWidget {
   State<CartPage> createState() => _CartPageState();
 }
 
-class _CartPageState extends State<CartPage> {
+class _CartPageState extends AuthGuardedState<CartPage> {
   List<CartItemWithPot> _cartItems = [];
   List<CartItemWithPot> _outOfStockItems = [];
   bool _isLoading = true;
@@ -32,7 +32,6 @@ class _CartPageState extends State<CartPage> {
   String _error = '';
   double _totalPrice = 0;
   int _totalItems = 0;
-  final SessionService _sessionService = SessionService();
   Set<int> _selectedItemIds = {};
 
   @override
@@ -42,27 +41,28 @@ class _CartPageState extends State<CartPage> {
   }
 
   Future<void> _loadCart() async {
-    setState(() {
+    safeSetState(() {
       _isLoading = true;
       _error = '';
       _isUnauthorized = false;
     });
     try {
       final cartResponse = await CartService.getCart();
-      _processCartItems(cartResponse.items);
+      await _processCartItems(cartResponse.items);
     } catch (e) {
+      if (!mounted) return;
       _handleLoadError(e);
     }
   }
 
   void _handleUnauthorized() {
-    setState(() {
+    safeSetState(() {
       _isUnauthorized = true;
       _isLoading = false;
     });
   }
 
-  void _processCartItems(List<CartItem> items) async {
+  Future<void> _processCartItems(List<CartItem> items) async {
     final List<CartItemWithPot> availableItems = [];
     final List<CartItemWithPot> outOfStockItems = [];
 
@@ -84,7 +84,7 @@ class _CartPageState extends State<CartPage> {
 
     final availableSummary = _calculateSummary(availableItems, selectedIds);
 
-    setState(() {
+    safeSetState(() {
       _cartItems = availableItems;
       _outOfStockItems = outOfStockItems;
       _selectedItemIds = selectedIds;
@@ -96,9 +96,8 @@ class _CartPageState extends State<CartPage> {
   }
 
   void _handleLoadError(dynamic e) {
-    final errorText = e.toString();
-    if (AppErrors.isForbiddenAccountError(errorText)) {
-      setState(() {
+    if (isForbiddenAccountError(e)) {
+      safeSetState(() {
         _error = AppErrors.accountBlockedMessage;
         _isLoading = false;
         _isUnauthorized = false;
@@ -106,21 +105,21 @@ class _CartPageState extends State<CartPage> {
       return;
     }
 
-    if (e.toString().contains('401') ||
-        e.toString().contains('authorized') ||
-        e.toString().contains('session') ||
-        e.toString().contains('token')) {
+    if (isUnauthorizedError(e)) {
       _handleUnauthorized();
       return;
     }
 
-    setState(() {
+    safeSetState(() {
       _error = 'Не удалось загрузить корзину';
       _isLoading = false;
     });
   }
 
-  Map<String, dynamic> _calculateSummary(List<CartItemWithPot> items, [Set<int>? selectedIds]) {
+  Map<String, dynamic> _calculateSummary(
+    List<CartItemWithPot> items, [
+    Set<int>? selectedIds,
+  ]) {
     double totalPrice = 0;
     int totalItems = 0;
     final idsToCheck = selectedIds ?? _selectedItemIds;
@@ -188,13 +187,13 @@ class _CartPageState extends State<CartPage> {
 
   void _removeOutOfStockItem(CartItemWithPot item) async {
     try {
-      if (!_sessionService.isLoggedIn || !_sessionService.isTokenValid) {
+      if (!hasValidSession) {
         _handleUnauthorized();
         return;
       }
-      
+
       await CartService.removeFromCart(item.id);
-      setState(() {
+      safeSetState(() {
         _outOfStockItems.removeWhere((i) => i.id == item.id);
       });
 
@@ -207,7 +206,7 @@ class _CartPageState extends State<CartPage> {
 
   Future<void> _clearCart() async {
     try {
-      if (!_sessionService.isLoggedIn || !_sessionService.isTokenValid) {
+      if (!hasValidSession) {
         _handleUnauthorized();
         return;
       }
@@ -215,7 +214,7 @@ class _CartPageState extends State<CartPage> {
       await CartService.clearCart();
       await SelectedItemsService.clearSelectedItems();
 
-      setState(() {
+      safeSetState(() {
         _cartItems.clear();
         _outOfStockItems.clear();
         _selectedItemIds.clear();
@@ -231,6 +230,7 @@ class _CartPageState extends State<CartPage> {
   }
 
   void _showSnackBar(String message, {bool isError = false}) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: AppColors.white,
@@ -246,13 +246,12 @@ class _CartPageState extends State<CartPage> {
   }
 
   Future<void> _proceedToCheckout() async {
-    final selectedItems = _cartItems.where((item) => _selectedItemIds.contains(item.id)).toList();
-    
+    final selectedItems = _cartItems
+        .where((item) => _selectedItemIds.contains(item.id))
+        .toList();
+
     if (selectedItems.isEmpty) {
-      _showSnackBar(
-        'Выберите товары для оформления заказа',
-        isError: true,
-      );
+      _showSnackBar('Выберите товары для оформления заказа', isError: true);
       return;
     }
 
@@ -287,7 +286,8 @@ class _CartPageState extends State<CartPage> {
       debugPrint('_proceedToCheckout error: $e');
       debugPrint('Stack: $stack');
       if (mounted) {
-        final errorMessage = e.toString()
+        final errorMessage = e
+            .toString()
             .replaceAll('Exception: ', '')
             .replaceAll('ApiException(status: 0, message: ', '')
             .replaceAll(')', '');
@@ -295,7 +295,6 @@ class _CartPageState extends State<CartPage> {
       }
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -346,24 +345,22 @@ class _CartPageState extends State<CartPage> {
     return ListView(
       padding: const EdgeInsets.only(top: 16, bottom: 16),
       children: [
-        ..._cartItems
-            .map(
-              (item) => CartCard(
-                key: Key('cart_${item.id}'),
-                item: item,
-                onItemRemoved: _onItemRemoved,
-                onQuantityChanged: _onQuantityChanged,
-                onSelectionChanged: _onSelectionChanged,
-              ),
-            ),
+        ..._cartItems.map(
+          (item) => CartCard(
+            key: Key('cart_${item.id}'),
+            item: item,
+            onItemRemoved: _onItemRemoved,
+            onQuantityChanged: _onQuantityChanged,
+            onSelectionChanged: _onSelectionChanged,
+          ),
+        ),
 
         if (_outOfStockItems.isNotEmpty) ...[
           _buildOutOfStockSection(),
-          ..._outOfStockItems
-              .map(
-                (item) =>
-                    OutOfStockCard(item: item, onRemove: _removeOutOfStockItem),
-              ),
+          ..._outOfStockItems.map(
+            (item) =>
+                OutOfStockCard(item: item, onRemove: _removeOutOfStockItem),
+          ),
         ],
       ],
     );
@@ -435,7 +432,7 @@ class _CartPageState extends State<CartPage> {
 
   Widget _buildCheckoutSection() {
     final hasSelectedItems = _selectedItemIds.isNotEmpty;
-    
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -488,9 +485,7 @@ class _CartPageState extends State<CartPage> {
               child: Text(
                 'Перейти к оформлению',
                 style: AppText.medium_16.copyWith(
-                  color: hasSelectedItems
-                      ? AppColors.white
-                      : AppColors.grey,
+                  color: hasSelectedItems ? AppColors.white : AppColors.grey,
                 ),
               ),
             ),

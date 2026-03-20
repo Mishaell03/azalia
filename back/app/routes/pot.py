@@ -8,6 +8,10 @@ from app.db import get_db_connection
 
 router = APIRouter(prefix="/api/pot", tags=["pot"])
 
+DEFAULT_FREE_POT_SIZE_NAMES = ["S", "Small", "Маленький", "Малый"]
+DEFAULT_FREE_POT_MATERIAL_NAMES = ["Пластик", "Plastic"]
+DEFAULT_FREE_POT_COLOR_NAMES = ["Белый", "White"]
+
 
 def _resolve_option_id(cur, table: str, option_id: Optional[int], option_name: Optional[str]) -> Optional[int]:
     if option_id is not None:
@@ -45,6 +49,66 @@ def _variant_rows(cur):
         """
     ).fetchall()
     return [row for row in rows if int(row["is_active"] or 0) == 1]
+
+
+def _default_option_id(cur, table: str, names: list[str]) -> Optional[int]:
+    for name in names:
+        resolved = _resolve_option_id(cur, table, None, name)
+        if resolved is not None:
+            return int(resolved)
+    return None
+
+
+def _first_option_id(cur, table: str) -> Optional[int]:
+    row = cur.execute(f"SELECT id FROM {table} ORDER BY id LIMIT 1").fetchone()
+    return int(row["id"]) if row else None
+
+
+def _resolve_default_free_pot_ids(cur) -> tuple[Optional[int], Optional[int], Optional[int]]:
+    size_id = _default_option_id(cur, "pot_sizes", DEFAULT_FREE_POT_SIZE_NAMES) or _first_option_id(cur, "pot_sizes")
+    material_id = _default_option_id(cur, "pot_materials", DEFAULT_FREE_POT_MATERIAL_NAMES) or _first_option_id(cur, "pot_materials")
+    color_id = _default_option_id(cur, "pot_colors", DEFAULT_FREE_POT_COLOR_NAMES) or _first_option_id(cur, "pot_colors")
+    return size_id, material_id, color_id
+
+
+def _is_default_free_pot(
+    *,
+    size_id: Optional[int],
+    material_id: Optional[int],
+    color_id: Optional[int],
+    default_size_id: Optional[int],
+    default_material_id: Optional[int],
+    default_color_id: Optional[int],
+) -> bool:
+    if size_id is None or material_id is None:
+        return False
+    if default_size_id is None or default_material_id is None:
+        return False
+    if size_id != default_size_id or material_id != default_material_id:
+        return False
+    if default_color_id is None:
+        return True
+    return color_id is None or color_id == default_color_id
+
+
+def _apply_default_pot_selection(
+    *,
+    size_id: Optional[int],
+    material_id: Optional[int],
+    color_id: Optional[int],
+    default_size_id: Optional[int],
+    default_material_id: Optional[int],
+    default_color_id: Optional[int],
+) -> tuple[int, int, Optional[int]]:
+    if default_size_id is None or default_material_id is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Default free pot configuration is missing (S + Plastic + White)",
+        )
+    resolved_size_id = size_id if size_id is not None else default_size_id
+    resolved_material_id = material_id if material_id is not None else default_material_id
+    resolved_color_id = color_id if color_id is not None else default_color_id
+    return int(resolved_size_id), int(resolved_material_id), resolved_color_id
 
 
 @router.get("/sizes", summary="Get Pot Sizes")
@@ -307,45 +371,47 @@ def get_pot_price(
         resolved_size_id = _resolve_option_id(cur, "pot_sizes", size_id, size)
         resolved_material_id = _resolve_option_id(cur, "pot_materials", material_id, material)
         resolved_color_id = _resolve_option_id(cur, "pot_colors", color_id, color)
+        default_size_id, default_material_id, default_color_id = _resolve_default_free_pot_ids(cur)
 
-        if resolved_size_id is None or resolved_material_id is None:
-            raise HTTPException(status_code=400, detail="Material and size are required")
+        resolved_size_id, resolved_material_id, resolved_color_id = _apply_default_pot_selection(
+            size_id=resolved_size_id,
+            material_id=resolved_material_id,
+            color_id=resolved_color_id,
+            default_size_id=default_size_id,
+            default_material_id=default_material_id,
+            default_color_id=default_color_id,
+        )
 
+        size_row = cur.execute(
+            "SELECT id, name FROM pot_sizes WHERE id = ?",
+            (resolved_size_id,),
+        ).fetchone()
+        material_row = cur.execute(
+            "SELECT id, name FROM pot_materials WHERE id = ?",
+            (resolved_material_id,),
+        ).fetchone()
+        color_row = None
         if resolved_color_id is not None:
-            row = cur.execute(
-                """
-                SELECT
-                    vp.price,
-                    ps.id AS size_id,
-                    ps.name AS size_name,
-                    pm.id AS material_id,
-                    pm.name AS material_name,
-                    pc.id AS color_id,
-                    pc.name AS color_name
-                FROM pot_variant_prices vp
-                JOIN pot_sizes ps ON ps.id = vp.size_id
-                JOIN pot_materials pm ON pm.id = vp.material_id
-                JOIN pot_colors pc ON pc.id = vp.color_id
-                WHERE vp.size_id = ? AND vp.material_id = ? AND vp.color_id = ? AND vp.is_active = 1
-                LIMIT 1
-                """,
-                (resolved_size_id, resolved_material_id, resolved_color_id),
+            color_row = cur.execute(
+                "SELECT id, name FROM pot_colors WHERE id = ?",
+                (resolved_color_id,),
             ).fetchone()
-            if not row:
-                raise HTTPException(status_code=404, detail="Price not found")
-            price = float(row["price"])
+
+        if _is_default_free_pot(
+            size_id=resolved_size_id,
+            material_id=resolved_material_id,
+            color_id=resolved_color_id,
+            default_size_id=default_size_id,
+            default_material_id=default_material_id,
+            default_color_id=default_color_id,
+        ):
+            price = 0.0
         else:
             row = cur.execute(
                 """
                 SELECT
-                    pp.price,
-                    ps.id AS size_id,
-                    ps.name AS size_name,
-                    pm.id AS material_id,
-                    pm.name AS material_name
+                    pp.price
                 FROM pot_prices pp
-                JOIN pot_sizes ps ON ps.id = pp.size_id
-                JOIN pot_materials pm ON pm.id = pp.material_id
                 WHERE pp.size_id = ? AND pp.material_id = ?
                 LIMIT 1
                 """,
@@ -361,11 +427,11 @@ def get_pot_price(
         "success": True,
         "data": {
             "price": price,
-            "material_id": int(row["material_id"]),
-            "material": row["material_name"],
-            "size_id": int(row["size_id"]),
-            "size": row["size_name"],
-            "color_id": int(row["color_id"]) if "color_id" in row.keys() else None,
-            "color": row["color_name"] if "color_name" in row.keys() else None,
+            "material_id": int(material_row["id"]) if material_row else None,
+            "material": material_row["name"] if material_row else None,
+            "size_id": int(size_row["id"]) if size_row else None,
+            "size": size_row["name"] if size_row else None,
+            "color_id": int(color_row["id"]) if color_row else None,
+            "color": color_row["name"] if color_row else None,
         },
     }

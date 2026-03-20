@@ -62,23 +62,14 @@ class Position {
   final int id;
   final String title;
 
-  Position({
-    required this.id,
-    required this.title,
-  });
+  Position({required this.id, required this.title});
 
   factory Position.fromJson(Map<String, dynamic> json) {
-    return Position(
-      id: json['id'],
-      title: json['title'] ?? '',
-    );
+    return Position(id: json['id'], title: json['title'] ?? '');
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'title': title,
-    };
+    return {'id': id, 'title': title};
   }
 }
 
@@ -100,13 +91,29 @@ class AuthResponse {
   });
 
   factory AuthResponse.fromJson(Map<String, dynamic> json) {
+    final dynamic employeeRaw = json['employee'];
+    Map<String, dynamic>? employeeMap;
+    if (employeeRaw is Map<String, dynamic>) {
+      employeeMap = employeeRaw;
+    } else if (employeeRaw is Map) {
+      employeeMap = Map<String, dynamic>.from(employeeRaw);
+    }
+
+    final dynamic positionRaw = json['position'] ?? employeeMap?['position'];
+    Map<String, dynamic>? positionMap;
+    if (positionRaw is Map<String, dynamic>) {
+      positionMap = positionRaw;
+    } else if (positionRaw is Map) {
+      positionMap = Map<String, dynamic>.from(positionRaw);
+    }
+
     return AuthResponse(
       success: json['success'] ?? false,
       user: User.fromJson(json['user']),
       message: json['message'] ?? '',
-      employee: json['employee'] != null ? Employee.fromJson(json['employee']) : null,
+      employee: employeeMap != null ? Employee.fromJson(employeeMap) : null,
       isEmployee: json['is_employee'] ?? false,
-      position: json['position'] != null ? Position.fromJson(json['position']) : null,
+      position: positionMap != null ? Position.fromJson(positionMap) : null,
     );
   }
 }
@@ -140,7 +147,9 @@ class CodeStatus {
       userLinked: json['user_linked'] ?? false,
       isValid: json['is_valid'] ?? false,
       user: json['user'] != null ? User.fromJson(json['user']) : null,
-      employee: json['employee'] != null ? Employee.fromJson(json['employee']) : null,
+      employee: json['employee'] != null
+          ? Employee.fromJson(json['employee'])
+          : null,
       isEmployee: json['is_employee'],
     );
   }
@@ -151,11 +160,7 @@ class CodeStatusResponse {
   final CodeStatus status;
   final String? error;
 
-  CodeStatusResponse({
-    required this.success,
-    required this.status,
-    this.error,
-  });
+  CodeStatusResponse({required this.success, required this.status, this.error});
 
   factory CodeStatusResponse.fromJson(Map<String, dynamic> json) {
     return CodeStatusResponse(

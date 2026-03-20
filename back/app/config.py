@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     PORT: int = 5000
 
     BOT_TOKEN: str = ""
-    API_BASE_URL: str = "http://localhost:5000/api"
+    API_BASE_URL: str = "https://www.nebinance.ru/api"
 
     YOOKASSA_SHOP_ID: str = ""
     YOOKASSA_SDK: str = ""

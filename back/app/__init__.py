@@ -13,6 +13,7 @@ from app.routes.employees import router as employees_router
 from app.routes.payments import router as payments_router
 from app.routes.plants import router as plants_router
 from app.routes.pot import router as pot_router
+from app.routes.notifications import router as notifications_router
 from app.routes.important_dates import router as important_dates_router
 from app.routes.plant_care_dates import router as plant_care_dates_router
 from app.routes.company_calendar_events import router as company_calendar_events_router
@@ -109,6 +110,7 @@ def create_app() -> FastAPI:
     app.include_router(cart_router)
     app.include_router(payments_router)
     app.include_router(pot_router)
+    app.include_router(notifications_router)
     app.include_router(important_dates_router)
     app.include_router(plant_care_dates_router)
     app.include_router(user_plants_router)

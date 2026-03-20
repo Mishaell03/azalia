@@ -19,7 +19,6 @@ class _AdminProductsCartOrdersState extends State<AdminProductsCartOrders> {
   final ApiClient _api = ApiClient();
 
   bool _isLoading = true;
-  bool _isActionLoading = false;
   String? _error;
   String _statusFilter = '';
   String _sortBy = 'created_at_desc';
@@ -205,6 +204,7 @@ class _AdminProductsCartOrdersState extends State<AdminProductsCartOrders> {
     String selectedStatus = _normalizeStatusCode(
       detail.statusCode.isNotEmpty ? detail.statusCode : detail.status,
     );
+    bool isDialogActionLoading = false;
 
     await showDialog<void>(
       context: context,
@@ -234,11 +234,9 @@ class _AdminProductsCartOrdersState extends State<AdminProductsCartOrders> {
                 currentStatusCode != 'cancelled';
             final hasRefund = detail.refunds.any(
               (refund) =>
-                  refund.status == 'processed' ||
-                  refund.status == 'pending',
+                  refund.status == 'processed' || refund.status == 'pending',
             );
-            final canRefund =
-                detail.paymentStatusCode == 'paid' && !hasRefund;
+            final canRefund = detail.paymentStatusCode == 'paid' && !hasRefund;
 
             return AlertDialog(
               title: Text('Заказ №${detail.orderNumber}'),
@@ -260,9 +258,7 @@ class _AdminProductsCartOrdersState extends State<AdminProductsCartOrders> {
                             ),
                             decoration: BoxDecoration(
                               border: Border.all(
-                                color: _orderStatusColor(
-                                  currentStatusCode,
-                                ),
+                                color: _orderStatusColor(currentStatusCode),
                               ),
                               color: _orderStatusColor(
                                 currentStatusCode,
@@ -293,7 +289,7 @@ class _AdminProductsCartOrdersState extends State<AdminProductsCartOrders> {
                                     detail.paymentStatusCode,
                                     detail.paymentStatus,
                                   ),
-                                )
+                                ),
                               ),
                               color: _paymentStatusColor(
                                 _resolvedPaymentCode(
@@ -345,13 +341,11 @@ class _AdminProductsCartOrdersState extends State<AdminProductsCartOrders> {
                             .map(
                               (entry) => DropdownMenuItem<String>(
                                 value: entry.key,
-                                child: Text(
-                                  _statusLabelByCode(entry.key),
-                                ),
+                                child: Text(_statusLabelByCode(entry.key)),
                               ),
                             )
                             .toList(),
-                        onChanged: _isActionLoading
+                        onChanged: isDialogActionLoading
                             ? null
                             : (value) {
                                 if (value == null) return;
@@ -454,9 +448,7 @@ class _AdminProductsCartOrdersState extends State<AdminProductsCartOrders> {
               ),
               actions: [
                 TextButton(
-                  onPressed: _isActionLoading
-                      ? null
-                      : () => Navigator.of(ctx).pop(),
+                  onPressed: () => Navigator.of(ctx).pop(),
                   style: TextButton.styleFrom(
                     side: BorderSide(color: AppColors.brown),
                   ),
@@ -467,12 +459,12 @@ class _AdminProductsCartOrdersState extends State<AdminProductsCartOrders> {
                 ),
                 if (canMarkPaid)
                   TextButton(
-                    onPressed: _isActionLoading
+                    onPressed: isDialogActionLoading
                         ? null
                         : () async {
                             final messenger = ScaffoldMessenger.of(context);
-                            setState(() {
-                              _isActionLoading = true;
+                            setDialogState(() {
+                              isDialogActionLoading = true;
                             });
                             try {
                               await _markOrderPaid(detail.orderId);
@@ -506,8 +498,8 @@ class _AdminProductsCartOrdersState extends State<AdminProductsCartOrders> {
                               );
                             } finally {
                               if (mounted) {
-                                setState(() {
-                                  _isActionLoading = false;
+                                setDialogState(() {
+                                  isDialogActionLoading = false;
                                 });
                               }
                             }
@@ -524,12 +516,12 @@ class _AdminProductsCartOrdersState extends State<AdminProductsCartOrders> {
                   ),
                 if (canRefund)
                   TextButton(
-                    onPressed: _isActionLoading
+                    onPressed: isDialogActionLoading
                         ? null
                         : () async {
                             final messenger = ScaffoldMessenger.of(context);
-                            setState(() {
-                              _isActionLoading = true;
+                            setDialogState(() {
+                              isDialogActionLoading = true;
                             });
                             try {
                               await _refundOrder(
@@ -566,8 +558,8 @@ class _AdminProductsCartOrdersState extends State<AdminProductsCartOrders> {
                               );
                             } finally {
                               if (mounted) {
-                                setState(() {
-                                  _isActionLoading = false;
+                                setDialogState(() {
+                                  isDialogActionLoading = false;
                                 });
                               }
                             }
@@ -577,14 +569,12 @@ class _AdminProductsCartOrdersState extends State<AdminProductsCartOrders> {
                     ),
                     child: Text(
                       'Сделать возврат',
-                      style: AppText.medium_12.copyWith(
-                        color: AppColors.brown,
-                      ),
+                      style: AppText.medium_12.copyWith(color: AppColors.brown),
                     ),
                   ),
                 if (hasStatusChange)
                   TextButton(
-                    onPressed: _isActionLoading
+                    onPressed: isDialogActionLoading
                         ? null
                         : () async {
                             final messenger = ScaffoldMessenger.of(context);
@@ -592,8 +582,8 @@ class _AdminProductsCartOrdersState extends State<AdminProductsCartOrders> {
                               Navigator.of(ctx).pop();
                               return;
                             }
-                            setState(() {
-                              _isActionLoading = true;
+                            setDialogState(() {
+                              isDialogActionLoading = true;
                             });
                             try {
                               await _updateOrderStatus(
@@ -635,8 +625,8 @@ class _AdminProductsCartOrdersState extends State<AdminProductsCartOrders> {
                               );
                             } finally {
                               if (mounted) {
-                                setState(() {
-                                  _isActionLoading = false;
+                                setDialogState(() {
+                                  isDialogActionLoading = false;
                                 });
                               }
                             }
@@ -653,13 +643,13 @@ class _AdminProductsCartOrdersState extends State<AdminProductsCartOrders> {
                   ),
                 if (canCloseOrder)
                   TextButton(
-                    onPressed: _isActionLoading
+                    onPressed: isDialogActionLoading
                         ? null
                         : () async {
-                            final navigator = Navigator.of(context);
+                            final navigator = Navigator.of(ctx);
                             final messenger = ScaffoldMessenger.of(context);
-                            setState(() {
-                              _isActionLoading = true;
+                            setDialogState(() {
+                              isDialogActionLoading = true;
                             });
                             try {
                               await _closeOrder(detail.orderId);
@@ -695,8 +685,8 @@ class _AdminProductsCartOrdersState extends State<AdminProductsCartOrders> {
                               );
                             } finally {
                               if (mounted) {
-                                setState(() {
-                                  _isActionLoading = false;
+                                setDialogState(() {
+                                  isDialogActionLoading = false;
                                 });
                               }
                             }
@@ -800,9 +790,7 @@ class _AdminProductsCartOrdersState extends State<AdminProductsCartOrders> {
                     itemBuilder: (context, index) {
                       final order = _orders[index];
                       return InkWell(
-                        onTap: _isActionLoading
-                            ? null
-                            : () => _showOrderDialog(order),
+                        onTap: () => _showOrderDialog(order),
                         child: Card(
                           margin: const EdgeInsets.symmetric(
                             horizontal: 16,
@@ -862,7 +850,7 @@ class _AdminProductsCartOrdersState extends State<AdminProductsCartOrders> {
                                         border: Border.all(
                                           color: _orderStatusColor(
                                             order.statusCode,
-                                          )
+                                          ),
                                         ),
                                         color: _orderStatusColor(
                                           order.statusCode,

@@ -28,7 +28,7 @@ class CompanyAddMemberRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     company_id: Optional[int] = Field(default=None, ge=1)
-    user_id: Optional[int] = Field(default=None, ge=1)
+    telegram_id: Optional[int] = Field(default=None, ge=1)
     user_phone: Optional[str] = Field(default=None, max_length=25)
     role: str = Field(default="member", max_length=16)
 
@@ -441,21 +441,21 @@ def add_company_member(payload: CompanyAddMemberRequest, user=Depends(get_curren
             )
 
         target = None
-        if payload.user_id is not None:
+        if payload.telegram_id is not None:
             target = cur.execute(
                 """
-                SELECT id, full_name, phone, avatar_url, status
+                SELECT id, telegram_id, full_name, phone, avatar_url, status
                 FROM users
-                WHERE id = ?
+                WHERE telegram_id = ?
                 LIMIT 1
                 """,
-                (int(payload.user_id),),
+                (int(payload.telegram_id),),
             ).fetchone()
         elif payload.user_phone is not None:
             normalized_phone = _normalize_phone(payload.user_phone)
             target = cur.execute(
                 """
-                SELECT id, full_name, phone, avatar_url, status
+                SELECT id, telegram_id, full_name, phone, avatar_url, status
                 FROM users
                 WHERE phone = ?
                 LIMIT 1
@@ -463,7 +463,7 @@ def add_company_member(payload: CompanyAddMemberRequest, user=Depends(get_curren
                 (normalized_phone,),
             ).fetchone()
         else:
-            raise HTTPException(status_code=422, detail="Укажите user_id или user_phone")
+            raise HTTPException(status_code=422, detail="Укажите telegram_id или user_phone")
 
         if not target:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
@@ -549,6 +549,7 @@ def add_company_member(payload: CompanyAddMemberRequest, user=Depends(get_curren
         "data": {
             "member": {
                 "user_id": int(member["user_id"]),
+                "telegram_id": int(target["telegram_id"]),
                 "full_name": member["full_name"],
                 "phone": member["phone"],
                 "avatar_url": member["avatar_url"],

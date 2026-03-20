@@ -24,7 +24,7 @@ class PaymentWebViewPage extends StatefulWidget {
 
 class _PaymentWebViewPage extends State<PaymentWebViewPage>
     with WidgetsBindingObserver {
-  static const Duration _webViewFallbackTimeout = Duration(seconds: 8);
+  static const Duration _webViewFallbackTimeout = Duration(seconds: 20);
 
   final ApiClient _api = ApiClient();
   late final WebViewController _controller;
@@ -36,6 +36,7 @@ class _PaymentWebViewPage extends State<PaymentWebViewPage>
   bool _isCheckingStatus = false;
   bool _isLaunchingExternal = false;
   bool _externalBrowserOpened = false;
+  bool _autoBrowserFallbackTried = false;
 
   bool _isPaidStatus(String? rawStatus) {
     final status = (rawStatus ?? '').trim().toLowerCase();
@@ -84,11 +85,17 @@ class _PaymentWebViewPage extends State<PaymentWebViewPage>
           },
           onWebResourceError: (WebResourceError error) {
             debugPrint(
-              'PaymentWebViewPage: WebResourceError: ${error.description}',
+              'PaymentWebViewPage: WebResourceError: '
+              'type=${error.errorType}, code=${error.errorCode}, description=${error.description}',
             );
-            _showWebViewError(
-              'Не удалось открыть оплату',
-            );
+            if (_isDnsLookupError(error)) {
+              _showWebViewError(
+                'Не удалось открыть оплату во встроенном окне: ошибка DNS',
+              );
+              _tryAutoOpenInBrowser();
+              return;
+            }
+            _showWebViewError('Не удалось открыть оплату');
           },
           onNavigationRequest: (NavigationRequest request) {
             debugPrint(
@@ -132,6 +139,26 @@ class _PaymentWebViewPage extends State<PaymentWebViewPage>
     }
   }
 
+  bool _isDnsLookupError(WebResourceError error) {
+    final description = error.description.toLowerCase();
+    return error.errorType == WebResourceErrorType.hostLookup ||
+        error.errorCode == -2 ||
+        description.contains('host') ||
+        description.contains('hostname') ||
+        description.contains('имени хоста') ||
+        description.contains('err_name_not_resolved');
+  }
+
+  Future<void> _tryAutoOpenInBrowser() async {
+    if (_autoBrowserFallbackTried ||
+        _externalBrowserOpened ||
+        _isLaunchingExternal) {
+      return;
+    }
+    _autoBrowserFallbackTried = true;
+    await _openInBrowser(showErrorSnackBar: false);
+  }
+
   void _scheduleFallbackTimer() {
     _fallbackTimer?.cancel();
     _fallbackTimer = Timer(_webViewFallbackTimeout, () {
@@ -150,7 +177,8 @@ class _PaymentWebViewPage extends State<PaymentWebViewPage>
     if (!mounted) return;
     setState(() {
       _loading = false;
-      _error = '$message\n\nПопробуйте оплатить через браузер';
+      _error =
+          '$message\n\nПопробуйте оплатить через браузер или сменить сервер VPN.';
     });
   }
 

@@ -235,12 +235,14 @@ def _enqueue_order_status_notification(
         INSERT INTO notifications (
             user_id,
             template_id,
+            type,
+            channel,
             title,
             body,
             status,
             related_order_id
         )
-        VALUES (?, NULL, ?, ?, 'pending', ?)
+        VALUES (?, NULL, 'order', 'telegram', ?, ?, 'pending', ?)
         """,
         (
             int(order_row["user_id"]),

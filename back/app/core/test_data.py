@@ -803,16 +803,84 @@ def seed_products(cur) -> None:
         product_images,
     )
 
+    # Полный прайс на все комбинации size+material.
+    # Цена формируется только по размеру и материалу; цвет на цену не влияет.
+    pot_price_rows = [
+        # Пластик
+        (1, 1, 0.00), (2, 1, 200.00), (3, 1, 250.00), (4, 1, 300.00),
+        # Керамика
+        (1, 2, 300.00), (2, 2, 400.00), (3, 2, 500.00), (4, 2, 600.00),
+        # Глина
+        (1, 3, 250.00), (2, 3, 350.00), (3, 3, 450.00), (4, 3, 550.00),
+        # Стекло
+        (1, 4, 350.00), (2, 4, 450.00), (3, 4, 550.00), (4, 4, 650.00),
+        # Металл
+        (1, 5, 400.00), (2, 5, 500.00), (3, 5, 600.00), (4, 5, 700.00),
+        # Дерево
+        (1, 6, 320.00), (2, 6, 420.00), (3, 6, 520.00), (4, 6, 620.00),
+    ]
+
     cur.executemany(
         """
         INSERT OR IGNORE INTO pot_prices (size_id, material_id, price)
         VALUES (?, ?, ?)
         """,
-        [
-            (1, 1, 150.00), (2, 1, 200.00), (3, 1, 250.00), (4, 1, 300.00),
-            (1, 2, 300.00), (2, 2, 400.00), (3, 2, 500.00), (4, 2, 600.00),
-            (1, 3, 250.00), (2, 3, 350.00), (3, 3, 450.00), (4, 3, 550.00),
-        ],
+        pot_price_rows,
+    )
+    cur.executemany(
+        """
+        UPDATE pot_prices
+        SET price = ?
+        WHERE size_id = ? AND material_id = ?
+        """,
+        [(price, size_id, material_id) for (size_id, material_id, price) in pot_price_rows],
+    )
+
+    # Матрица вариантов для всех цветов (для availability в API):
+    # цена дублируется из базовой pot_prices, чтобы цвет не менял стоимость.
+    cur.execute(
+        """
+        INSERT OR IGNORE INTO pot_variant_prices (size_id, material_id, color_id, price, is_active)
+        SELECT pp.size_id, pp.material_id, pc.id, pp.price, 1
+        FROM pot_prices pp
+        CROSS JOIN pot_colors pc
+        """
+    )
+    cur.execute(
+        """
+        UPDATE pot_variant_prices
+        SET price = (
+            SELECT pp.price
+            FROM pot_prices pp
+            WHERE pp.size_id = pot_variant_prices.size_id
+              AND pp.material_id = pot_variant_prices.material_id
+            LIMIT 1
+        ),
+        is_active = 1
+        """
+    )
+
+    # Гарантируем: дефолтный горшок S + Пластик всегда бесплатный.
+    # Ищем по именам, чтобы не зависеть от конкретных ID в БД.
+    cur.execute(
+        """
+        UPDATE pot_prices
+        SET price = 0
+        WHERE size_id = (
+            SELECT id
+            FROM pot_sizes
+            WHERE LOWER(name) IN ('s', 'small', 'маленький', 'малый')
+            ORDER BY id
+            LIMIT 1
+        )
+          AND material_id = (
+            SELECT id
+            FROM pot_materials
+            WHERE LOWER(name) IN ('пластик', 'plastic')
+            ORDER BY id
+            LIMIT 1
+        )
+        """
     )
 
 def seed_user_content(cur) -> None:

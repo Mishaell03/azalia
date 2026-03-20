@@ -8,7 +8,7 @@ import 'package:azalia/components/widgets/footer.dart';
 import 'package:azalia/pages/error/loading_error.dart';
 import 'package:azalia/pages/error/app_errors.dart';
 import 'package:azalia/backend/models/wishlist.dart';
-import 'package:azalia/backend/services/session.dart';
+import 'package:azalia/components/state/auth_guarded_state.dart';
 import 'package:azalia/pages/wishlist/widgets/cards.dart';
 import 'package:azalia/pages/wishlist/widgets/header.dart';
 import 'package:azalia/pages/wishlist/widgets/unauthorized.dart';
@@ -22,14 +22,12 @@ class WishlistPage extends StatefulWidget {
   State<WishlistPage> createState() => _WishlistPageState();
 }
 
-class _WishlistPageState extends State<WishlistPage> {
+class _WishlistPageState extends AuthGuardedState<WishlistPage> {
   List<WishlistItem> _availableItems = [];
   List<WishlistItem> _outOfStockItems = [];
   bool _isLoading = true;
   bool _isUnauthorized = false;
   String _error = '';
-  final SessionService _sessionService = SessionService();
-
   @override
   void initState() {
     super.initState();
@@ -38,13 +36,13 @@ class _WishlistPageState extends State<WishlistPage> {
 
   Future<void> _loadWishlist() async {
     try {
-      setState(() {
+      safeSetState(() {
         _isLoading = true;
         _error = '';
         _isUnauthorized = false;
       });
 
-      if (!_sessionService.isLoggedIn || !_sessionService.isTokenValid) {
+      if (!hasValidSession) {
         _handleUnauthorized();
         return;
       }
@@ -64,14 +62,15 @@ class _WishlistPageState extends State<WishlistPage> {
         }
       }
 
-      setState(() {
+      safeSetState(() {
         _availableItems = availableItems;
         _outOfStockItems = outOfStockItems;
         _isLoading = false;
       });
     } catch (e) {
-      if (AppErrors.isForbiddenAccountError(e.toString())) {
-        setState(() {
+      if (!mounted) return;
+      if (isForbiddenAccountError(e)) {
+        safeSetState(() {
           _error = AppErrors.accountBlockedMessage;
           _isLoading = false;
           _isUnauthorized = false;
@@ -79,15 +78,12 @@ class _WishlistPageState extends State<WishlistPage> {
         return;
       }
 
-      if (e.toString().contains('401') ||
-          e.toString().contains('authorized') ||
-          e.toString().contains('session') ||
-          e.toString().contains('token')) {
+      if (isUnauthorizedError(e)) {
         _handleUnauthorized();
         return;
       }
 
-      setState(() {
+      safeSetState(() {
         _error = 'Не удалось загрузить избранное';
         debugPrint('Не удалось загрузить избранное: $e');
         _isLoading = false;
@@ -96,14 +92,14 @@ class _WishlistPageState extends State<WishlistPage> {
   }
 
   void _handleUnauthorized() {
-    setState(() {
+    safeSetState(() {
       _isUnauthorized = true;
       _isLoading = false;
     });
   }
 
   void _onWishlistUpdated(WishlistItem removedItem) {
-    setState(() {
+    safeSetState(() {
       _availableItems.removeWhere((item) => item.id == removedItem.id);
       _outOfStockItems.removeWhere((item) => item.id == removedItem.id);
     });

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.error import Conflict
+from telegram.error import Conflict, TimedOut
 from telegram.ext import (
     Application,
     CallbackContext,
@@ -101,6 +101,7 @@ class BotConfig:
     token: str
     code_ttl_minutes: int = 10
     enable_debug_admin: bool = False
+    notification_poll_seconds: int = 20
 
     @classmethod
     def from_env(cls) -> "BotConfig":
@@ -119,6 +120,10 @@ class BotConfig:
             enable_debug_admin=cls._parse_bool(
                 os.getenv("BOT_ENABLE_DEBUG_ADMIN"),
             ),
+            notification_poll_seconds=cls._parse_notification_poll_seconds(
+                os.getenv("BOT_NOTIFICATION_POLL_SECONDS"),
+                default=20,
+            ),
         )
 
     @staticmethod
@@ -136,6 +141,16 @@ class BotConfig:
         if raw_value is None:
             return False
         return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
+    @staticmethod
+    def _parse_notification_poll_seconds(raw_value: Optional[str], default: int) -> int:
+        if raw_value is None:
+            return default
+        try:
+            parsed = int(raw_value)
+        except (TypeError, ValueError):
+            return default
+        return max(5, min(parsed, 300))
 
 
 @dataclass
@@ -540,14 +555,131 @@ class AuthService:
             raise ServiceError("Ошибка при обновлении роли.")
 
 
+@dataclass(frozen=True)
+class PendingTelegramNotification:
+    notification_id: int
+    telegram_id: int
+    title: str
+    body: str
+
+
+class NotificationRepository:
+    def fetch_pending_telegram_notifications(self, *, limit: int = 50) -> list[PendingTelegramNotification]:
+        conn = get_connection()
+        try:
+            rows = conn.execute(
+                """
+                SELECT
+                    n.id,
+                    u.telegram_id,
+                    n.title,
+                    n.body
+                FROM notifications n
+                JOIN users u ON u.id = n.user_id
+                WHERE n.status = 'pending'
+                  AND n.channel = 'telegram'
+                  AND u.status = 'active'
+                  AND u.telegram_id IS NOT NULL
+                  AND (
+                        n.scheduled_at IS NULL
+                        OR datetime(n.scheduled_at) <= datetime('now')
+                  )
+                ORDER BY COALESCE(n.scheduled_at, n.created_at) ASC, n.id ASC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+            return [
+                PendingTelegramNotification(
+                    notification_id=int(row["id"]),
+                    telegram_id=int(row["telegram_id"]),
+                    title=str(row["title"] or "Уведомление"),
+                    body=str(row["body"] or ""),
+                )
+                for row in rows
+            ]
+        finally:
+            conn.close()
+
+    def fetch_pending_for_telegram_id(self, telegram_id: int, *, limit: int = 20) -> list[PendingTelegramNotification]:
+        conn = get_connection()
+        try:
+            rows = conn.execute(
+                """
+                SELECT
+                    n.id,
+                    u.telegram_id,
+                    n.title,
+                    n.body
+                FROM notifications n
+                JOIN users u ON u.id = n.user_id
+                WHERE n.status = 'pending'
+                  AND n.channel = 'telegram'
+                  AND u.telegram_id = ?
+                  AND u.status = 'active'
+                  AND (
+                        n.scheduled_at IS NULL
+                        OR datetime(n.scheduled_at) <= datetime('now')
+                  )
+                ORDER BY COALESCE(n.scheduled_at, n.created_at) ASC, n.id ASC
+                LIMIT ?
+                """,
+                (telegram_id, limit),
+            ).fetchall()
+            return [
+                PendingTelegramNotification(
+                    notification_id=int(row["id"]),
+                    telegram_id=int(row["telegram_id"]),
+                    title=str(row["title"] or "Уведомление"),
+                    body=str(row["body"] or ""),
+                )
+                for row in rows
+            ]
+        finally:
+            conn.close()
+
+    def mark_sent(self, notification_id: int) -> None:
+        conn = get_connection()
+        try:
+            conn.execute(
+                """
+                UPDATE notifications
+                SET status = 'sent',
+                    sent_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (notification_id,),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def mark_failed(self, notification_id: int) -> None:
+        conn = get_connection()
+        try:
+            conn.execute(
+                """
+                UPDATE notifications
+                SET status = 'failed'
+                WHERE id = ?
+                """,
+                (notification_id,),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
 class FlowerShopBot:
-    def __init__(self, config: BotConfig, auth_service: AuthService):
+    def __init__(self, config: BotConfig, auth_service: AuthService, notification_repository: NotificationRepository):
         self.config = config
         self.auth_service = auth_service
+        self.notification_repository = notification_repository
         self.application = Application.builder().token(config.token).build()
 
         self.application.add_handler(CommandHandler("start", self.start_handler))
         self.application.add_handler(CommandHandler("help", self.help_handler))
+        self.application.add_handler(CommandHandler("notifications", self.notifications_handler))
         self.application.add_handler(CommandHandler("auth", self.auth_disabled_handler))
         self.application.add_handler(
             CommandHandler("debug_make_admin", self.debug_make_admin_handler)
@@ -627,6 +759,7 @@ class FlowerShopBot:
             "Доступные команды:\n"
             "/start — открыть меню\n"
             "/help — показать помощь\n",
+            "/notifications — проверить новые уведомления\n",
         ]
         if self.config.enable_debug_admin:
             lines.append("/debug_make_admin — назначить себя админом (debug)\n")
@@ -635,6 +768,27 @@ class FlowerShopBot:
             "«Войти через Telegram» в мобильном приложении."
         )
         return "".join(lines)
+
+    async def _safe_answer_callback_query(
+        self,
+        query,
+        text: Optional[str] = None,
+        *,
+        show_alert: bool = False,
+    ) -> bool:
+        try:
+            if text is None:
+                await query.answer()
+            else:
+                await query.answer(text, show_alert=show_alert)
+            return True
+        except TimedOut:
+            logger.warning(
+                "Timed out while answering callback query id=%s data=%s",
+                getattr(query, "id", "unknown"),
+                getattr(query, "data", None),
+            )
+            return False
 
     async def start_handler(self, update: Update, context: CallbackContext) -> None:
         message = update.effective_message
@@ -678,6 +832,11 @@ class FlowerShopBot:
                 self._build_auth_code_text(result=result, refreshed=False),
                 reply_markup=self._build_code_keyboard(result.auth_code_id),
             )
+            await self._drain_notifications_for_telegram_id(
+                telegram_id=int(user.id),
+                context=context,
+                silent_if_empty=True,
+            )
         except ValidationError:
             await message.reply_text(
                 "❌ Неверные данные авторизации.\n"
@@ -694,6 +853,23 @@ class FlowerShopBot:
             self._build_help_text(),
             reply_markup=self._build_main_menu_keyboard(),
         )
+
+    async def notifications_handler(self, update: Update, context: CallbackContext) -> None:
+        message = update.effective_message
+        user = update.effective_user
+        if message is None:
+            return
+        if user is None or not isinstance(user.id, int) or user.id <= 0:
+            await message.reply_text("❌ Не удалось определить пользователя.")
+            return
+
+        sent_count = await self._drain_notifications_for_telegram_id(
+            telegram_id=int(user.id),
+            context=context,
+            silent_if_empty=False,
+        )
+        if sent_count == 0:
+            await message.reply_text("📭 Новых уведомлений пока нет.")
 
     async def auth_disabled_handler(self, update: Update, context: CallbackContext) -> None:
         message = update.effective_message
@@ -736,7 +912,7 @@ class FlowerShopBot:
         callback_data = (query.data or "").strip()
 
         if callback_data == "auth_help":
-            await query.answer()
+            await self._safe_answer_callback_query(query)
             await query.edit_message_text(
                 self._build_auth_help_text(),
                 reply_markup=InlineKeyboardMarkup(
@@ -746,7 +922,7 @@ class FlowerShopBot:
             return
 
         if callback_data == "help":
-            await query.answer()
+            await self._safe_answer_callback_query(query)
             await query.edit_message_text(
                 self._build_help_text(),
                 reply_markup=self._build_main_menu_keyboard(),
@@ -755,47 +931,79 @@ class FlowerShopBot:
 
         if callback_data == "debug:make_admin":
             if not self.config.enable_debug_admin:
-                await query.answer("🔒 Debug-режим отключен.", show_alert=True)
+                await self._safe_answer_callback_query(
+                    query,
+                    "🔒 Debug-режим отключен.",
+                    show_alert=True,
+                )
                 return
             if user is None:
-                await query.answer("❌ Не удалось определить пользователя.", show_alert=True)
+                await self._safe_answer_callback_query(
+                    query,
+                    "❌ Не удалось определить пользователя.",
+                    show_alert=True,
+                )
                 return
 
             try:
                 self.auth_service.make_admin_debug(user)
-                await query.answer()
+                await self._safe_answer_callback_query(query)
                 await query.edit_message_text(
                     "✅ Вы назначены администратором (debug-режим).",
                     reply_markup=self._build_main_menu_keyboard(),
                 )
             except ServiceError:
-                await query.answer("❌ Ошибка при обновлении роли.", show_alert=True)
+                await self._safe_answer_callback_query(
+                    query,
+                    "❌ Ошибка при обновлении роли.",
+                    show_alert=True,
+                )
             return
 
         match = REFRESH_CALLBACK_PATTERN.fullmatch(callback_data)
         if not match:
-            await query.answer("❌ Некорректная команда.", show_alert=True)
+            await self._safe_answer_callback_query(
+                query,
+                "❌ Некорректная команда.",
+                show_alert=True,
+            )
             return
 
         if user is None:
-            await query.answer("❌ Не удалось определить пользователя.", show_alert=True)
+            await self._safe_answer_callback_query(
+                query,
+                "❌ Не удалось определить пользователя.",
+                show_alert=True,
+            )
             return
 
         auth_code_id = int(match.group(1))
 
         try:
             result = self.auth_service.refresh_code_by_record(user, auth_code_id)
-            await query.answer("Код обновлен")
+            await self._safe_answer_callback_query(query, "Код обновлен")
             await query.edit_message_text(
                 self._build_auth_code_text(result=result, refreshed=True),
                 reply_markup=self._build_code_keyboard(result.auth_code_id),
             )
         except ValidationError:
-            await query.answer("❌ Некорректные данные запроса.", show_alert=True)
+            await self._safe_answer_callback_query(
+                query,
+                "❌ Некорректные данные запроса.",
+                show_alert=True,
+            )
         except NotFoundError:
-            await query.answer("❌ Код не найден или больше недоступен.", show_alert=True)
+            await self._safe_answer_callback_query(
+                query,
+                "❌ Код не найден или больше недоступен.",
+                show_alert=True,
+            )
         except ServiceError:
-            await query.answer("❌ Ошибка при обновлении кода.", show_alert=True)
+            await self._safe_answer_callback_query(
+                query,
+                "❌ Ошибка при обновлении кода.",
+                show_alert=True,
+            )
 
     async def application_error_handler(
         self,
@@ -811,10 +1019,82 @@ class FlowerShopBot:
             context.application.stop_running()
             return
 
+        if isinstance(error, TimedOut):
+            logger.warning("Telegram API timeout: %s", error)
+            return
+
         logger.exception("Unhandled telegram application error", exc_info=error)
+
+    async def _deliver_notification(
+        self,
+        pending: PendingTelegramNotification,
+        *,
+        context: CallbackContext,
+    ) -> bool:
+        text = f"{pending.title}\n\n{pending.body}".strip()
+        try:
+            await context.bot.send_message(
+                chat_id=pending.telegram_id,
+                text=text,
+            )
+            self.notification_repository.mark_sent(pending.notification_id)
+            return True
+        except Exception:
+            logger.exception(
+                "Failed to deliver notification_id=%s to telegram_id=%s",
+                pending.notification_id,
+                pending.telegram_id,
+            )
+            self.notification_repository.mark_failed(pending.notification_id)
+            return False
+
+    async def _drain_notifications_for_telegram_id(
+        self,
+        *,
+        telegram_id: int,
+        context: CallbackContext,
+        silent_if_empty: bool,
+    ) -> int:
+        pending = self.notification_repository.fetch_pending_for_telegram_id(
+            telegram_id=telegram_id,
+            limit=20,
+        )
+        if not pending:
+            return 0
+
+        sent_count = 0
+        for item in pending:
+            if await self._deliver_notification(item, context=context):
+                sent_count += 1
+
+        if not silent_if_empty and sent_count > 0:
+            await context.bot.send_message(
+                chat_id=telegram_id,
+                text=f"✅ Отправлено уведомлений: {sent_count}",
+            )
+        return sent_count
+
+    async def process_pending_notifications_job(self, context: CallbackContext) -> None:
+        pending = self.notification_repository.fetch_pending_telegram_notifications(limit=50)
+        if not pending:
+            return
+        for item in pending:
+            await self._deliver_notification(item, context=context)
 
     def run(self) -> None:
         logger.info("Bot is starting...")
+        if self.application.job_queue is not None:
+            self.application.job_queue.run_repeating(
+                self.process_pending_notifications_job,
+                interval=self.config.notification_poll_seconds,
+                first=5,
+            )
+            logger.info(
+                "Notification polling enabled: every %s seconds",
+                self.config.notification_poll_seconds,
+            )
+        else:
+            logger.warning("Job queue is unavailable: pending notifications polling is disabled")
         self.application.run_polling(drop_pending_updates=True)
 
 
@@ -835,10 +1115,12 @@ def main() -> None:
         repository=AuthRepository(),
         code_ttl_minutes=config.code_ttl_minutes,
     )
+    notification_repository = NotificationRepository()
 
     bot = FlowerShopBot(
         config=config,
         auth_service=auth_service,
+        notification_repository=notification_repository,
     )
     bot.run()
 

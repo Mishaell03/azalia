@@ -10,6 +10,10 @@ from app.routes.utils import clean_text, get_current_user
 
 router = APIRouter(prefix="/api/cart", tags=["cart"])
 
+DEFAULT_FREE_POT_SIZE_NAMES = ["S", "Small", "Маленький", "Малый"]
+DEFAULT_FREE_POT_MATERIAL_NAMES = ["Пластик", "Plastic"]
+DEFAULT_FREE_POT_COLOR_NAMES = ["Белый", "White"]
+
 
 class CartAddRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -109,20 +113,6 @@ def _resolve_pot_unit_price(
     if pot_size_id is None or pot_material_id is None:
         raise HTTPException(status_code=400, detail="pot_size and pot_material must be provided together")
 
-    if pot_color_id is not None:
-        row = cur.execute(
-            """
-            SELECT price
-            FROM pot_variant_prices
-            WHERE size_id = ? AND material_id = ? AND color_id = ? AND is_active = 1
-            LIMIT 1
-            """,
-            (pot_size_id, pot_material_id, pot_color_id),
-        ).fetchone()
-        if not row:
-            raise HTTPException(status_code=400, detail="Selected pot combination not available")
-        return float(row["price"])
-
     row = cur.execute(
         "SELECT price FROM pot_prices WHERE size_id = ? AND material_id = ? LIMIT 1",
         (pot_size_id, pot_material_id),
@@ -144,7 +134,71 @@ def _default_option_id(cur, table: str, names: list[str]) -> Optional[int]:
     return None
 
 
+def _first_option_id(cur, table: str) -> Optional[int]:
+    row = cur.execute(f"SELECT id FROM {table} ORDER BY id LIMIT 1").fetchone()
+    return int(row["id"]) if row else None
+
+
+def _resolve_default_free_pot_ids(cur) -> tuple[Optional[int], Optional[int], Optional[int]]:
+    size_id = _default_option_id(cur, "pot_sizes", DEFAULT_FREE_POT_SIZE_NAMES) or _first_option_id(cur, "pot_sizes")
+    material_id = _default_option_id(cur, "pot_materials", DEFAULT_FREE_POT_MATERIAL_NAMES) or _first_option_id(cur, "pot_materials")
+    color_id = _default_option_id(cur, "pot_colors", DEFAULT_FREE_POT_COLOR_NAMES) or _first_option_id(cur, "pot_colors")
+    return size_id, material_id, color_id
+
+
+def _is_default_free_pot(
+    *,
+    size_id: Optional[int],
+    material_id: Optional[int],
+    color_id: Optional[int],
+    default_size_id: Optional[int],
+    default_material_id: Optional[int],
+    default_color_id: Optional[int],
+) -> bool:
+    if size_id is None or material_id is None:
+        return False
+    if default_size_id is None or default_material_id is None:
+        return False
+    if size_id != default_size_id or material_id != default_material_id:
+        return False
+    if default_color_id is None:
+        return True
+    # Даже если цвет не передали явно, для дефолтной пары считаем бесплатным.
+    return color_id is None or color_id == default_color_id
+
+
+def _apply_default_pot_selection(
+    *,
+    pot_size_id: Optional[int],
+    pot_material_id: Optional[int],
+    pot_color_id: Optional[int],
+    default_size_id: Optional[int],
+    default_material_id: Optional[int],
+    default_color_id: Optional[int],
+) -> tuple[int, int, Optional[int]]:
+    if default_size_id is None or default_material_id is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Default free pot configuration is missing (S + Plastic + White)",
+        )
+
+    resolved_size_id = pot_size_id if pot_size_id is not None else default_size_id
+    resolved_material_id = pot_material_id if pot_material_id is not None else default_material_id
+    resolved_color_id = pot_color_id if pot_color_id is not None else default_color_id
+    return int(resolved_size_id), int(resolved_material_id), resolved_color_id
+
+
 def _cart_item_to_dict(cur, row):
+    default_size_id, default_material_id, default_color_id = _resolve_default_free_pot_ids(cur)
+    pot_size_id, pot_material_id, pot_color_id = _apply_default_pot_selection(
+        pot_size_id=row["pot_size_id"],
+        pot_material_id=row["pot_material_id"],
+        pot_color_id=row["pot_color_id"],
+        default_size_id=default_size_id,
+        default_material_id=default_material_id,
+        default_color_id=default_color_id,
+    )
+
     product = cur.execute(
         """
         SELECT
@@ -163,18 +217,18 @@ def _cart_item_to_dict(cur, row):
     ).fetchone()
 
     size_name = None
-    if row["pot_size_id"]:
-        psize = cur.execute("SELECT name FROM pot_sizes WHERE id = ?", (row["pot_size_id"],)).fetchone()
+    if pot_size_id:
+        psize = cur.execute("SELECT name FROM pot_sizes WHERE id = ?", (pot_size_id,)).fetchone()
         size_name = psize["name"] if psize else None
 
     material_name = None
-    if row["pot_material_id"]:
-        mat = cur.execute("SELECT name FROM pot_materials WHERE id = ?", (row["pot_material_id"],)).fetchone()
+    if pot_material_id:
+        mat = cur.execute("SELECT name FROM pot_materials WHERE id = ?", (pot_material_id,)).fetchone()
         material_name = mat["name"] if mat else None
 
     color_name = None
-    if row["pot_color_id"]:
-        clr = cur.execute("SELECT name FROM pot_colors WHERE id = ?", (row["pot_color_id"],)).fetchone()
+    if pot_color_id:
+        clr = cur.execute("SELECT name FROM pot_colors WHERE id = ?", (pot_color_id,)).fetchone()
         color_name = clr["name"] if clr else None
 
     return {
@@ -189,11 +243,11 @@ def _cart_item_to_dict(cur, row):
         "in_stock": bool((product["available_qty"] or 0) > 0) if product else False,
         "stock_quantity": int(product["available_qty"] or 0) if product else 0,
         "quantity": int(row["quantity"]),
-        "pot_size_id": row["pot_size_id"],
+        "pot_size_id": pot_size_id,
         "pot_size": size_name,
-        "pot_material_id": row["pot_material_id"],
+        "pot_material_id": pot_material_id,
         "pot_material": material_name,
-        "pot_color_id": row["pot_color_id"],
+        "pot_color_id": pot_color_id,
         "pot_color": color_name,
         "product_unit_price": float(row["product_unit_price"]),
         "pot_unit_price": float(row["pot_unit_price"]),
@@ -254,18 +308,28 @@ def add_to_cart(payload: CartAddRequest, response: Response, user=Depends(get_cu
         pot_material_id = _resolve_option_id(cur, "pot_materials", payload.pot_material_id, payload.pot_material)
         pot_color_id = _resolve_option_id(cur, "pot_colors", payload.pot_color_id, payload.pot_color)
 
-        if pot_size_id is None and pot_material_id is None and pot_color_id is None:
-            recommended_size_id = product["recommended_pot_size_id"]
-            if recommended_size_id is not None:
-                pot_size_id = int(recommended_size_id)
-            else:
-                fallback_size = cur.execute("SELECT id FROM pot_sizes ORDER BY id LIMIT 1").fetchone()
-                pot_size_id = int(fallback_size["id"]) if fallback_size else None
+        default_size_id, default_material_id, default_color_id = _resolve_default_free_pot_ids(cur)
 
-            pot_material_id = _default_option_id(cur, "pot_materials", ["Пластик", "Plastic"])
-            pot_color_id = _default_option_id(cur, "pot_colors", ["Белый", "White"])
+        pot_size_id, pot_material_id, pot_color_id = _apply_default_pot_selection(
+            pot_size_id=pot_size_id,
+            pot_material_id=pot_material_id,
+            pot_color_id=pot_color_id,
+            default_size_id=default_size_id,
+            default_material_id=default_material_id,
+            default_color_id=default_color_id,
+        )
 
-        pot_unit_price = _resolve_pot_unit_price(cur, pot_size_id, pot_material_id, pot_color_id)
+        if _is_default_free_pot(
+            size_id=pot_size_id,
+            material_id=pot_material_id,
+            color_id=pot_color_id,
+            default_size_id=default_size_id,
+            default_material_id=default_material_id,
+            default_color_id=default_color_id,
+        ):
+            pot_unit_price = 0.0
+        else:
+            pot_unit_price = _resolve_pot_unit_price(cur, pot_size_id, pot_material_id, pot_color_id)
 
         existing = cur.execute(
             """
@@ -591,10 +655,29 @@ def get_pot_price(
         resolved_size_id = _resolve_option_id(cur, "pot_sizes", size_id, size)
         resolved_material_id = _resolve_option_id(cur, "pot_materials", material_id, material)
         resolved_color_id = _resolve_option_id(cur, "pot_colors", color_id, color)
+        default_size_id, default_material_id, default_color_id = _resolve_default_free_pot_ids(cur)
 
-        if resolved_size_id is None or resolved_material_id is None:
-            raise HTTPException(status_code=400, detail="Material and size are required")
-        price = _resolve_pot_unit_price(cur, resolved_size_id, resolved_material_id, resolved_color_id)
+        resolved_size_id, resolved_material_id, resolved_color_id = _apply_default_pot_selection(
+            pot_size_id=resolved_size_id,
+            pot_material_id=resolved_material_id,
+            pot_color_id=resolved_color_id,
+            default_size_id=default_size_id,
+            default_material_id=default_material_id,
+            default_color_id=default_color_id,
+        )
+
+        if _is_default_free_pot(
+            size_id=resolved_size_id,
+            material_id=resolved_material_id,
+            color_id=resolved_color_id,
+            default_size_id=default_size_id,
+            default_material_id=default_material_id,
+            default_color_id=default_color_id,
+        ):
+            price = 0.0
+        else:
+            price = _resolve_pot_unit_price(cur, resolved_size_id, resolved_material_id, resolved_color_id)
+
         size_row = cur.execute("SELECT id, name FROM pot_sizes WHERE id = ?", (resolved_size_id,)).fetchone()
         material_row = cur.execute("SELECT id, name FROM pot_materials WHERE id = ?", (resolved_material_id,)).fetchone()
         color_row = None

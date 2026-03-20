@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:azalia/components/colors.dart';
 import 'package:azalia/components/text_styles.dart';
+import 'package:azalia/backend/services/auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:azalia/backend/services/session.dart';
@@ -42,23 +43,28 @@ class _AppStartPageState extends State<AppStartPage>
 
   Future<void> _bootstrap() async {
     try {
-      _session
-          .validateCurrentSession()
-          .timeout(
-            const Duration(seconds: 30),
-            onTimeout: () => _session.hasActiveSession,
-          )
-          .catchError((_) => _session.hasActiveSession);
+      final token = await _session.getToken();
+      bool isTokenValid = false;
 
-      await Future.delayed(const Duration(seconds: 8));
+      if (token != null && token.isNotEmpty) {
+        isTokenValid = await AuthService.validateSessionToken(
+          token,
+        ).timeout(const Duration(seconds: 30), onTimeout: () => false);
+      }
+
+      if (!isTokenValid) {
+        await _session.clearSession();
+      }
+
+      await Future.delayed(const Duration(seconds: 2));
 
       if (!mounted) return;
 
-      context.go('/');
+      context.go(isTokenValid ? '/' : '/auth');
     } catch (e) {
       debugPrint('AppStart error: $e');
       if (mounted) {
-        context.go('/');
+        context.go('/auth');
       }
     }
   }

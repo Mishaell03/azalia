@@ -156,7 +156,7 @@ class SubscriptionService {
 
   static Future<CorporateSubscriptionStateDto> addCorporateMember({
     int? companyId,
-    int? userId,
+    int? telegramId,
     String? userPhone,
     String role = 'member',
   }) async {
@@ -164,7 +164,7 @@ class SubscriptionService {
       ApiConfig.corporateCompanyMembers,
       body: {
         if (companyId != null) 'company_id': companyId,
-        if (userId != null) 'user_id': userId,
+        if (telegramId != null) 'telegram_id': telegramId,
         if (userPhone != null) 'user_phone': userPhone,
         'role': role,
       },
