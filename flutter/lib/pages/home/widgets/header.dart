@@ -4,7 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 class HomeHeader extends StatefulWidget implements PreferredSizeWidget {
-  const HomeHeader({super.key});
+  final ValueChanged<String>? onSearchChanged;
+  final VoidCallback? onSearchCleared;
+  final ValueChanged<String>? onSearchSubmitted;
+
+  const HomeHeader({
+    super.key,
+    this.onSearchChanged,
+    this.onSearchCleared,
+    this.onSearchSubmitted,
+  });
 
   @override
   State<HomeHeader> createState() => _HomeHeader();
@@ -16,6 +25,12 @@ class HomeHeader extends StatefulWidget implements PreferredSizeWidget {
 class _HomeHeader extends State<HomeHeader> {
   bool _searchActive = false;
   final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +71,9 @@ class _HomeHeader extends State<HomeHeader> {
                   child: TextField(
                     controller: _searchController,
                     autofocus: true,
-                    textAlignVertical: TextAlignVertical.center, 
+                    textAlignVertical: TextAlignVertical.center,
+                    onChanged: widget.onSearchChanged,
+                    onSubmitted: widget.onSearchSubmitted,
                     decoration: const InputDecoration(
                       hintText: "Поиск растений...",
                       border: InputBorder.none,
@@ -75,6 +92,8 @@ class _HomeHeader extends State<HomeHeader> {
                         _searchActive = false;
                         _searchController.clear();
                       });
+                      widget.onSearchChanged?.call('');
+                      widget.onSearchCleared?.call();
                     },
                   ),
                 ),

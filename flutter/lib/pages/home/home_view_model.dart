@@ -36,6 +36,11 @@ class HomeViewModel extends ChangeNotifier {
 
   String _searchQuery = '';
   String get searchQuery => _searchQuery;
+  bool _isSearching = false;
+  bool get isSearching => _isSearching;
+  List<String> _searchSuggestions = const [];
+  List<String> get searchSuggestions => _searchSuggestions;
+  int _searchRequestVersion = 0;
 
   int _currentPage = 1;
   bool _hasMore = true;
@@ -76,35 +81,183 @@ class HomeViewModel extends ChangeNotifier {
     }
   }
 
-  void setSearchQuery(String query) {
-    _searchQuery = query;
+  void setSearchQuery(String query, {bool immediate = false}) {
+    _searchQuery = query.trim();
     _searchDebounceTimer?.cancel();
 
-    if (query.isEmpty) {
+    if (_searchQuery.isEmpty) {
+      _searchRequestVersion += 1;
+      _isSearching = false;
+      _searchSuggestions = const [];
       _performSearch('');
+      return;
+    }
+
+    if (immediate) {
+      _performSearch(_searchQuery);
       return;
     }
 
     _searchDebounceTimer = Timer(
       Duration(milliseconds: HomeConstants.searchDebounceMs),
-      () => _performSearch(query),
+      () => _performSearch(_searchQuery),
     );
+  }
+
+  void applySuggestion(String suggestion) {
+    setSearchQuery(suggestion, immediate: true);
   }
 
   Future<void> _performSearch(String query) async {
     _clearError();
-    _searchQuery = query;
+    _searchQuery = query.trim();
+    final requestVersion = ++_searchRequestVersion;
+    _isSearching = _searchQuery.isNotEmpty;
+    notifyListeners();
 
     try {
-      await _loadPlants(reset: true);
+      if (_searchQuery.isEmpty) {
+        await _loadPlants(reset: true);
+        if (requestVersion != _searchRequestVersion) return;
+        _searchSuggestions = const [];
+        return;
+      }
+
+      await _loadSearchResults(_searchQuery, requestVersion);
     } catch (e) {
-      _setError('Ошибка поиска', HomePageError.search);
-      _setLoading(false);
+      if (requestVersion == _searchRequestVersion) {
+        _setError('Ошибка поиска', HomePageError.search);
+        _setLoading(false);
+      }
+    } finally {
+      if (requestVersion == _searchRequestVersion) {
+        _isSearching = false;
+        notifyListeners();
+      }
     }
   }
 
+  Future<void> _loadSearchResults(String query, int requestVersion) async {
+    _setLoading(true);
+    _hasMore = false;
+    _currentPage = 1;
+    final normalizedQuery = query.trim().toLowerCase();
+
+    final seenIds = <int>{};
+    final merged = <Plant>[];
+
+    void appendPlants(List<Plant> plants) {
+      for (final plant in plants) {
+        if (seenIds.add(plant.id)) {
+          merged.add(plant);
+        }
+      }
+    }
+
+    final byName = await PlantService.getPlants(
+      search: normalizedQuery,
+      inStock: true,
+      page: 1,
+      perPage: 30,
+      sortBy: 'name',
+    );
+    if (requestVersion != _searchRequestVersion) return;
+    appendPlants(_filterAvailablePlants(byName.data));
+
+    final matchingCategories = _categories
+        .where((c) => c.name.toLowerCase().contains(normalizedQuery))
+        .take(3)
+        .toList();
+
+    for (final category in matchingCategories) {
+      final byCategory = await PlantService.getPlants(
+        categoryId: category.id,
+        inStock: true,
+        page: 1,
+        perPage: 20,
+        sortBy: 'name',
+      );
+      if (requestVersion != _searchRequestVersion) return;
+      appendPlants(_filterAvailablePlants(byCategory.data));
+    }
+
+    // Если точный поиск дал мало результатов, добавляем fallback:
+    // разбиваем запрос на куски по 3 символа и ищем по ним.
+    if (merged.length < 3 && normalizedQuery.length >= 3) {
+      final chunks = _buildSearchChunks(normalizedQuery);
+      for (final chunk in chunks) {
+        final byChunk = await PlantService.getPlants(
+          search: chunk,
+          inStock: true,
+          page: 1,
+          perPage: 20,
+          sortBy: 'name',
+        );
+        if (requestVersion != _searchRequestVersion) return;
+        appendPlants(_filterAvailablePlants(byChunk.data));
+      }
+    }
+
+    _allPlants = merged;
+    _displayedPlants = List<Plant>.from(merged);
+    _searchSuggestions = _buildSuggestions(
+      normalizedQuery,
+      merged,
+      matchingCategories,
+    );
+    notifyListeners();
+    _setLoading(false);
+  }
+
+  List<String> _buildSearchChunks(String query) {
+    final chunks = <String>[];
+    final seen = <String>{};
+    if (query.length < 3) return chunks;
+
+    for (int i = 0; i <= query.length - 3; i++) {
+      final chunk = query.substring(i, i + 3);
+      if (seen.add(chunk)) {
+        chunks.add(chunk);
+      }
+    }
+    return chunks.take(5).toList();
+  }
+
+  List<String> _buildSuggestions(
+    String query,
+    List<Plant> plants,
+    List<Category> matchedCategories,
+  ) {
+    final normalized = query.toLowerCase();
+    final suggestions = <String>[];
+    final seen = <String>{};
+
+    void addSuggestion(String value) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return;
+      final key = trimmed.toLowerCase();
+      if (seen.add(key)) {
+        suggestions.add(trimmed);
+      }
+    }
+
+    for (final category in matchedCategories) {
+      addSuggestion(category.name);
+      if (suggestions.length >= 8) return suggestions;
+    }
+
+    for (final plant in plants) {
+      if (plant.name.toLowerCase().contains(normalized)) {
+        addSuggestion(plant.name);
+        if (suggestions.length >= 8) return suggestions;
+      }
+    }
+
+    return suggestions;
+  }
+
   Future<void> loadNextCycle() async {
-    if (_isLoading || _isLoadingMore || !_hasMore) {
+    if (_searchQuery.isNotEmpty || _isLoading || _isLoadingMore || !_hasMore) {
       return;
     }
 
@@ -116,6 +269,7 @@ class HomeViewModel extends ChangeNotifier {
   }
 
   bool shouldLoadMore(double scrollPosition, double maxScrollExtent) {
+    if (_searchQuery.isNotEmpty) return false;
     return _hasMore &&
         !_isLoadingMore &&
         scrollPosition >= maxScrollExtent - HomeConstants.scrollThreshold;
@@ -143,7 +297,7 @@ class HomeViewModel extends ChangeNotifier {
 
     try {
       final response = await PlantService.getPlants(
-        categoryId: _selectedCategory?.id,
+        categoryId: _searchQuery.isNotEmpty ? null : _selectedCategory?.id,
         search: _searchQuery.isNotEmpty ? _searchQuery : null,
         inStock: true,
         page: _currentPage,
@@ -158,10 +312,9 @@ class HomeViewModel extends ChangeNotifier {
       }
 
       final pagination = response.pagination;
-      _hasMore =
-          pagination != null
-              ? pagination.page < pagination.pages
-              : response.data.length >= _pageSize;
+      _hasMore = pagination != null
+          ? pagination.page < pagination.pages
+          : response.data.length >= _pageSize;
       _currentPage += 1;
 
       _updateDisplayedPlants();

@@ -18,19 +18,19 @@ class EmployeesService {
 
   /// Получаем список всех пользователей
   Future<List<User>> getUsers({int page = 1, int perPage = 100}) async {
-    final url = Uri.parse(
-      ApiConfig.users,
-    ).replace(queryParameters: {
-      'page': page.toString(),
-      'per_page': perPage.toString(),
-    }).toString();
+    final url = Uri.parse(ApiConfig.users)
+        .replace(
+          queryParameters: {
+            'page': page.toString(),
+            'per_page': perPage.toString(),
+          },
+        )
+        .toString();
 
     final res = await api.get(url);
     _checkSuccess(res);
     _log('Список пользователей получен');
-    final users = (res['data'] as List)
-        .map((e) => User.fromJson(e))
-        .toList();
+    final users = (res['data'] as List).map((e) => User.fromJson(e)).toList();
     return users;
   }
 
@@ -43,6 +43,18 @@ class EmployeesService {
         .map((e) => Employee.fromJson(e))
         .toList();
     return employees;
+  }
+
+  /// Получаем список компаний с участниками (для админки)
+  Future<List<AdminCompany>> getAdminCompanies() async {
+    final res = await api.get(ApiConfig.adminCompanies);
+    _checkSuccess(res);
+    _log('Список компаний получен');
+    final companies = (res['data'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(AdminCompany.fromJson)
+        .toList();
+    return companies;
   }
 
   /// Получаем данные конкретного сотрудника
@@ -81,10 +93,7 @@ class EmployeesService {
   }) {
     return _patchUser(
       userId,
-      payload: {
-        'status': 'blocked',
-        'blocked_reason': reason,
-      },
+      payload: {'status': 'blocked', 'blocked_reason': reason},
     );
   }
 
@@ -110,12 +119,7 @@ class EmployeesService {
   }
 
   Future<AdminUserDetails> rehireUser(int userId) {
-    return _patchUser(
-      userId,
-      payload: {
-        'is_active': true,
-      },
-    );
+    return _patchUser(userId, payload: {'is_active': true});
   }
 
   Future<AdminUserDetails> fireUser(int userId) {
@@ -126,24 +130,14 @@ class EmployeesService {
     required int userId,
     required double salary,
   }) {
-    return _patchUser(
-      userId,
-      payload: {
-        'salary': salary,
-      },
-    );
+    return _patchUser(userId, payload: {'salary': salary});
   }
 
   Future<AdminUserDetails> updateEmployeeStore({
     required int userId,
     required int storeId,
   }) {
-    return _patchUser(
-      userId,
-      payload: {
-        'store_id': storeId,
-      },
-    );
+    return _patchUser(userId, payload: {'store_id': storeId});
   }
 
   Future<AdminUserDetails> updateEmployeeProfile({
@@ -191,10 +185,7 @@ class EmployeesService {
   }) async {
     final res = await api.post(
       ApiConfig.assignEmployee,
-      body: {
-        'telegram_id': telegramId,
-        'is_active': isActive,
-      },
+      body: {'telegram_id': telegramId, 'is_active': isActive},
     );
     _checkSuccess(res);
     _log('Пользователь tg_id=$telegramId имеет статус активности: $isActive');

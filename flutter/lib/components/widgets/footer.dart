@@ -25,8 +25,8 @@ IconData _iconFromString(String name) {
       return Icons.home_filled;
     case 'supervised_user_circle_outlined':
       return Icons.supervised_user_circle_outlined;
-    case 'settings':
-      return Icons.settings;
+    case 'workspace_premium_outlined':
+      return Icons.workspace_premium_outlined;
     default:
       return Icons.help_outline;
   }

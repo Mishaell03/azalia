@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+import json
 import uuid
 from typing import Optional
 
@@ -114,6 +115,24 @@ class ProcurementReceiptRequest(BaseModel):
     comment: Optional[str] = Field(default=None, max_length=500)
 
 
+class AdminSubscriptionPlanUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: Optional[str] = Field(default=None, min_length=1, max_length=150)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    monthly_price: Optional[float] = Field(default=None, ge=0)
+    yearly_price: Optional[float] = Field(default=None, ge=0)
+    max_plants: Optional[int] = Field(default=None, ge=1, le=100000)
+    max_members: Optional[int] = Field(default=None, ge=1, le=100000)
+    notifications: Optional[str] = Field(default=None, max_length=32)
+    has_corporate: Optional[bool] = None
+    can_create_company: Optional[bool] = None
+    has_analytics: Optional[bool] = None
+    has_extended_features: Optional[bool] = None
+    is_active: Optional[bool] = None
+    features: Optional[list[str]] = Field(default=None, max_length=100)
+
+
 def _procurement_status_label(status_code: Optional[str]) -> str:
     code = (status_code or "").strip().lower()
     if code == "received":
@@ -142,6 +161,44 @@ def _procurement_order_status_from_rows(item_rows: list[object]) -> str:
     if has_any_received:
         return "partially_received"
     return "sent"
+
+
+def _parse_plan_features(raw_features) -> list[str]:
+    if raw_features is None:
+        return []
+    if isinstance(raw_features, list):
+        return [str(item).strip() for item in raw_features if str(item).strip()]
+    text = str(raw_features).strip()
+    if not text:
+        return []
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, list):
+            return [str(item).strip() for item in parsed if str(item).strip()]
+    except Exception:
+        pass
+    return [line.strip("- ").strip() for line in text.splitlines() if line.strip()]
+
+
+def _serialize_subscription_plan(row):
+    return {
+        "id": int(row["id"]),
+        "code": row["code"] or "",
+        "name": row["name"] or "",
+        "description": row["description"] or "",
+        "monthly_price": round(float(row["monthly_price"] or 0), 2),
+        "yearly_price": round(float(row["yearly_price"] or 0), 2),
+        "max_plants": int(row["max_plants"] or 1),
+        "max_members": int(row["max_members"] or 1),
+        "notifications": row["notifications"] or "basic",
+        "has_corporate": bool(row["has_corporate"]),
+        "can_create_company": bool(row["can_create_company"]),
+        "has_analytics": bool(row["has_analytics"]),
+        "has_extended_features": bool(row["has_extended_features"]),
+        "is_active": bool(row["is_active"]),
+        "features": _parse_plan_features(row["features_json"]),
+        "created_at": row["created_at"],
+    }
 
 
 def _resolve_user(cur, user_id: Optional[int], telegram_id: Optional[int]):
@@ -1088,6 +1145,158 @@ def list_users(
             "per_page": per_page,
             "total": total,
             "pages": pages,
+        },
+    }
+
+
+@router.get("/admin/companies", summary="Admin: Companies with members")
+def admin_companies(user=Depends(get_current_user)):
+    require_admin(user)
+
+    conn = get_db_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT
+                c.id AS company_id,
+                c.name AS company_name,
+                c.description,
+                c.contact_phone,
+                c.contact_email,
+                c.address,
+                c.status,
+                c.owner_user_id,
+                c.created_at AS company_created_at,
+                c.updated_at AS company_updated_at,
+                ou.full_name AS owner_name,
+                ou.phone AS owner_phone,
+                ou.telegram_id AS owner_telegram_id,
+                cm.user_id AS member_user_id,
+                cm.role AS member_role,
+                cm.is_active AS member_is_active,
+                cm.created_at AS member_created_at,
+                mu.full_name AS member_name,
+                mu.phone AS member_phone,
+                mu.telegram_id AS member_telegram_id
+            FROM companies c
+            JOIN users ou ON ou.id = c.owner_user_id
+            LEFT JOIN company_members cm
+              ON cm.company_id = c.id
+             AND cm.is_active = 1
+            LEFT JOIN users mu ON mu.id = cm.user_id
+            ORDER BY
+                c.id ASC,
+                CASE cm.role
+                    WHEN 'owner' THEN 0
+                    WHEN 'admin' THEN 1
+                    ELSE 2
+                END ASC,
+                cm.id ASC
+            """
+        ).fetchall()
+    finally:
+        conn.close()
+
+    companies_map: dict[int, dict] = {}
+    member_rank = {"owner": 0, "admin": 1, "member": 2}
+
+    for row in rows:
+        company_id = int(row["company_id"])
+        company = companies_map.get(company_id)
+        if company is None:
+            owner_user_id = int(row["owner_user_id"])
+            company = {
+                "id": company_id,
+                "name": row["company_name"] or "",
+                "description": row["description"],
+                "contact_phone": row["contact_phone"],
+                "contact_email": row["contact_email"],
+                "address": row["address"],
+                "status": row["status"] or "active",
+                "created_at": row["company_created_at"],
+                "updated_at": row["company_updated_at"],
+                "owner": {
+                    "user_id": owner_user_id,
+                    "full_name": row["owner_name"] or "Создатель",
+                    "phone": row["owner_phone"] or "",
+                    "telegram_id": row["owner_telegram_id"],
+                    "role": "owner",
+                    "is_active": True,
+                },
+                "members": [],
+                "_member_ids": set(),
+            }
+            companies_map[company_id] = company
+
+        if row["member_user_id"] is None:
+            continue
+
+        member_user_id = int(row["member_user_id"])
+        if member_user_id in company["_member_ids"]:
+            continue
+
+        role = (row["member_role"] or "member").strip().lower()
+        company["members"].append(
+            {
+                "user_id": member_user_id,
+                "full_name": row["member_name"] or "Пользователь",
+                "phone": row["member_phone"] or "",
+                "telegram_id": row["member_telegram_id"],
+                "role": role,
+                "is_active": bool(row["member_is_active"]),
+                "joined_at": row["member_created_at"],
+            }
+        )
+        company["_member_ids"].add(member_user_id)
+
+    items = []
+    for company in companies_map.values():
+        owner = company["owner"]
+        if owner["user_id"] not in company["_member_ids"]:
+            company["members"].insert(
+                0,
+                {
+                    "user_id": owner["user_id"],
+                    "full_name": owner["full_name"],
+                    "phone": owner["phone"],
+                    "telegram_id": owner["telegram_id"],
+                    "role": "owner",
+                    "is_active": True,
+                    "joined_at": company["created_at"],
+                },
+            )
+
+        company["members"].sort(
+            key=lambda m: (
+                member_rank.get(str(m.get("role", "member")).lower(), 3),
+                int(m.get("user_id") or 0),
+            )
+        )
+
+        company_item = {
+            "id": company["id"],
+            "name": company["name"],
+            "description": company["description"],
+            "contact_phone": company["contact_phone"],
+            "contact_email": company["contact_email"],
+            "address": company["address"],
+            "status": company["status"],
+            "created_at": company["created_at"],
+            "updated_at": company["updated_at"],
+            "owner": company["owner"],
+            "members_count": len(company["members"]),
+            "members": company["members"],
+        }
+        items.append(company_item)
+
+    return {
+        "success": True,
+        "data": items,
+        "pagination": {
+            "page": 1,
+            "per_page": len(items),
+            "total": len(items),
+            "pages": 1,
         },
     }
 
@@ -2418,6 +2627,91 @@ def admin_analytics(
             """,
             tuple(top_params),
         ).fetchall()
+
+        subscription_rows = cur.execute(
+            """
+            SELECT
+                date(COALESCE(spl.paid_at, spl.created_at)) AS paid_date,
+                COUNT(*) AS sold_count,
+                COALESCE(SUM(spl.amount), 0) AS revenue
+            FROM subscription_payment_links spl
+            WHERE spl.status = 'paid'
+              AND date(COALESCE(spl.paid_at, spl.created_at)) >= ?
+            GROUP BY date(COALESCE(spl.paid_at, spl.created_at))
+            ORDER BY paid_date ASC
+            """,
+            (date_from.isoformat(),),
+        ).fetchall()
+        subscription_daily_map = {
+            row["paid_date"]: {
+                "sold_count": int(row["sold_count"] or 0),
+                "revenue": float(row["revenue"] or 0),
+            }
+            for row in subscription_rows
+        }
+
+        total_subscriptions_sold = 0
+        total_subscription_revenue = 0.0
+        subscription_series = []
+        for idx in range(days):
+            d = date_from + timedelta(days=idx)
+            key = d.isoformat()
+            entry = subscription_daily_map.get(key, {"sold_count": 0, "revenue": 0.0})
+            sold_count = int(entry["sold_count"])
+            revenue = float(entry["revenue"])
+            total_subscriptions_sold += sold_count
+            total_subscription_revenue += revenue
+            subscription_series.append(
+                {
+                    "date": key,
+                    "sold_count": sold_count,
+                    "revenue": round(revenue, 2),
+                }
+            )
+
+        popular_subscriptions_rows = cur.execute(
+            """
+            SELECT
+                sp.id AS plan_id,
+                sp.code AS plan_code,
+                sp.name AS plan_name,
+                COUNT(*) AS sold_count,
+                COALESCE(SUM(spl.amount), 0) AS revenue
+            FROM subscription_payment_links spl
+            JOIN subscription_plans sp ON sp.id = spl.plan_id
+            WHERE spl.status = 'paid'
+              AND date(COALESCE(spl.paid_at, spl.created_at)) >= ?
+            GROUP BY sp.id, sp.code, sp.name
+            ORDER BY sold_count DESC, revenue DESC, sp.id ASC
+            LIMIT ?
+            """,
+            (date_from.isoformat(), int(top)),
+        ).fetchall()
+
+        registrations_rows = cur.execute(
+            """
+            SELECT
+                date(u.created_at) AS register_date,
+                COUNT(*) AS users_count
+            FROM users u
+            WHERE date(u.created_at) >= ?
+            GROUP BY date(u.created_at)
+            ORDER BY register_date ASC
+            """,
+            (date_from.isoformat(),),
+        ).fetchall()
+        registrations_daily_map = {
+            row["register_date"]: int(row["users_count"] or 0)
+            for row in registrations_rows
+        }
+        registrations_series = []
+        total_registrations = 0
+        for idx in range(days):
+            d = date_from + timedelta(days=idx)
+            key = d.isoformat()
+            cnt = registrations_daily_map.get(key, 0)
+            total_registrations += cnt
+            registrations_series.append({"date": key, "users_count": cnt})
     finally:
         conn.close()
 
@@ -2435,8 +2729,21 @@ def admin_analytics(
                 "average_order_value": round(float(total_revenue) / total_orders, 2)
                 if total_orders > 0
                 else 0.0,
+                "new_users_count": int(total_registrations),
+            },
+            "subscription_summary": {
+                "sold_subscriptions_count": int(total_subscriptions_sold),
+                "revenue": round(float(total_subscription_revenue), 2),
+                "average_subscription_check": round(
+                    float(total_subscription_revenue) / total_subscriptions_sold,
+                    2,
+                )
+                if total_subscriptions_sold > 0
+                else 0.0,
             },
             "series": daily_series,
+            "subscription_series": subscription_series,
+            "registrations_series": registrations_series,
             "popular_plants": [
                 {
                     "product_id": int(row["product_id"]) if row["product_id"] is not None else None,
@@ -2446,7 +2753,190 @@ def admin_analytics(
                 }
                 for row in top_rows
             ],
+            "popular_subscriptions": [
+                {
+                    "plan_id": int(row["plan_id"]),
+                    "plan_code": row["plan_code"],
+                    "name": row["plan_name"] or "Тариф",
+                    "sold_count": int(row["sold_count"] or 0),
+                    "revenue": round(float(row["revenue"] or 0), 2),
+                }
+                for row in popular_subscriptions_rows
+            ],
         },
+    }
+
+
+@router.get("/admin/subscription-plans", summary="Admin: Subscription Plans")
+def admin_subscription_plans(user=Depends(get_current_user)):
+    require_admin(user)
+
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        rows = cur.execute(
+            """
+            SELECT
+                id,
+                code,
+                name,
+                description,
+                monthly_price,
+                yearly_price,
+                max_plants,
+                max_members,
+                notifications,
+                has_corporate,
+                can_create_company,
+                has_analytics,
+                has_extended_features,
+                is_active,
+                features_json,
+                created_at
+            FROM subscription_plans
+            ORDER BY monthly_price ASC, id ASC
+            """
+        ).fetchall()
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "data": [_serialize_subscription_plan(row) for row in rows],
+    }
+
+
+@router.put(
+    "/admin/subscription-plans/{plan_id}",
+    summary="Admin: Update Subscription Plan",
+)
+def admin_update_subscription_plan(
+    plan_id: str,
+    payload: AdminSubscriptionPlanUpdateRequest,
+    user=Depends(get_current_user),
+):
+    require_admin(user)
+
+    requested = (plan_id or "").strip()
+    if not requested:
+        raise HTTPException(status_code=400, detail="plan_id is required")
+
+    updates: dict[str, object] = {}
+    provided = payload.model_fields_set
+
+    if "name" in provided:
+        name = clean_optional_text(payload.name, max_len=150)
+        if not name:
+            raise HTTPException(status_code=422, detail="name cannot be empty")
+        updates["name"] = name
+    if "description" in provided:
+        updates["description"] = clean_optional_text(payload.description, max_len=2000)
+    if "monthly_price" in provided:
+        updates["monthly_price"] = float(payload.monthly_price or 0)
+    if "yearly_price" in provided:
+        updates["yearly_price"] = float(payload.yearly_price or 0)
+    if "max_plants" in provided:
+        updates["max_plants"] = int(payload.max_plants or 1)
+    if "max_members" in provided:
+        updates["max_members"] = int(payload.max_members or 1)
+    if "notifications" in provided:
+        notifications = clean_optional_text(payload.notifications, max_len=32)
+        notifications = (notifications or "basic").lower()
+        if notifications not in {"basic", "extended", "smart"}:
+            raise HTTPException(
+                status_code=400,
+                detail="notifications must be one of: basic, extended, smart",
+            )
+        updates["notifications"] = notifications
+    if "has_corporate" in provided:
+        updates["has_corporate"] = int(bool(payload.has_corporate))
+    if "can_create_company" in provided:
+        updates["can_create_company"] = int(bool(payload.can_create_company))
+    if "has_analytics" in provided:
+        updates["has_analytics"] = int(bool(payload.has_analytics))
+    if "has_extended_features" in provided:
+        updates["has_extended_features"] = int(bool(payload.has_extended_features))
+    if "is_active" in provided:
+        updates["is_active"] = int(bool(payload.is_active))
+    if "features" in provided:
+        features = [clean_optional_text(item, max_len=200) for item in (payload.features or [])]
+        compact = [item for item in features if item]
+        updates["features_json"] = json.dumps(compact, ensure_ascii=False)
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="No update fields provided")
+
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        row = cur.execute(
+            """
+            SELECT id, code
+            FROM subscription_plans
+            WHERE CAST(id AS TEXT) = ? OR LOWER(code) = LOWER(?)
+            LIMIT 1
+            """,
+            (requested, requested),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Subscription plan not found")
+
+        if "name" in updates:
+            dup = cur.execute(
+                """
+                SELECT id
+                FROM subscription_plans
+                WHERE LOWER(name) = LOWER(?) AND id <> ?
+                LIMIT 1
+                """,
+                (str(updates["name"]), int(row["id"])),
+            ).fetchone()
+            if dup:
+                raise HTTPException(status_code=400, detail="Subscription name already exists")
+
+        set_parts = [f"{key} = ?" for key in updates.keys()]
+        params = list(updates.values())
+        params.append(int(row["id"]))
+
+        cur.execute(
+            f"UPDATE subscription_plans SET {', '.join(set_parts)} WHERE id = ?",
+            tuple(params),
+        )
+        refreshed = cur.execute(
+            """
+            SELECT
+                id,
+                code,
+                name,
+                description,
+                monthly_price,
+                yearly_price,
+                max_plants,
+                max_members,
+                notifications,
+                has_corporate,
+                can_create_company,
+                has_analytics,
+                has_extended_features,
+                is_active,
+                features_json,
+                created_at
+            FROM subscription_plans
+            WHERE id = ?
+            LIMIT 1
+            """,
+            (int(row["id"]),),
+        ).fetchone()
+        conn.commit()
+    finally:
+        conn.close()
+
+    if not refreshed:
+        raise HTTPException(status_code=500, detail="Failed to update subscription plan")
+
+    return {
+        "success": True,
+        "data": _serialize_subscription_plan(refreshed),
     }
 
 

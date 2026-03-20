@@ -182,7 +182,7 @@ class AppProfileContent extends StatelessWidget {
               child: OutlinedButton(
                 onPressed: onLogout,
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.brown, width: 2),
+                  side: const BorderSide(color: AppColors.error, width: 2),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),

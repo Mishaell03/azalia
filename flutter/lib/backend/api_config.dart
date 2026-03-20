@@ -9,6 +9,11 @@ class ApiConfig {
   static const String users = '$baseURL/users';
   static String updateUser(int id) => '$baseURL/users/$id';
   static const String employees = '$baseURL/employees';
+  static const String adminCompanies = '$baseURL/admin/companies';
+  static const String adminSubscriptionPlans =
+      '$baseURL/admin/subscription-plans';
+  static String adminSubscriptionPlanById(String planId) =>
+      '$baseURL/admin/subscription-plans/$planId';
   static String employee(int id) => '$baseURL/employees/$id';
   static String updateAdmin(int userId) => '$baseURL/admins/$userId';
   static const String assignEmployee = '$baseURL/employees/assign';

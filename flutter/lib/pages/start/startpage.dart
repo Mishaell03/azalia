@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:azalia/components/colors.dart';
 import 'package:azalia/components/text_styles.dart';
 import 'package:flutter/material.dart';
@@ -40,24 +42,23 @@ class _AppStartPageState extends State<AppStartPage>
 
   Future<void> _bootstrap() async {
     try {
-      final results = await Future.wait<dynamic>([
-        Future.delayed(const Duration(seconds: 8)),
-        _session.validateCurrentSession(),
-      ]);
+      _session
+          .validateCurrentSession()
+          .timeout(
+            const Duration(seconds: 30),
+            onTimeout: () => _session.hasActiveSession,
+          )
+          .catchError((_) => _session.hasActiveSession);
 
-      final hasValidSession = results[1] as bool;
+      await Future.delayed(const Duration(seconds: 8));
 
       if (!mounted) return;
 
-      if (hasValidSession) {
-        context.go('/');
-      } else {
-        context.go('/auth');
-      }
+      context.go('/');
     } catch (e) {
       debugPrint('AppStart error: $e');
       if (mounted) {
-        context.go('/auth');
+        context.go('/');
       }
     }
   }

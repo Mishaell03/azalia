@@ -1,4 +1,5 @@
 import 'package:azalia/components/colors.dart';
+import 'package:azalia/backend/services/local_notifications.dart';
 import 'package:azalia/router.dart';
 import 'package:flutter/material.dart';
 import 'package:azalia/backend/services/session.dart';
@@ -8,6 +9,8 @@ Future<void> main() async {
 
   final session = SessionService();
   await session.initialize();
+  await LocalNotificationsService.instance.initialize();
+  await LocalNotificationsService.instance.syncCalendarNotifications();
 
   runApp(const MyApp());
 }

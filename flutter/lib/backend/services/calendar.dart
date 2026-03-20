@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:azalia/backend/apiClient.dart';
 import 'package:azalia/backend/api_config.dart';
+import 'package:azalia/backend/services/local_notifications.dart';
 
 class ImportantDateDto {
   final int id;
@@ -377,6 +379,10 @@ class CalendarService {
     return '$y-$m-$d';
   }
 
+  static void _syncLocalNotifications() {
+    unawaited(LocalNotificationsService.instance.syncCalendarNotifications());
+  }
+
   static Future<List<ImportantDateDto>> getImportantDates() async {
     final response = await _api.get(ApiConfig.importantDates);
     if (response['success'] != true) return const [];
@@ -398,7 +404,9 @@ class CalendarService {
       body: {'title': title, 'event_date': _dateOnly(date), 'comment': comment},
     );
     final data = response['data'] as Map<String, dynamic>? ?? const {};
-    return ImportantDateDto.fromJson(data);
+    final result = ImportantDateDto.fromJson(data);
+    _syncLocalNotifications();
+    return result;
   }
 
   static Future<ImportantDateDto> updateImportantDate({
@@ -416,11 +424,14 @@ class CalendarService {
       },
     );
     final data = response['data'] as Map<String, dynamic>? ?? const {};
-    return ImportantDateDto.fromJson(data);
+    final result = ImportantDateDto.fromJson(data);
+    _syncLocalNotifications();
+    return result;
   }
 
   static Future<void> deleteImportantDate(int id) async {
     await _api.delete('${ApiConfig.importantDates}/$id');
+    _syncLocalNotifications();
   }
 
   static Future<List<PlantCareDateDto>> getPlantCareDates() async {
@@ -461,7 +472,9 @@ class CalendarService {
       },
     );
     final data = response['data'] as Map<String, dynamic>? ?? const {};
-    return PlantCareDateDto.fromJson(data);
+    final result = PlantCareDateDto.fromJson(data);
+    _syncLocalNotifications();
+    return result;
   }
 
   static Future<PlantCareDateDto> updatePlantCareDate({
@@ -490,11 +503,14 @@ class CalendarService {
       },
     );
     final data = response['data'] as Map<String, dynamic>? ?? const {};
-    return PlantCareDateDto.fromJson(data);
+    final result = PlantCareDateDto.fromJson(data);
+    _syncLocalNotifications();
+    return result;
   }
 
   static Future<void> deletePlantCareDate(int id) async {
     await _api.delete('${ApiConfig.plantCareDates}/$id');
+    _syncLocalNotifications();
   }
 
   static Future<List<UserPlantDto>> getUserPlants() async {
@@ -555,7 +571,9 @@ class CalendarService {
       },
     );
     final data = response['data'] as Map<String, dynamic>? ?? const {};
-    return UserPlantDto.fromJson(data);
+    final result = UserPlantDto.fromJson(data);
+    _syncLocalNotifications();
+    return result;
   }
 
   static Future<UserPlantDto> updateUserPlant({
@@ -591,11 +609,14 @@ class CalendarService {
       },
     );
     final data = response['data'] as Map<String, dynamic>? ?? const {};
-    return UserPlantDto.fromJson(data);
+    final result = UserPlantDto.fromJson(data);
+    _syncLocalNotifications();
+    return result;
   }
 
   static Future<void> deleteUserPlant(int id) async {
     await _api.delete(ApiConfig.userPlantById(id));
+    _syncLocalNotifications();
   }
 
   static Future<UserPlantDto> uploadUserPlantPhoto({
@@ -626,7 +647,9 @@ class CalendarService {
       },
     );
     final data = response['data'] as Map<String, dynamic>? ?? const {};
-    return UserPlantCareMarkDto.fromJson(data);
+    final result = UserPlantCareMarkDto.fromJson(data);
+    _syncLocalNotifications();
+    return result;
   }
 
   static Future<OrganizationsResponse> getOrganizations() async {

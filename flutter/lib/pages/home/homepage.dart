@@ -69,7 +69,11 @@ class _HomePage extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: HomeHeader(),
+      appBar: HomeHeader(
+        onSearchChanged: (value) => _viewModel.setSearchQuery(value),
+        onSearchSubmitted: (value) =>
+            _viewModel.setSearchQuery(value, immediate: true),
+      ),
       bottomNavigationBar: const AppFooter(items: userFooterItems),
       body: _viewModel.isLoading
           ? const LoadingWidget()
@@ -123,6 +127,58 @@ class _HomePage extends State<HomePage> {
                           ),
                         ),
                         const SizedBox(height: 20),
+                        if (_viewModel.searchQuery.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (_viewModel.isSearching)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 10),
+                                    child: Row(
+                                      children: [
+                                        const SizedBox(
+                                          width: 14,
+                                          height: 14,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Ищем...',
+                                          style: AppText.medium_12.copyWith(
+                                            color: AppColors.grey,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                if (_viewModel.searchSuggestions.isNotEmpty)
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: _viewModel.searchSuggestions
+                                        .map(
+                                          (suggestion) => ActionChip(
+                                            label: Text(suggestion),
+                                            labelStyle: AppText.medium_12
+                                                .copyWith(
+                                                  color: AppColors.black,
+                                                ),
+                                            side: const BorderSide(
+                                              color: AppColors.brown,
+                                            ),
+                                            onPressed: () => _viewModel
+                                                .applySuggestion(suggestion),
+                                          ),
+                                        )
+                                        .toList(),
+                                  ),
+                              ],
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -156,7 +212,10 @@ class _HomePage extends State<HomePage> {
                             padding: const EdgeInsets.all(16.0),
                             child: Center(
                               child: _viewModel.isLoadingMore
-                                  ? const LoadingWidget(size: 24, strokeWidth: 2)
+                                  ? const LoadingWidget(
+                                      size: 24,
+                                      strokeWidth: 2,
+                                    )
                                   : Text(
                                       'Загрузить ещё...',
                                       style: AppText.medium_14.copyWith(

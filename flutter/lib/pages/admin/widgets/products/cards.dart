@@ -11,43 +11,56 @@ class AdminProductsCards extends StatelessWidget {
       "name": "Клиентские заказы",
       "pic": Icons.inventory_2_outlined,
       "heading": "Текущие заказы",
-      "description": "Активные заявки от клиентов, которые требуют сборки, упаковки или подготовки к выдаче.",
-      "route": "orders"
+      "description":
+          "Активные заявки от клиентов, которые требуют сборки, упаковки или подготовки к выдаче.",
+      "route": "orders",
     },
     {
       "name": "Товары на складах",
       "pic": Icons.warehouse_outlined,
       "heading": "Складской раздел",
       "description": "Складские операции и учет остатков по точкам хранения.",
-      "route": "warehouse"
+      "route": "warehouse",
     },
     {
       "name": "Товары в закупках",
       "pic": Icons.add_shopping_cart,
       "heading": "Ожидают заказа",
-      "description": "Планируемые позиции для заказа у поставщиков. Формирование новых поставок.",
-      "route": "procurement"
+      "description":
+          "Планируемые позиции для заказа у поставщиков. Формирование новых поставок.",
+      "route": "procurement",
     },
     {
       "name": "Товары в доставке",
       "pic": Icons.local_shipping_outlined,
       "heading": "Поступление товаров",
-      "description": "Новая партия растений в пути от поставщика. Ожидается пополнение ассортимента.",
-      "route": "delivery"
+      "description":
+          "Новая партия растений в пути от поставщика. Ожидается пополнение ассортимента.",
+      "route": "delivery",
     },
     {
       "name": "Прием поставок",
       "pic": Icons.conveyor_belt,
       "heading": "Поступления на склад",
-      "description": "Регистрация и проверка поступивших товаров от поставщиков.",
-      "route": "receipts"
+      "description":
+          "Регистрация и проверка поступивших товаров от поставщиков.",
+      "route": "receipts",
     },
     {
       "name": "Редактор товаров",
       "pic": Icons.edit_note_outlined,
       "heading": "Изменение карточек",
-      "description": "Изменение информации по товарам, управление статусом продаж и просмотр остатков в штуках.",
-      "route": "editor"
+      "description":
+          "Изменение информации по товарам, управление статусом продаж и просмотр остатков в штуках.",
+      "route": "editor",
+    },
+    {
+      "name": "Подписки",
+      "pic": Icons.workspace_premium_outlined,
+      "heading": "Тарифы подписок",
+      "description":
+          "Редактирование цен, описания, лимитов и возможностей тарифов.",
+      "route": "subscriptions",
     },
   ];
 

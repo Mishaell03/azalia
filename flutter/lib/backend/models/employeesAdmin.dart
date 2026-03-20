@@ -4,16 +4,12 @@ class ApiObjectResponse<T> {
   final T data;
   final String? message;
 
-  ApiObjectResponse({
-    required this.success,
-    required this.data,
-    this.message,
-  });
+  ApiObjectResponse({required this.success, required this.data, this.message});
 
   factory ApiObjectResponse.fromJson(
-      Map<String, dynamic> json,
-      T Function(Map<String, dynamic>) fromJsonT,
-      ) {
+    Map<String, dynamic> json,
+    T Function(Map<String, dynamic>) fromJsonT,
+  ) {
     return ApiObjectResponse(
       success: json['success'],
       data: fromJsonT(json['data']),
@@ -28,16 +24,12 @@ class ApiListResponse<T> {
   final List<T> data;
   final Pagination? pagination;
 
-  ApiListResponse({
-    required this.success,
-    required this.data,
-    this.pagination,
-  });
+  ApiListResponse({required this.success, required this.data, this.pagination});
 
   factory ApiListResponse.fromJson(
-      Map<String, dynamic> json,
-      T Function(Map<String, dynamic>) fromJsonT,
-      ) {
+    Map<String, dynamic> json,
+    T Function(Map<String, dynamic>) fromJsonT,
+  ) {
     final items = (json['data'] as List? ?? [])
         .map((item) => fromJsonT(item as Map<String, dynamic>))
         .toList();
@@ -168,11 +160,7 @@ class EmployeeUserInfo {
   final String phone;
   final String? avatarUrl;
 
-  EmployeeUserInfo({
-    required this.name,
-    required this.phone,
-    this.avatarUrl,
-  });
+  EmployeeUserInfo({required this.name, required this.phone, this.avatarUrl});
 
   factory EmployeeUserInfo.fromJson(Map<String, dynamic> json) {
     return EmployeeUserInfo(
@@ -334,10 +322,7 @@ class AdminOptionItem {
   final int id;
   final String title;
 
-  const AdminOptionItem({
-    required this.id,
-    required this.title,
-  });
+  const AdminOptionItem({required this.id, required this.title});
 }
 
 class AdminUserDetails {
@@ -373,7 +358,9 @@ class AdminUserDetails {
       status: data['status']?.toString() ?? '',
       isAdmin: data['is_admin'] == true,
       employee: data['employee'] is Map<String, dynamic>
-          ? AdminEmployeeState.fromJson(data['employee'] as Map<String, dynamic>)
+          ? AdminEmployeeState.fromJson(
+              data['employee'] as Map<String, dynamic>,
+            )
           : null,
       positions: positionRows
           .whereType<Map<String, dynamic>>()
@@ -396,6 +383,90 @@ class AdminUserDetails {
       orders: (data['orders'] as List? ?? const [])
           .map((item) => AdminUserOrderSummary.fromJson(item))
           .toList(),
+    );
+  }
+}
+
+class AdminCompanyMember {
+  final int userId;
+  final String fullName;
+  final String phone;
+  final int? telegramId;
+  final String role;
+  final bool isActive;
+  final DateTime? joinedAt;
+
+  const AdminCompanyMember({
+    required this.userId,
+    required this.fullName,
+    required this.phone,
+    required this.telegramId,
+    required this.role,
+    required this.isActive,
+    required this.joinedAt,
+  });
+
+  factory AdminCompanyMember.fromJson(Map<String, dynamic> json) {
+    return AdminCompanyMember(
+      userId: (json['user_id'] as num?)?.toInt() ?? 0,
+      fullName: json['full_name']?.toString() ?? 'Пользователь',
+      phone: json['phone']?.toString() ?? '',
+      telegramId: (json['telegram_id'] as num?)?.toInt(),
+      role: json['role']?.toString() ?? 'member',
+      isActive: json['is_active'] == true,
+      joinedAt: _tryParseDateTime(json['joined_at']),
+    );
+  }
+}
+
+class AdminCompany {
+  final int id;
+  final String name;
+  final String? description;
+  final String? contactPhone;
+  final String? contactEmail;
+  final String? address;
+  final String status;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+  final AdminCompanyMember owner;
+  final int membersCount;
+  final List<AdminCompanyMember> members;
+
+  const AdminCompany({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.contactPhone,
+    required this.contactEmail,
+    required this.address,
+    required this.status,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.owner,
+    required this.membersCount,
+    required this.members,
+  });
+
+  factory AdminCompany.fromJson(Map<String, dynamic> json) {
+    final ownerJson = json['owner'] as Map<String, dynamic>? ?? const {};
+    final members = (json['members'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(AdminCompanyMember.fromJson)
+        .toList();
+    return AdminCompany(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      name: json['name']?.toString() ?? '',
+      description: json['description']?.toString(),
+      contactPhone: json['contact_phone']?.toString(),
+      contactEmail: json['contact_email']?.toString(),
+      address: json['address']?.toString(),
+      status: json['status']?.toString() ?? 'active',
+      createdAt: _tryParseDateTime(json['created_at']),
+      updatedAt: _tryParseDateTime(json['updated_at']),
+      owner: AdminCompanyMember.fromJson(ownerJson),
+      membersCount: (json['members_count'] as num?)?.toInt() ?? members.length,
+      members: members,
     );
   }
 }

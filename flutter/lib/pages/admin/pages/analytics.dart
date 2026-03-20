@@ -27,9 +27,16 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
   List<_StoreOption> _stores = const [];
   List<_DailySeriesPoint> _series = const [];
   List<_PopularPlantPoint> _popularPlants = const [];
+  List<_SubscriptionSeriesPoint> _subscriptionSeries = const [];
+  List<_RegistrationsSeriesPoint> _registrationsSeries = const [];
+  List<_PopularSubscriptionPoint> _popularSubscriptions = const [];
   int _ordersCount = 0;
   double _revenue = 0;
   double _averageOrderValue = 0;
+  int _soldSubscriptionsCount = 0;
+  double _subscriptionRevenue = 0;
+  double _averageSubscriptionCheck = 0;
+  int _newUsersCount = 0;
 
   @override
   void initState() {
@@ -52,7 +59,15 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
       final storesRaw = data['stores'] as List? ?? const [];
       final seriesRaw = data['series'] as List? ?? const [];
       final popularRaw = data['popular_plants'] as List? ?? const [];
+      final subscriptionSeriesRaw =
+          data['subscription_series'] as List? ?? const [];
+      final registrationsSeriesRaw =
+          data['registrations_series'] as List? ?? const [];
+      final popularSubscriptionsRaw =
+          data['popular_subscriptions'] as List? ?? const [];
       final summary = data['summary'] as Map<String, dynamic>? ?? const {};
+      final subscriptionSummary =
+          data['subscription_summary'] as Map<String, dynamic>? ?? const {};
       if (!mounted) return;
       setState(() {
         _stores = storesRaw
@@ -67,10 +82,33 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
             .whereType<Map<String, dynamic>>()
             .map(_PopularPlantPoint.fromJson)
             .toList();
+        _subscriptionSeries = subscriptionSeriesRaw
+            .whereType<Map<String, dynamic>>()
+            .map(_SubscriptionSeriesPoint.fromJson)
+            .toList();
+        _registrationsSeries = registrationsSeriesRaw
+            .whereType<Map<String, dynamic>>()
+            .map(_RegistrationsSeriesPoint.fromJson)
+            .toList();
+        _popularSubscriptions = popularSubscriptionsRaw
+            .whereType<Map<String, dynamic>>()
+            .map(_PopularSubscriptionPoint.fromJson)
+            .toList();
         _ordersCount = (summary['orders_count'] as num?)?.toInt() ?? 0;
         _revenue = (summary['revenue'] as num?)?.toDouble() ?? 0;
         _averageOrderValue =
             (summary['average_order_value'] as num?)?.toDouble() ?? 0;
+        _newUsersCount = (summary['new_users_count'] as num?)?.toInt() ?? 0;
+        _soldSubscriptionsCount =
+            (subscriptionSummary['sold_subscriptions_count'] as num?)
+                ?.toInt() ??
+            0;
+        _subscriptionRevenue =
+            (subscriptionSummary['revenue'] as num?)?.toDouble() ?? 0;
+        _averageSubscriptionCheck =
+            (subscriptionSummary['average_subscription_check'] as num?)
+                ?.toDouble() ??
+            0;
         _selectedStoreId = storeId;
         _selectedDays = targetDays;
       });
@@ -110,11 +148,54 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: AppText.medium_12.copyWith(color: AppColors.grey)),
+          Text(
+            title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: AppText.medium_12.copyWith(color: AppColors.grey),
+          ),
           const SizedBox(height: 6),
           Text(value, style: AppText.bold_18.copyWith(color: AppColors.black)),
         ],
       ),
+    );
+  }
+
+  Widget _summaryCardsSection() {
+    final cards = <Widget>[
+      _summaryCard(title: 'Количество заказов', value: '$_ordersCount'),
+      _summaryCard(title: 'Выручка', value: _money(_revenue)),
+      _summaryCard(title: 'Средний чек', value: _money(_averageOrderValue)),
+      _summaryCard(
+        title: 'Продано подписок',
+        value: '$_soldSubscriptionsCount',
+      ),
+      _summaryCard(
+        title: 'Выручка по подпискам',
+        value: _money(_subscriptionRevenue),
+      ),
+      _summaryCard(
+        title: 'Средний чек подписки',
+        value: _money(_averageSubscriptionCheck),
+      ),
+      _summaryCard(title: 'Новые пользователи', value: '$_newUsersCount'),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 8.0;
+        const minCardWidth = 280.0;
+        final showTwoColumns = constraints.maxWidth >= (minCardWidth * 2 + spacing);
+        final cardWidth =
+            showTwoColumns ? (constraints.maxWidth - spacing) / 2 : constraints.maxWidth;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: cards
+              .map((card) => SizedBox(width: cardWidth, child: card))
+              .toList(),
+        );
+      },
     );
   }
 
@@ -162,9 +243,12 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
           enabled: true,
           touchTooltipData: BarTouchTooltipData(
             getTooltipColor: (_) => AppColors.grey,
+            fitInsideHorizontally: true,
+            fitInsideVertically: true,
+            tooltipPadding: const EdgeInsets.all(10),
             getTooltipItem: (group, groupIndex, rod, rodIndex) => BarTooltipItem(
               '${_shortDate(_series[group.x.toInt()].date)}\n${rod.toY.toInt()} заказов',
-              AppText.medium_12.copyWith(color: AppColors.white),
+              AppText.medium_14.copyWith(color: AppColors.white),
             ),
           ),
         ),
@@ -246,11 +330,14 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
           handleBuiltInTouches: true,
           touchTooltipData: LineTouchTooltipData(
             getTooltipColor: (_) => AppColors.grey,
+            fitInsideHorizontally: true,
+            fitInsideVertically: true,
+            tooltipPadding: const EdgeInsets.all(10),
             getTooltipItems: (spots) => spots
                 .map(
                   (spot) => LineTooltipItem(
                     '${_shortDate(_series[spot.x.toInt()].date)}\n${_money(spot.y)}',
-                    AppText.medium_12.copyWith(color: AppColors.white),
+                    AppText.medium_14.copyWith(color: AppColors.white),
                   ),
                 )
                 .toList(),
@@ -337,10 +424,13 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
                 enabled: true,
                 touchTooltipData: BarTouchTooltipData(
                   getTooltipColor: (_) => AppColors.grey,
+                  fitInsideHorizontally: true,
+                  fitInsideVertically: true,
+                  tooltipPadding: const EdgeInsets.all(10),
                   getTooltipItem: (group, groupIndex, rod, rodIndex) =>
                       BarTooltipItem(
                         '${_popularPlants[group.x.toInt()].name}\n${rod.toY.toInt()} шт.',
-                        AppText.medium_12.copyWith(color: AppColors.white),
+                        AppText.medium_14.copyWith(color: AppColors.white),
                       ),
                 ),
               ),
@@ -412,6 +502,230 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _subscriptionsChart() {
+    if (_subscriptionSeries.isEmpty) {
+      return Center(
+        child: Text(
+          'Нет данных',
+          style: AppText.medium_14.copyWith(color: AppColors.grey),
+        ),
+      );
+    }
+    final maxY = _subscriptionSeries
+        .map((e) => e.soldCount)
+        .fold<int>(0, (a, b) => a > b ? a : b);
+    final labelStep = (_subscriptionSeries.length / 6).ceil().clamp(1, 10);
+    return BarChart(
+      BarChartData(
+        maxY: (maxY + 1).toDouble(),
+        alignment: BarChartAlignment.spaceBetween,
+        gridData: const FlGridData(show: true),
+        borderData: FlBorderData(show: false),
+        barTouchData: BarTouchData(
+          enabled: true,
+          touchTooltipData: BarTouchTooltipData(
+            getTooltipColor: (_) => AppColors.grey,
+            fitInsideHorizontally: true,
+            fitInsideVertically: true,
+            tooltipPadding: const EdgeInsets.all(10),
+            getTooltipItem: (group, groupIndex, rod, rodIndex) =>
+                BarTooltipItem(
+                  '${_shortDate(_subscriptionSeries[group.x.toInt()].date)}\n${rod.toY.toInt()} подписок',
+                  AppText.medium_14.copyWith(color: AppColors.white),
+                ),
+          ),
+        ),
+        titlesData: FlTitlesData(
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 28,
+              interval: ((maxY + 1) / 4).clamp(1, 9999).toDouble(),
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 28,
+              getTitlesWidget: (value, meta) {
+                final idx = value.toInt();
+                if (idx < 0 ||
+                    idx >= _subscriptionSeries.length ||
+                    idx % labelStep != 0) {
+                  return const SizedBox.shrink();
+                }
+                return Text(
+                  _shortDate(_subscriptionSeries[idx].date),
+                  style: AppText.medium_8.copyWith(color: AppColors.grey),
+                );
+              },
+            ),
+          ),
+        ),
+        barGroups: List.generate(
+          _subscriptionSeries.length,
+          (i) => BarChartGroupData(
+            x: i,
+            barRods: [
+              BarChartRodData(
+                toY: _subscriptionSeries[i].soldCount.toDouble(),
+                color: AppColors.brown,
+                width: 7,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _registrationsChart() {
+    if (_registrationsSeries.isEmpty) {
+      return Center(
+        child: Text(
+          'Нет данных',
+          style: AppText.medium_14.copyWith(color: AppColors.grey),
+        ),
+      );
+    }
+    final maxY = _registrationsSeries
+        .map((e) => e.usersCount)
+        .fold<int>(0, (a, b) => a > b ? a : b);
+    final labelStep = (_registrationsSeries.length / 6).ceil().clamp(1, 10);
+    return LineChart(
+      LineChartData(
+        minX: 0,
+        maxX: (_registrationsSeries.length - 1).toDouble(),
+        minY: 0,
+        maxY: (maxY <= 0 ? 1 : maxY * 1.1).toDouble(),
+        gridData: const FlGridData(show: true),
+        borderData: FlBorderData(show: false),
+        lineTouchData: LineTouchData(
+          enabled: true,
+          handleBuiltInTouches: true,
+          touchTooltipData: LineTouchTooltipData(
+            getTooltipColor: (_) => AppColors.grey,
+            fitInsideHorizontally: true,
+            fitInsideVertically: true,
+            tooltipPadding: const EdgeInsets.all(10),
+            getTooltipItems: (spots) => spots
+                .map(
+                  (spot) => LineTooltipItem(
+                    '${_shortDate(_registrationsSeries[spot.x.toInt()].date)}\n${spot.y.toInt()} пользователей',
+                    AppText.medium_14.copyWith(color: AppColors.white),
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+        titlesData: FlTitlesData(
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 28,
+              interval: ((maxY + 1) / 4).clamp(1, 9999).toDouble(),
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 28,
+              getTitlesWidget: (value, meta) {
+                final idx = value.toInt();
+                if (idx < 0 ||
+                    idx >= _registrationsSeries.length ||
+                    idx % labelStep != 0) {
+                  return const SizedBox.shrink();
+                }
+                return Text(
+                  _shortDate(_registrationsSeries[idx].date),
+                  style: AppText.medium_8.copyWith(color: AppColors.grey),
+                );
+              },
+            ),
+          ),
+        ),
+        lineBarsData: [
+          LineChartBarData(
+            spots: List.generate(
+              _registrationsSeries.length,
+              (i) => FlSpot(
+                i.toDouble(),
+                _registrationsSeries[i].usersCount.toDouble(),
+              ),
+            ),
+            isCurved: true,
+            preventCurveOverShooting: true,
+            color: AppColors.success,
+            barWidth: 3,
+            dotData: const FlDotData(show: false),
+            belowBarData: BarAreaData(
+              show: true,
+              color: AppColors.success.withValues(alpha: 0.15),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _popularSubscriptionsList() {
+    if (_popularSubscriptions.isEmpty) {
+      return Center(
+        child: Text(
+          'Нет данных',
+          style: AppText.medium_14.copyWith(color: AppColors.grey),
+        ),
+      );
+    }
+    return Column(
+      children: _popularSubscriptions
+          .asMap()
+          .entries
+          .map(
+            (entry) => Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  Text('${entry.key + 1}. ', style: AppText.medium_12),
+                  Expanded(
+                    child: Text(
+                      entry.value.name,
+                      style: AppText.medium_12.copyWith(color: AppColors.black),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${entry.value.soldCount} шт.',
+                    style: AppText.medium_12.copyWith(color: AppColors.brown),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _money(entry.value.revenue),
+                    style: AppText.medium_12.copyWith(color: AppColors.grey),
+                  ),
+                ],
+              ),
+            ),
+          )
+          .toList(),
     );
   }
 
@@ -487,17 +801,7 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
                         .toList(),
                   ),
                   const SizedBox(height: 12),
-                  _summaryCard(
-                    title: 'Количество заказов',
-                    value: '$_ordersCount',
-                  ),
-                  const SizedBox(height: 8),
-                  _summaryCard(title: 'Выручка', value: _money(_revenue)),
-                  const SizedBox(height: 8),
-                  _summaryCard(
-                    title: 'Средний чек',
-                    value: _money(_averageOrderValue),
-                  ),
+                  _summaryCardsSection(),
                   _chartContainer(
                     title: 'График заказов',
                     child: _ordersChart(),
@@ -509,6 +813,20 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
                   _chartContainer(
                     title: 'Популярные растения',
                     child: _popularPlantsChart(),
+                  ),
+                  _chartContainer(
+                    title: 'Продажи подписок (по дням)',
+                    child: _subscriptionsChart(),
+                  ),
+                  _chartContainer(
+                    title: 'Регистрация пользователей (по дням)',
+                    child: _registrationsChart(),
+                  ),
+                  _chartContainer(
+                    title: 'Востребованные подписки',
+                    child: SingleChildScrollView(
+                      child: _popularSubscriptionsList(),
+                    ),
                   ),
                 ],
               ),
@@ -573,6 +891,66 @@ class _PopularPlantPoint {
     return _PopularPlantPoint(
       name: json['name']?.toString() ?? '',
       totalSold: (json['total_sold'] as num?)?.toInt() ?? 0,
+      revenue: (json['revenue'] as num?)?.toDouble() ?? 0,
+    );
+  }
+}
+
+class _SubscriptionSeriesPoint {
+  final String date;
+  final int soldCount;
+  final double revenue;
+
+  const _SubscriptionSeriesPoint({
+    required this.date,
+    required this.soldCount,
+    required this.revenue,
+  });
+
+  factory _SubscriptionSeriesPoint.fromJson(Map<String, dynamic> json) {
+    return _SubscriptionSeriesPoint(
+      date: json['date']?.toString() ?? '',
+      soldCount: (json['sold_count'] as num?)?.toInt() ?? 0,
+      revenue: (json['revenue'] as num?)?.toDouble() ?? 0,
+    );
+  }
+}
+
+class _RegistrationsSeriesPoint {
+  final String date;
+  final int usersCount;
+
+  const _RegistrationsSeriesPoint({
+    required this.date,
+    required this.usersCount,
+  });
+
+  factory _RegistrationsSeriesPoint.fromJson(Map<String, dynamic> json) {
+    return _RegistrationsSeriesPoint(
+      date: json['date']?.toString() ?? '',
+      usersCount: (json['users_count'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class _PopularSubscriptionPoint {
+  final int planId;
+  final String name;
+  final int soldCount;
+  final double revenue;
+
+  const _PopularSubscriptionPoint({
+    required this.planId,
+    required this.name,
+    required this.soldCount,
+    required this.revenue,
+  });
+
+  factory _PopularSubscriptionPoint.fromJson(Map<String, dynamic> json) {
+    return _PopularSubscriptionPoint(
+      planId: (json['plan_id'] as num?)?.toInt() ?? 0,
+      name: json['name']?.toString() ?? 'Тариф',
+      soldCount: (json['sold_count'] as num?)?.toInt() ?? 0,
       revenue: (json['revenue'] as num?)?.toDouble() ?? 0,
     );
   }

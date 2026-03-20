@@ -7,6 +7,7 @@ import 'package:azalia/pages/admin/widgets/products/cards/orders.dart';
 import 'package:azalia/pages/admin/widgets/products/cards/procurement.dart';
 import 'package:azalia/pages/admin/widgets/products/cards/receipts.dart';
 import 'package:azalia/pages/admin/widgets/products/cards/editor.dart';
+import 'package:azalia/pages/admin/widgets/products/cards/subscriptions.dart';
 import 'package:azalia/pages/admin/widgets/products/cards/warehouse.dart';
 import 'package:azalia/pages/payment/payment_webview.dart';
 import 'package:azalia/pages/payment/paymentpage.dart';
@@ -208,7 +209,8 @@ class AppRouter {
               GoRoute(
                 path: 'procurement',
                 name: 'adminProductsProcurement',
-                builder: (context, state) => const AdminProductsCartProcurement(),
+                builder: (context, state) =>
+                    const AdminProductsCartProcurement(),
               ),
               GoRoute(
                 path: 'warehouse',
@@ -224,14 +226,22 @@ class AppRouter {
                 path: 'delivery',
                 name: 'adminProductsDelivery',
                 builder: (context, state) => const AdminProductsCartDelivery(),
-              ),GoRoute(
+              ),
+              GoRoute(
                 path: 'orders',
                 name: 'adminProductsOrders',
                 builder: (context, state) => const AdminProductsCartOrders(),
-              ),GoRoute(
+              ),
+              GoRoute(
                 path: 'receipts',
                 name: 'adminProductsReceipts',
                 builder: (context, state) => const AdminProductsCartReceipts(),
+              ),
+              GoRoute(
+                path: 'subscriptions',
+                name: 'adminProductsSubscriptions',
+                builder: (context, state) =>
+                    const AdminProductsCartSubscriptions(),
               ),
             ],
           ),
@@ -276,10 +286,7 @@ class PaymentWebViewArgs {
   final int paymentLinkId;
   final String paymentUrl;
 
-  PaymentWebViewArgs({
-    required this.paymentLinkId,
-    required this.paymentUrl,
-  });
+  PaymentWebViewArgs({required this.paymentLinkId, required this.paymentUrl});
 }
 
 class PaymentItemArgs {

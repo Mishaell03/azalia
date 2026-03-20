@@ -141,6 +141,16 @@ def _fetch_images(cur, product_id: int, preview_url: Optional[str] = None) -> li
     return result
 
 
+def _matches_search_casefold(row, needle: str) -> bool:
+    if not needle:
+        return True
+    needle_cf = needle.casefold()
+    name = (row["name"] or "").casefold()
+    description = (row["description"] or "").casefold()
+    sku = (row["sku"] or "").casefold()
+    return needle_cf in name or needle_cf in description or needle_cf in sku
+
+
 def _base_product_sql() -> str:
     return """
         SELECT
@@ -266,6 +276,8 @@ def get_plants(
         (effective_offset // effective_limit) + 1 if effective_limit > 0 else 1
     )
 
+    search_term = _clean_text(search, 100) if search else None
+
     sql = _base_product_sql() + " WHERE 1=1 "
     params: list[Any] = []
 
@@ -286,11 +298,6 @@ def get_plants(
     if supplier_id is not None:
         sql += " AND p.supplier_id = ?"
         params.append(supplier_id)
-
-    if search:
-        q = f"%{_clean_text(search, 100) or ''}%"
-        sql += " AND (p.name LIKE ? ESCAPE '\\' OR p.description LIKE ? ESCAPE '\\' OR p.sku LIKE ? ESCAPE '\\')"
-        params.extend([q, q, q])
 
     if min_price is not None:
         sql += " AND p.base_price >= ?"
@@ -320,15 +327,23 @@ def get_plants(
 
     count_sql = f"SELECT COUNT(*) AS total FROM ({sql}) AS filtered_products"
     count_params = params.copy()
-
-    sql += f" ORDER BY {sort_sql} LIMIT ? OFFSET ?"
-    params.extend([effective_limit, effective_offset])
+    paged_sql = sql + f" ORDER BY {sort_sql} LIMIT ? OFFSET ?"
+    paged_params = [*params, effective_limit, effective_offset]
+    unpaged_sorted_sql = sql + f" ORDER BY {sort_sql}"
 
     conn = get_db_connection()
     try:
         cur = conn.cursor()
-        total = int(cur.execute(count_sql, count_params).fetchone()["total"])
-        rows = cur.execute(sql, params).fetchall()
+        if search_term:
+            all_rows = cur.execute(unpaged_sorted_sql, params).fetchall()
+            matched_rows = [
+                row for row in all_rows if _matches_search_casefold(row, search_term)
+            ]
+            total = len(matched_rows)
+            rows = matched_rows[effective_offset : effective_offset + effective_limit]
+        else:
+            total = int(cur.execute(count_sql, count_params).fetchone()["total"])
+            rows = cur.execute(paged_sql, paged_params).fetchall()
         data = [
             _product_to_dict(
                 row,

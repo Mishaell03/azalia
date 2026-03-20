@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:azalia/backend/apiClient.dart';
 import 'package:azalia/backend/api_config.dart';
 import 'package:azalia/backend/models/auth.dart';
@@ -15,16 +17,12 @@ class AuthService {
 
       final response = await _api.post(
         ApiConfig.authVerify,
-        body: {
-          'code': code,
-          'device_id': cleanDeviceId,
-        },
+        body: {'code': code, 'device_id': cleanDeviceId},
       );
 
       final authResponse = AuthResponse.fromJson(response);
 
-      final token =
-          authResponse.user.sessionToken ?? _generateTempToken();
+      final token = authResponse.user.sessionToken ?? _generateTempToken();
 
       await SessionService().saveSession(
         user: authResponse.user,
@@ -36,14 +34,9 @@ class AuthService {
 
       return authResponse;
     } on ApiException catch (e) {
-      throw AuthException(
-        message: e.message,
-        statusCode: e.statusCode,
-      );
+      throw AuthException(message: e.message, statusCode: e.statusCode);
     } catch (e) {
-      throw AuthException(
-        message: 'Ошибка авторизации',
-      );
+      throw AuthException(message: 'Ошибка авторизации');
     }
   }
 
@@ -53,35 +46,26 @@ class AuthService {
       final response = await _api.get(ApiConfig.authCheckStatus(code));
       return CodeStatusResponse.fromJson(response);
     } on ApiException catch (e) {
-      throw AuthException(
-        message: e.message,
-        statusCode: e.statusCode,
-      );
+      throw AuthException(message: e.message, statusCode: e.statusCode);
     } catch (e) {
-      throw AuthException(
-        message: 'Ошибка проверки кода',
-      );
+      throw AuthException(message: 'Ошибка проверки кода');
     }
   }
 
   /// Серверная проверка session token
   static Future<bool> validateSessionToken(String token) async {
     try {
-      final response = await _api.post(
-        ApiConfig.authValidateToken,
-        body: {'token': token},
-      );
+      final response = await _api
+          .post(ApiConfig.authValidateToken, body: {'token': token})
+          .timeout(const Duration(seconds: 30));
 
       return response['is_valid'] == true;
+    } on TimeoutException {
+      throw AuthException(message: 'Таймаут проверки сессии', statusCode: 408);
     } on ApiException catch (e) {
-      throw AuthException(
-        message: e.message,
-        statusCode: e.statusCode,
-      );
+      throw AuthException(message: e.message, statusCode: e.statusCode);
     } catch (e) {
-      throw AuthException(
-        message: 'Ошибка проверки сессии',
-      );
+      throw AuthException(message: 'Ошибка проверки сессии');
     }
   }
 
@@ -89,20 +73,14 @@ class AuthService {
   static Future<AuthResponse> fetchMe() async {
     try {
       final session = SessionService();
-      
+
       if (!session.isLoggedIn || !session.isTokenValid) {
-        throw AuthException(
-          message: 'Сессия недействительна',
-          statusCode: 401,
-        );
+        throw AuthException(message: 'Сессия недействительна', statusCode: 401);
       }
 
       final token = await session.getToken();
       if (token == null || token.isEmpty) {
-        throw AuthException(
-          message: 'Сессия недействительна',
-          statusCode: 401,
-        );
+        throw AuthException(message: 'Сессия недействительна', statusCode: 401);
       }
 
       // Используем GET или POST без body, токен в заголовке Authorization
@@ -122,19 +100,11 @@ class AuthService {
 
       return authResponse;
     } on UnauthorizedException {
-      throw AuthException(
-        message: 'Сессия недействительна',
-        statusCode: 401,
-      );
+      throw AuthException(message: 'Сессия недействительна', statusCode: 401);
     } on ApiException catch (e) {
-      throw AuthException(
-        message: e.message,
-        statusCode: e.statusCode,
-      );
+      throw AuthException(message: e.message, statusCode: e.statusCode);
     } catch (e) {
-      throw AuthException(
-        message: 'Ошибка обновления профиля',
-      );
+      throw AuthException(message: 'Ошибка обновления профиля');
     }
   }
 
@@ -164,10 +134,7 @@ class AuthException implements Exception {
   final String message;
   final int? statusCode;
 
-  AuthException({
-    required this.message,
-    this.statusCode,
-  });
+  AuthException({required this.message, this.statusCode});
 
   @override
   String toString() {

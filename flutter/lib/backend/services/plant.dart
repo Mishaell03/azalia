@@ -129,7 +129,9 @@ class PlantService {
   /// Удаление категории (админ)
   static Future<void> deleteCategory(int categoryId) async {
     try {
-      final response = await _api.delete(ApiConfig.adminCategoryDelete(categoryId));
+      final response = await _api.delete(
+        ApiConfig.adminCategoryDelete(categoryId),
+      );
       if (response['success'] != true) {
         throw Exception('Не удалось удалить категорию');
       }
@@ -140,9 +142,13 @@ class PlantService {
   }
 
   /// Проверка удаления категории и список товаров в ней (админ)
-  static Future<Map<String, dynamic>> getCategoryDeletionCheck(int categoryId) async {
+  static Future<Map<String, dynamic>> getCategoryDeletionCheck(
+    int categoryId,
+  ) async {
     try {
-      final response = await _api.get(ApiConfig.adminCategoryDeletionCheck(categoryId));
+      final response = await _api.get(
+        ApiConfig.adminCategoryDeletionCheck(categoryId),
+      );
       if (response['success'] != true) {
         throw Exception('Не удалось получить информацию по категории');
       }
@@ -285,7 +291,9 @@ class PlantService {
   /// Удалить одно изображение товара (админ)
   static Future<void> deletePlantImageById(int plantId, int imageId) async {
     try {
-      final response = await _api.delete('${ApiConfig.plantsId(plantId)}/images/$imageId');
+      final response = await _api.delete(
+        '${ApiConfig.plantsId(plantId)}/images/$imageId',
+      );
       if (response['success'] != true) {
         throw Exception('Не удалось удалить изображение');
       }
