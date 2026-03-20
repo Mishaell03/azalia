@@ -1,7 +1,7 @@
 class ApiConfig {
   static const String baseURL = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://127.0.0.1:5000/api',
+    defaultValue: 'https://www.nebinance.ru/api',
   );
 
   static const Duration timeout = Duration(seconds: 10);
