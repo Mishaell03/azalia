@@ -11,6 +11,7 @@ Future<void> main() async {
   await session.initialize();
   await LocalNotificationsService.instance.initialize();
   await LocalNotificationsService.instance.syncCalendarNotifications();
+  await LocalNotificationsService.instance.syncOrderStatusNotifications();
 
   runApp(const MyApp());
 }

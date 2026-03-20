@@ -1,6 +1,10 @@
+import 'dart:convert';
+
 import 'package:azalia/backend/apiClient.dart';
 import 'package:azalia/backend/api_config.dart';
+import 'package:azalia/backend/services/session.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
@@ -12,6 +16,7 @@ class LocalNotificationsService {
   static final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
   static final ApiClient _api = ApiClient();
+  static const String _orderStatusesKey = 'cached_order_statuses_v1';
 
   bool _initialized = false;
 
@@ -85,6 +90,52 @@ class LocalNotificationsService {
     }
   }
 
+  Future<void> syncOrderStatusNotifications() async {
+    await initialize();
+    final session = SessionService();
+    if (!session.hasActiveSession) return;
+
+    final orders = await _loadOrders();
+    if (orders.isEmpty) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_orderStatusesKey);
+    final previous = <String, String>{};
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final parsed = Map<String, dynamic>.from(_decodeJson(raw));
+        for (final entry in parsed.entries) {
+          previous[entry.key] = entry.value?.toString() ?? '';
+        }
+      } catch (_) {}
+    }
+
+    final next = <String, String>{};
+    for (final order in orders) {
+      final orderId = (order['order_id'] as num?)?.toInt();
+      if (orderId == null || orderId <= 0) continue;
+      final key = '$orderId';
+      final statusCode = order['status_code']?.toString() ?? '';
+      next[key] = statusCode;
+
+      final oldStatus = previous[key];
+      if (oldStatus != null &&
+          oldStatus.isNotEmpty &&
+          oldStatus != statusCode) {
+        final title = 'Статус заказа обновлен';
+        final orderNumber = order['order_number']?.toString() ?? '#$orderId';
+        final statusRu = order['status']?.toString() ?? statusCode;
+        await _showNow(
+          id: 300000 + orderId,
+          title: title,
+          body: 'Заказ №$orderNumber: $statusRu',
+        );
+      }
+    }
+
+    await prefs.setString(_orderStatusesKey, _encodeJson(next));
+  }
+
   Future<List<Map<String, dynamic>>> _loadImportantDates() async {
     try {
       final response = await _api.get(ApiConfig.importantDates);
@@ -100,6 +151,18 @@ class LocalNotificationsService {
   Future<List<Map<String, dynamic>>> _loadPlantCareDates() async {
     try {
       final response = await _api.get(ApiConfig.plantCareDates);
+      if (response['success'] != true) return const [];
+      final data = response['data'] as Map<String, dynamic>? ?? const {};
+      final items = data['items'] as List? ?? const [];
+      return items.whereType<Map<String, dynamic>>().toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _loadOrders() async {
+    try {
+      final response = await _api.get(ApiConfig.orders(limit: 50, offset: 0));
       if (response['success'] != true) return const [];
       final data = response['data'] as Map<String, dynamic>? ?? const {};
       final items = data['items'] as List? ?? const [];
@@ -144,5 +207,31 @@ class LocalNotificationsService {
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
     );
+  }
+
+  Future<void> _showNow({
+    required int id,
+    required String title,
+    required String body,
+  }) async {
+    const details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        'order_status_changes',
+        'Order status changes',
+        channelDescription: 'Изменения статусов заказов',
+        importance: Importance.high,
+        priority: Priority.high,
+      ),
+      iOS: DarwinNotificationDetails(),
+    );
+    await _plugin.show(id, title, body, details);
+  }
+
+  dynamic _decodeJson(String raw) {
+    return raw.isEmpty ? <String, dynamic>{} : jsonDecode(raw);
+  }
+
+  String _encodeJson(Map<String, String> value) {
+    return jsonEncode(value);
   }
 }

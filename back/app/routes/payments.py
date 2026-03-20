@@ -201,6 +201,56 @@ def _allowed_admin_statuses_for_order_type(order_type: Optional[str]) -> tuple[s
     return ("assembled", "shipped", "delivered", "completed", "cancelled")
 
 
+def _enqueue_order_status_notification(
+    cur,
+    *,
+    order_id: int,
+    old_status: Optional[str],
+    new_status: str,
+) -> None:
+    old_code = clean_text(old_status, max_len=32).lower()
+    new_code = clean_text(new_status, max_len=32).lower()
+    if not new_code or old_code == new_code:
+        return
+
+    order_row = cur.execute(
+        """
+        SELECT id, user_id, order_number
+        FROM orders
+        WHERE id = ?
+        LIMIT 1
+        """,
+        (order_id,),
+    ).fetchone()
+    if not order_row:
+        return
+
+    title = "Статус заказа обновлен"
+    body = (
+        f"Заказ №{order_row['order_number']}: "
+        f"{_order_status_to_ru(old_code) if old_code else 'Создан'} -> {_order_status_to_ru(new_code)}"
+    )
+    cur.execute(
+        """
+        INSERT INTO notifications (
+            user_id,
+            template_id,
+            title,
+            body,
+            status,
+            related_order_id
+        )
+        VALUES (?, NULL, ?, ?, 'pending', ?)
+        """,
+        (
+            int(order_row["user_id"]),
+            title,
+            body,
+            int(order_id),
+        ),
+    )
+
+
 def _admin_status_options_for_order_type(order_type: Optional[str]) -> list[dict[str, str]]:
     return [
         {"code": status_code, "label": _order_status_to_ru(status_code)}
@@ -874,6 +924,12 @@ def _update_order_status(
             """,
             (resolved_new, employee_id, order_id),
         )
+        _enqueue_order_status_notification(
+            cur,
+            order_id=int(order_id),
+            old_status=current_status,
+            new_status=resolved_new,
+        )
     else:
         cur.execute(
             """
@@ -896,6 +952,19 @@ def _update_order_status(
 def _sync_payment_and_order(cur, payment_row, new_status: str):
     payment_id = payment_row["id"]
     order_id = payment_row["order_id"]
+    before_row = cur.execute(
+        """
+        SELECT status
+        FROM orders
+        WHERE id = ?
+        LIMIT 1
+        """,
+        (order_id,),
+    ).fetchone()
+    old_order_status = clean_text(
+        before_row["status"] if before_row else None,
+        max_len=32,
+    ).lower()
 
     if new_status == "paid":
         cur.execute(
@@ -917,6 +986,25 @@ def _sync_payment_and_order(cur, payment_row, new_status: str):
             WHERE id = ?
             """,
             (order_id,),
+        )
+        after_row = cur.execute(
+            """
+            SELECT status
+            FROM orders
+            WHERE id = ?
+            LIMIT 1
+            """,
+            (order_id,),
+        ).fetchone()
+        new_order_status = clean_text(
+            after_row["status"] if after_row else None,
+            max_len=32,
+        ).lower()
+        _enqueue_order_status_notification(
+            cur,
+            order_id=int(order_id),
+            old_status=old_order_status,
+            new_status=new_order_status,
         )
 
         order_items = cur.execute(
@@ -995,6 +1083,25 @@ def _sync_payment_and_order(cur, payment_row, new_status: str):
             WHERE id = ?
             """,
             (order_id,),
+        )
+        after_row = cur.execute(
+            """
+            SELECT status
+            FROM orders
+            WHERE id = ?
+            LIMIT 1
+            """,
+            (order_id,),
+        ).fetchone()
+        new_order_status = clean_text(
+            after_row["status"] if after_row else None,
+            max_len=32,
+        ).lower()
+        _enqueue_order_status_notification(
+            cur,
+            order_id=int(order_id),
+            old_status=old_order_status,
+            new_status=new_order_status,
         )
         _release_reserved_inventory_for_order(
             cur,
@@ -2093,6 +2200,7 @@ def cancel_user_order(order_id: int, user=Depends(get_current_user)):
         if payment and clean_text(payment["status"], max_len=32).lower() not in {"failed", "refunded", "paid"}:
             _sync_payment_and_order(cur, payment, "failed")
         else:
+            old_status = current_status
             cur.execute(
                 """
                 UPDATE orders
@@ -2101,6 +2209,12 @@ def cancel_user_order(order_id: int, user=Depends(get_current_user)):
                 WHERE id = ?
                 """,
                 (order_id,),
+            )
+            _enqueue_order_status_notification(
+                cur,
+                order_id=int(order_id),
+                old_status=old_status,
+                new_status="cancelled",
             )
             _release_reserved_inventory_for_order(
                 cur,

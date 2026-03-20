@@ -685,7 +685,7 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
     );
   }
 
-  Widget _popularSubscriptionsList() {
+  Widget _popularSubscriptionsChart() {
     if (_popularSubscriptions.isEmpty) {
       return Center(
         child: Text(
@@ -694,38 +694,100 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
         ),
       );
     }
+    final maxY = _popularSubscriptions
+        .map((e) => e.soldCount)
+        .fold<int>(0, (a, b) => a > b ? a : b);
     return Column(
-      children: _popularSubscriptions
-          .asMap()
-          .entries
-          .map(
-            (entry) => Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Row(
-                children: [
-                  Text('${entry.key + 1}. ', style: AppText.medium_12),
-                  Expanded(
-                    child: Text(
-                      entry.value.name,
-                      style: AppText.medium_12.copyWith(color: AppColors.black),
-                      overflow: TextOverflow.ellipsis,
+      children: [
+        Expanded(
+          child: BarChart(
+            BarChartData(
+              maxY: (maxY + 1).toDouble(),
+              alignment: BarChartAlignment.spaceAround,
+              gridData: const FlGridData(show: true),
+              borderData: FlBorderData(show: false),
+              barTouchData: BarTouchData(
+                enabled: true,
+                touchTooltipData: BarTouchTooltipData(
+                  getTooltipColor: (_) => AppColors.grey,
+                  fitInsideHorizontally: true,
+                  fitInsideVertically: true,
+                  tooltipPadding: const EdgeInsets.all(10),
+                  getTooltipItem: (group, groupIndex, rod, rodIndex) =>
+                      BarTooltipItem(
+                        '${_popularSubscriptions[group.x.toInt()].name}\n${rod.toY.toInt()} шт.',
+                        AppText.medium_14.copyWith(color: AppColors.white),
+                      ),
+                ),
+              ),
+              titlesData: FlTitlesData(
+                rightTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                topTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 28,
+                    interval: ((maxY + 1) / 4).clamp(1, 9999).toDouble(),
+                  ),
+                ),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    getTitlesWidget: (value, meta) => Text(
+                      '${value.toInt() + 1}',
+                      style: AppText.medium_12.copyWith(color: AppColors.grey),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${entry.value.soldCount} шт.',
-                    style: AppText.medium_12.copyWith(color: AppColors.brown),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    _money(entry.value.revenue),
-                    style: AppText.medium_12.copyWith(color: AppColors.grey),
-                  ),
-                ],
+                ),
+              ),
+              barGroups: List.generate(
+                _popularSubscriptions.length,
+                (i) => BarChartGroupData(
+                  x: i,
+                  barRods: [
+                    BarChartRodData(
+                      toY: _popularSubscriptions[i].soldCount.toDouble(),
+                      color: AppColors.brown,
+                      width: 16,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ],
+                ),
               ),
             ),
-          )
-          .toList(),
+          ),
+        ),
+        const SizedBox(height: 10),
+        ..._popularSubscriptions.asMap().entries.map(
+          (entry) => Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              children: [
+                Text(
+                  '${entry.key + 1}. ',
+                  style: AppText.medium_12.copyWith(color: AppColors.grey),
+                ),
+                Expanded(
+                  child: Text(
+                    entry.value.name,
+                    style: AppText.medium_12.copyWith(color: AppColors.black),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${entry.value.soldCount} шт.',
+                  style: AppText.medium_12.copyWith(color: AppColors.brown),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -824,9 +886,7 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
                   ),
                   _chartContainer(
                     title: 'Востребованные подписки',
-                    child: SingleChildScrollView(
-                      child: _popularSubscriptionsList(),
-                    ),
+                    child: _popularSubscriptionsChart(),
                   ),
                 ],
               ),
