@@ -1,183 +1,193 @@
-# API Краткая справка - Азалия
+# API Quick Reference - Azalia
 
-## Быстрый навигатор по всем эндпоинтам
+## Base
 
-### 🔐 Аутентификация `/api/auth`
-- `POST /verify` - Проверить код и получить session_token
-- `GET /check_status/<code>` - Статус кода
-- `GET/POST /me` - Получить инфо о текущем пользователе
-- `POST /update_profile` - Обновить имя/телефон
-- `POST /avatar` - Загрузить аватарку
-- `GET /avatar` - Получить аватарку
+- Base URL: `http://localhost:5000`
+- API prefix: `/api`
+- Docs: `/docs`, `/redoc`, `/openapi.json`
+- Auth header for protected methods: `Authorization: <session_token>` (не `Bearer`)
 
-### 🛍️ Корзина и Избранное `/api/cart`
-- `GET /items` - Товары в корзине
-- `POST /items` - Добавить в корзину
-- `PUT /items/<id>` - Изменить кол-во
-- `DELETE /items/<id>` - Удалить из корзины
-- `DELETE /clear` - Очистить корзину
-- `GET /wishlist` - Избранное
-- `POST /wishlist` - Добавить в избранное
-- `DELETE /wishlist/<id>` - Удалить из избранного
-- `GET /wishlist/check/<id>` - Проверить в избранном
-- `GET /pot/price` - Цена горшка
+## Images (WebP)
 
-### 🌿 Растения `/api/plants`
-- `GET /` - Список растений (с фильтрами)
-- `GET /<id>` - Информация о растении
-- `POST /` - Создать растение (админ)
-- `PUT /<id>` - Обновить растение (админ)
-- `DELETE /<id>` - Удалить растение (админ)
-- `POST /<id>/image` - Загрузить изображение (админ)
-- `DELETE /<id>/image` - Удалить изображение (админ)
-- `PATCH /<id>/stock` - Обновить наличие (админ)
-- `GET /with-images` - Растения с картинками
-- `GET /top-rated` - Top растения по рейтингу
+- `GET /img/{file_path:path}` - сервер отдает изображения как `image/webp`
+- Upload ручки сохраняют изображения в `.webp`:
+  - `POST /api/auth/avatar`
+  - `POST /api/plants/{plant_id}/image`
+  - `POST /api/plants/{plant_id}/images`
+  - `POST /api/user-plants/{plant_id}/photo`
 
-### 📂 Категории `/api/categories`
-- `GET /` - Все категории
-- `GET /<id>` - Категория
-- `POST /` - Создать категорию (админ)
-- `PUT /<id>` - Обновить категорию (админ)
-- `DELETE /<id>` - Удалить категорию (админ)
-- `GET /<id>/plants` - Растения в категории
-- `GET /stats` - Статистика (админ)
+## Auth `/api/auth`
 
-### 👥 Сотрудники `/api`
-- `GET /users` - Список пользователей (админ)
-- `GET /debug/whoami` - Инфо о себе
-- `GET /employees` - Список сотрудников (админ)
-- `GET /employees/<id>` - Сотрудник (админ)
-- `POST /employees/assign` - Назначить сотрудника (админ)
-- `POST /employees/deactivate` - Деактивировать (админ)
+- `POST /validate_token`
+- `POST /verify`
+- `GET /check_status/{code}`
+- `GET|POST /me`
+- `POST /update_profile`
+- `POST /avatar`
+- `GET /avatar`
+- `GET /subscription-plans`
+- `POST /subscription-plans/checkout`
+- `GET /subscription-plans/checkout/{checkout_id}/status`
+- `GET /subscription-payment-return`
+- `POST /subscription-plans/callback`
+- `POST /subscription-plans/{plan_id}/cancel`
 
-### 💳 Платежи `/api/payments`
-- `POST /create` - Создать платежную ссылку
-- `GET /status/<id>` - Статус платежа
-- `POST /callback` - Webhook от Yookassa (автоматический)
+## Plants `/api/plants`
 
-### 🖼️ Статические файлы `/api`
-- `GET /img/<filename>` - Получить изображение
+- `GET /`
+- `GET /categories`
+- `GET /filters`
+- `GET /{plant_id}`
+- `POST /`
+- `POST /admin/create`
+- `PUT /{plant_id}`
+- `DELETE /{plant_id}`
+- `POST /{plant_id}/image`
+- `POST /{plant_id}/images`
+- `GET /{plant_id}/images`
+- `DELETE /{plant_id}/images/{image_id}`
+- `DELETE /{plant_id}/image`
 
----
+## Categories `/api/categories`
 
-## Основные параметры запросов
+- `GET /`
+- `GET /stats`
+- `GET /{category_id}`
+- `POST /`
+- `POST /admin/create`
+- `PUT /{category_id}`
+- `DELETE /{category_id}`
+- `GET /admin/{category_id}/deletion-check`
+- `DELETE /admin/{category_id}/delete`
+- `GET /{category_id}/plants`
 
-### Аутентификация
-```
-Заголовок: Authorization: session_token
-или в теле: {"session_token": "..."}
-```
+## Cart `/api/cart`
 
-### Фильтры в GET /plants
-```
-?category_id=1
-&in_stock=true
-&plant_type=декоративное
-&search=фикус
-&min_price=1000&max_price=5000
-&min_rating=4&max_rating=5
-```
+- `GET /items`
+- `POST /items`
+- `PUT /items/{item_id}`
+- `DELETE /items/{item_id}`
+- `DELETE /clear`
+- `GET /wishlist`
+- `POST /wishlist`
+- `DELETE /wishlist/{plant_id}`
+- `GET /wishlist/check/{plant_id}`
+- `GET /pot/price`
 
-### Создание платежа
-```json
-{
-  "items": [{"plant_id": 1, "quantity": 2, "plant_price": 1500}],
-  "amount": 3000,
-  "delivery_address": "адрес"
-}
-```
+## Pot `/api/pot`
 
-### Добавление в корзину
-```json
-{
-  "plant_id": 1,
-  "quantity": 2,
-  "pot_color": "white",
-  "pot_size": "M",
-  "pot_material": "ceramic"
-}
-```
+- `GET /sizes`
+- `GET /materials`
+- `GET /colors`
+- `GET /variants`
+- `GET /options`
+- `GET /prices`
+- `GET /price`
 
----
+## Payments `/api/payments`
 
-## Коды ответов
+- `GET /stores`
+- `POST /availability`
+- `POST /generate-link`
+- `GET /return/{link_id}`
+- `GET /link/{link_id}`
+- `POST /link/{link_id}/cancel`
+- `POST /callback`
+- `GET /status/{payment_id}`
+- `GET /status/link/{link_id}`
+- `GET /orders`
+- `GET /orders/{order_id}`
+- `POST /orders/{order_id}/cancel`
+- `PUT /orders/{order_id}/address`
+- `GET /admin/orders`
+- `GET /admin/orders/{order_id}`
+- `POST /admin/orders/{order_id}/accept`
+- `PATCH /admin/orders/{order_id}/status`
+- `POST /admin/orders/{order_id}/close`
+- `POST /admin/orders/{order_id}/mark-paid`
+- `POST /admin/orders/{order_id}/refund`
+- `GET /status/order/{order_id}`
 
-| Код | Значение |
-|-----|----------|
-| 200 | OK ✓ |
-| 201 | Created ✓ |
-| 400 | Bad Request ✗ |
-| 401 | Unauthorized ✗ |
-| 403 | Forbidden ✗ |
-| 404 | Not Found ✗ |
-| 500 | Server Error ✗ |
+## Employees & Procurement `/api`
 
----
+- `GET /users/{user_id}`
+- `GET /admins/{user_id}`
+- `PATCH /users/{user_id}`
+- `PATCH /admins/{user_id}`
+- `GET /users`
+- `GET /admin/companies`
+- `GET /debug/whoami`
+- `GET /employees`
+- `GET /employees/{employee_id}`
+- `GET /warehouse/products`
+- `PATCH /warehouse/products/{product_id}/adjust`
+- `GET /procurement/stores`
+- `GET /procurement/missing-products`
+- `GET /procurement/catalog-products`
+- `GET /procurement/cart`
+- `POST /procurement/cart/items`
+- `DELETE /procurement/cart/items/{cart_item_id}`
+- `POST /procurement/cart/checkout`
+- `GET /procurement/history`
+- `GET /procurement/receipts`
+- `POST /procurement/receipts`
+- `GET /admin/analytics`
+- `GET /admin/subscription-plans`
+- `POST /employees/assign`
+- `POST /employees/deactivate`
 
-## Форматы значений в БД
+## Other modules
 
-### Статусы
-- **Заказ**: `new`, `payment_pending`, `processing`, `delivered`, `cancelled`
-- **Платеж**: `pending`, `completed`, `failed`
-- **Сотрудник**: `is_active` (true/false)
+### Notifications `/api/notifications`
+- `GET /items`
 
-### Освещение
-- `full_sun`, `partial_shade`, `shade`
+### Important Dates `/api/important-dates`
+- `GET /`
+- `GET /holiday-preferences`
+- `POST /holiday-preferences`
+- `GET /holiday-preferences/options`
+- `GET /preferences/options`
+- `GET /{important_date_id}/preferences`
+- `POST /{important_date_id}/preferences`
+- `DELETE /preferences/{preference_id}`
+- `DELETE /holiday-preferences/{preference_id}`
+- `GET /{important_date_id}`
+- `POST /`
+- `PUT /{important_date_id}`
+- `DELETE /{important_date_id}`
 
-### Цвета горшков
-- `white`, `black`, `terracotta`, `green`, `blue`, `multicolor`
+### Plant Care Dates `/api/plant-care-dates`
+- `GET /`
+- `GET /{care_date_id}`
+- `POST /`
+- `PUT /{care_date_id}`
+- `DELETE /{care_date_id}`
 
-### Размеры горшков
-- `S`, `M`, `L`, `XL`
+### User Plants `/api/user-plants`
+- `GET /`
+- `GET /limits`
+- `GET /{plant_id}`
+- `POST /`
+- `PUT /{plant_id}`
+- `DELETE /{plant_id}`
+- `POST /{plant_id}/care`
+- `POST /{plant_id}/photo`
+- `GET /care/types`
 
-### Материалы горшков
-- `ceramic`, `plastic`, `clay`, `glass`, `metal`, `wood`
+### Company Calendar `/api/company-calendar-events`
+- `GET /organizations`
+- `GET /`
+- `POST /`
+- `PUT /{event_id}`
+- `DELETE /{event_id}`
+- `GET /preferences/options`
+- `GET /{event_id}/preferences`
+- `POST /{event_id}/preferences`
+- `DELETE /preferences/{preference_id}`
 
-### Методы оплаты
-- `cash`, `card`
-
----
-
-## Обязательные переменные окружения
-
-```dotenv
-SECRET_KEY=...          # 64 символа
-DATABASE_URL=...        # Путь к БД
-BOT_TOKEN=...          # Token Telegram бота
-YOOKASSA_SHOP_ID=...   # ID магазина Yookassa
-YOOKASSA_API_KEY=...   # API ключ Yookassa
-```
-
----
-
-## Примеры использования
-
-### Вход в систему
-```bash
-1. POST /api/auth/verify {code: "1234"}
-2. Получить session_token из ответа
-3. Использовать в заголовке Authorization
-```
-
-### Добавить товар и оплатить
-```bash
-1. POST /api/cart/items {plant_id: 1, quantity: 2, ...}
-2. GET /api/cart/items (проверить)
-3. POST /api/payments/create {items: [...], amount: 3000, ...}
-4. Перенаправить на payment_url
-5. Yookassa отправит callback (платеж готов)
-```
-
-### Как администратор
-```bash
-1. Получить session_token (должен быть ID=4 или в ADMIN_IDS)
-2. POST /api/plants/ {name: "...", base_price: 1500, ...}
-3. POST /api/plants/<id>/image (форма с файлом)
-4. PATCH /api/plants/<id>/stock {stock_quantity: 10}
-5. POST /api/employees/assign {user_id: 1, position_id: 1}
-```
-
----
-
-**Полная документация:** [API_DOCUMENTATION.md](API_DOCUMENTATION.md)
+### Corporate Subscription `/api/corporate-subscription`
+- `GET /company`
+- `POST /company`
+- `GET /company/members`
+- `POST /company/members`
+- `DELETE /company/members/{member_user_id}`

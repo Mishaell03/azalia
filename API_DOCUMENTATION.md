@@ -1,1212 +1,317 @@
-# API Документация - Цветочный магазин "Азалия"
+# API Documentation - Azalia Backend
 
-## Базовая информация
+## 1) Общая информация
 
-**Base URL:** `http://localhost:5000/api`
+- Приложение: `FastAPI`
+- Base URL (локально): `http://localhost:5000`
+- API Prefix: `/api`
+- Swagger UI: `/docs`
+- ReDoc: `/redoc`
+- OpenAPI JSON: `/openapi.json`
 
-**Аутентификация:** Большинство эндпоинтов требуют `session_token` в заголовке `Authorization` или в теле запроса.
+## 2) Аутентификация и доступ
 
----
+### Session token
 
-## 📱 Аутентификация (Auth)
+Для защищенных методов передавайте **сырое значение session_token** в заголовке:
 
-### 1. POST `/auth/verify`
-**Проверка кода авторизации и получение session_token**
+```http
+Authorization: <session_token>
+```
 
-#### Параметры запроса (JSON):
+Важно:
+- формат `Bearer <token>` не поддерживается;
+- токен проверяется по активной сессии и сроку действия;
+- у заблокированных/удаленных пользователей доступ к защищенным методам закрывается.
+
+### Уровни доступа
+
+- `Public` - без токена
+- `User` - любой авторизованный пользователь
+- `Admin` - только администратор
+- `Employee/Admin` - сотрудник или администратор (в зависимости от endpoint)
+
+## 3) Формат ответов
+
+В проекте нет одного обязательного envelope для всех ручек, но чаще всего используются:
+
 ```json
-{
-  "code": "4321",
-  "device_id": "abc123def456"
-}
+{"success": true, "data": {...}}
 ```
 
-#### Успешный ответ (200):
+или
+
 ```json
-{
-  "success": true,
-  "user": {
-    "id": 1,
-    "telegram_id": 123456789,
-    "name": "Иван Петров",
-    "phone": "+7 999 999 99 99",
-    "session_token": "93719ff544e283126f31c8ec97d56de2a7b3c1af767a30b06b7261803782349b",
-    "avatar": "base64_encoded_image_or_null"
-  },
-  "role": "customer",
-  "message": "Authentication successful"
-}
+{"success": false, "detail": "..."}
 ```
 
-#### Ошибки:
-- 400: Неверный код или формат
-- 401: Код истек или уже использован
+Типовые коды:
+- `200 OK`
+- `201 Created`
+- `400 Bad Request`
+- `401 Unauthorized`
+- `403 Forbidden`
+- `404 Not Found`
+- `413 Payload Too Large`
+- `500 Internal Server Error`
 
----
+## 4) Изображения и WebP
 
-### 2. GET `/auth/check_status/<code>`
-**Проверка статуса кода авторизации**
+### Что изменено на бэке
 
-#### Параметры пути:
-- `code` (string): 4-значный код
+- Загрузка изображений (`avatar`, `plant image`, `user plant photo`) теперь сохраняет файлы в `webp`.
+- Endpoint `GET /img/{file_path:path}` теперь отдает изображения клиенту в формате `image/webp` (включая старые `png/jpg` через серверную конвертацию).
 
-#### Успешный ответ (200):
-```json
-{
-  "code": "4321",
-  "expires_at": "2026-01-26T15:30:00",
-  "used": false,
-  "user_linked": false,
-  "is_valid": true,
-  "user_info": {
-    "name": "Иван Петров",
-    "telegram_id": 123456789
-  }
-}
+Это сделано без изменений фронтенда.
+
+### Статический endpoint
+
+- `GET /img/{file_path:path}` - отдать файл из каталога `img`.
+- Если файл не найден, возвращается дефолтное изображение.
+
+## 5) Полный список endpoint'ов
+
+Ниже перечислены все актуальные ручки из `back/app/routes/*`.
+
+## 5.1 Auth (`/api/auth`)
+
+| Method | Path | Access | Назначение |
+|---|---|---|---|
+| POST | `/api/auth/validate_token` | Public | Validate session token |
+| POST | `/api/auth/verify` | Public | Verify auth code |
+| GET | `/api/auth/check_status/{code}` | Public | Check auth code status |
+| GET, POST | `/api/auth/me` | User | Current user profile |
+| POST | `/api/auth/update_profile` | User | Update name/phone |
+| POST | `/api/auth/avatar` | User | Upload avatar (multipart) |
+| GET | `/api/auth/avatar` | User | Get current avatar |
+| GET | `/api/auth/subscription-plans` | User | Subscription plans |
+| POST | `/api/auth/subscription-plans/checkout` | User | Create subscription checkout |
+| GET | `/api/auth/subscription-plans/checkout/{checkout_id}/status` | User | Checkout status |
+| GET | `/api/auth/subscription-payment-return` | Public | Return URL after payment |
+| POST | `/api/auth/subscription-plans/callback` | Public | Subscription payment callback |
+| POST | `/api/auth/subscription-plans/{plan_id}/cancel` | User | Cancel active subscription |
+
+## 5.2 Plants (`/api/plants`)
+
+| Method | Path | Access | Назначение |
+|---|---|---|---|
+| GET | `/api/plants/` | Public | List plants |
+| GET | `/api/plants/categories` | Public | Plant categories |
+| GET | `/api/plants/filters` | Public | Filter dictionaries |
+| GET | `/api/plants/{plant_id}` | Public | Plant details |
+| POST | `/api/plants/` | Admin | Create plant |
+| POST | `/api/plants/admin/create` | Admin | Admin create plant |
+| PUT | `/api/plants/{plant_id}` | Admin | Update plant |
+| DELETE | `/api/plants/{plant_id}` | Admin | Archive plant |
+| POST | `/api/plants/{plant_id}/image` | Admin | Upload preview image |
+| POST | `/api/plants/{plant_id}/images` | Admin | Upload detail image |
+| GET | `/api/plants/{plant_id}/images` | Admin | List plant images |
+| DELETE | `/api/plants/{plant_id}/images/{image_id}` | Admin | Delete one image |
+| DELETE | `/api/plants/{plant_id}/image` | Admin | Delete preview endpoint-stub |
+
+## 5.3 Categories (`/api/categories`)
+
+| Method | Path | Access | Назначение |
+|---|---|---|---|
+| GET | `/api/categories/` | Public | List categories |
+| GET | `/api/categories/stats` | Admin | Categories statistics |
+| GET | `/api/categories/{category_id}` | Public | Category details |
+| POST | `/api/categories/` | Admin | Create category |
+| POST | `/api/categories/admin/create` | Admin | Admin create category |
+| PUT | `/api/categories/{category_id}` | Admin | Update category |
+| DELETE | `/api/categories/{category_id}` | Admin | Delete category |
+| GET | `/api/categories/admin/{category_id}/deletion-check` | Admin | Deletion validation |
+| DELETE | `/api/categories/admin/{category_id}/delete` | Admin | Force admin delete |
+| GET | `/api/categories/{category_id}/plants` | Public | Plants by category |
+
+## 5.4 Cart & Wishlist (`/api/cart`)
+
+| Method | Path | Access | Назначение |
+|---|---|---|---|
+| GET | `/api/cart/items` | User | Get cart items |
+| POST | `/api/cart/items` | User | Add item to cart |
+| PUT | `/api/cart/items/{item_id}` | User | Update cart item |
+| DELETE | `/api/cart/items/{item_id}` | User | Delete cart item |
+| DELETE | `/api/cart/clear` | User | Clear cart |
+| GET | `/api/cart/wishlist` | User | Get wishlist |
+| POST | `/api/cart/wishlist` | User | Add to wishlist |
+| DELETE | `/api/cart/wishlist/{plant_id}` | User | Remove from wishlist |
+| GET | `/api/cart/wishlist/check/{plant_id}` | User | Check in wishlist |
+| GET | `/api/cart/pot/price` | User | Calculate pot price |
+
+## 5.5 Pot Dictionaries (`/api/pot`)
+
+| Method | Path | Access | Назначение |
+|---|---|---|---|
+| GET | `/api/pot/sizes` | Public | Pot sizes |
+| GET | `/api/pot/materials` | Public | Pot materials |
+| GET | `/api/pot/colors` | Public | Pot colors |
+| GET | `/api/pot/variants` | Public | Pot variants |
+| GET | `/api/pot/options` | Public | Options availability |
+| GET | `/api/pot/prices` | Public | Pot prices |
+| GET | `/api/pot/price` | Public | Single pot price |
+
+## 5.6 Payments (`/api/payments`)
+
+| Method | Path | Access | Назначение |
+|---|---|---|---|
+| GET | `/api/payments/stores` | User | Active stores for delivery/pickup |
+| POST | `/api/payments/availability` | User | Check order availability |
+| POST | `/api/payments/generate-link` | User | Generate payment link |
+| GET | `/api/payments/return/{link_id}` | Public | YooKassa return page |
+| GET | `/api/payments/link/{link_id}` | User | Payment link details |
+| POST | `/api/payments/link/{link_id}/cancel` | User | Cancel payment link |
+| POST | `/api/payments/callback` | Public | YooKassa callback |
+| GET | `/api/payments/status/{payment_id}` | User | Payment status |
+| GET | `/api/payments/status/link/{link_id}` | User | Payment link status |
+| GET | `/api/payments/orders` | User | User order list |
+| GET | `/api/payments/orders/{order_id}` | User | User order details |
+| POST | `/api/payments/orders/{order_id}/cancel` | User | Cancel user order |
+| PUT | `/api/payments/orders/{order_id}/address` | User | Update order address |
+| GET | `/api/payments/admin/orders` | Admin | Admin order list |
+| GET | `/api/payments/admin/orders/{order_id}` | Admin | Admin order details |
+| POST | `/api/payments/admin/orders/{order_id}/accept` | Admin | Accept order |
+| PATCH | `/api/payments/admin/orders/{order_id}/status` | Admin | Update order status |
+| POST | `/api/payments/admin/orders/{order_id}/close` | Admin | Close order |
+| POST | `/api/payments/admin/orders/{order_id}/mark-paid` | Admin | Mark paid |
+| POST | `/api/payments/admin/orders/{order_id}/refund` | Admin | Refund payment |
+| GET | `/api/payments/status/order/{order_id}` | User | Order payment status |
+
+## 5.7 Employees & Procurement (`/api`)
+
+| Method | Path | Access | Назначение |
+|---|---|---|---|
+| GET | `/api/users/{user_id}` | Admin | User details |
+| GET | `/api/admins/{user_id}` | Admin | Admin details |
+| PATCH | `/api/users/{user_id}` | Admin | Update user |
+| PATCH | `/api/admins/{user_id}` | Admin | Update admin |
+| GET | `/api/users` | Admin | User list |
+| GET | `/api/admin/companies` | Admin | Companies with members |
+| GET | `/api/debug/whoami` | User | Debug current user |
+| GET | `/api/employees` | Admin | Employee list |
+| GET | `/api/employees/{employee_id}` | Admin | Employee details |
+| GET | `/api/warehouse/products` | Employee/Admin | Warehouse products |
+| PATCH | `/api/warehouse/products/{product_id}/adjust` | Employee/Admin | Adjust stock |
+| GET | `/api/procurement/stores` | Employee/Admin | Stores for procurement |
+| GET | `/api/procurement/missing-products` | Employee/Admin | Missing products |
+| GET | `/api/procurement/catalog-products` | Employee/Admin | Catalog for procurement |
+| GET | `/api/procurement/cart` | Employee/Admin | Procurement cart |
+| POST | `/api/procurement/cart/items` | Employee/Admin | Add/update cart item |
+| DELETE | `/api/procurement/cart/items/{cart_item_id}` | Employee/Admin | Remove cart item |
+| POST | `/api/procurement/cart/checkout` | Employee/Admin | Checkout procurement cart |
+| GET | `/api/procurement/history` | Employee/Admin | Procurement history |
+| GET | `/api/procurement/receipts` | Employee/Admin | Supplies for unloading |
+| POST | `/api/procurement/receipts` | Employee/Admin | Accept unloading |
+| GET | `/api/admin/analytics` | Admin | Sales analytics |
+| GET | `/api/admin/subscription-plans` | Admin | Subscription plans (admin) |
+| POST | `/api/employees/assign` | Admin | Assign employee |
+| POST | `/api/employees/deactivate` | Admin | Deactivate/update employee |
+
+## 5.8 Notifications (`/api/notifications`)
+
+| Method | Path | Access | Назначение |
+|---|---|---|---|
+| GET | `/api/notifications/items` | User | User notifications |
+
+## 5.9 Important Dates (`/api/important-dates`)
+
+| Method | Path | Access | Назначение |
+|---|---|---|---|
+| GET | `/api/important-dates` | User | List dates |
+| GET | `/api/important-dates/holiday-preferences` | User | List holiday prefs |
+| POST | `/api/important-dates/holiday-preferences` | User | Add holiday pref |
+| GET | `/api/important-dates/holiday-preferences/options` | User | Holiday pref options |
+| GET | `/api/important-dates/preferences/options` | User | Date pref options |
+| GET | `/api/important-dates/{important_date_id}/preferences` | User | Date prefs list |
+| POST | `/api/important-dates/{important_date_id}/preferences` | User | Add date pref |
+| DELETE | `/api/important-dates/preferences/{preference_id}` | User | Delete date pref |
+| DELETE | `/api/important-dates/holiday-preferences/{preference_id}` | User | Delete holiday pref |
+| GET | `/api/important-dates/{important_date_id}` | User | Date details |
+| POST | `/api/important-dates` | User | Create date |
+| PUT | `/api/important-dates/{important_date_id}` | User | Update date |
+| DELETE | `/api/important-dates/{important_date_id}` | User | Delete date |
+
+## 5.10 Plant Care Dates (`/api/plant-care-dates`)
+
+| Method | Path | Access | Назначение |
+|---|---|---|---|
+| GET | `/api/plant-care-dates` | User | List care dates |
+| GET | `/api/plant-care-dates/{care_date_id}` | User | Care date details |
+| POST | `/api/plant-care-dates` | User | Create care date |
+| PUT | `/api/plant-care-dates/{care_date_id}` | User | Update care date |
+| DELETE | `/api/plant-care-dates/{care_date_id}` | User | Delete care date |
+
+## 5.11 User Plants (`/api/user-plants`)
+
+| Method | Path | Access | Назначение |
+|---|---|---|---|
+| GET | `/api/user-plants` | User | My plants list |
+| GET | `/api/user-plants/limits` | User | Plan limits |
+| GET | `/api/user-plants/{plant_id}` | User | Plant details |
+| POST | `/api/user-plants` | User | Create user plant |
+| PUT | `/api/user-plants/{plant_id}` | User | Update user plant |
+| DELETE | `/api/user-plants/{plant_id}` | User | Delete user plant |
+| POST | `/api/user-plants/{plant_id}/care` | User | Mark care action |
+| POST | `/api/user-plants/{plant_id}/photo` | User | Upload plant photo |
+| GET | `/api/user-plants/care/types` | User | Care type dictionary |
+
+## 5.12 Company Calendar (`/api/company-calendar-events`)
+
+| Method | Path | Access | Назначение |
+|---|---|---|---|
+| GET | `/api/company-calendar-events/organizations` | User | My organizations |
+| GET | `/api/company-calendar-events` | User | Event list |
+| POST | `/api/company-calendar-events` | User | Create event |
+| PUT | `/api/company-calendar-events/{event_id}` | User | Update event |
+| DELETE | `/api/company-calendar-events/{event_id}` | User | Delete event |
+| GET | `/api/company-calendar-events/preferences/options` | User | Preference options |
+| GET | `/api/company-calendar-events/{event_id}/preferences` | User | Event preferences |
+| POST | `/api/company-calendar-events/{event_id}/preferences` | User | Add event preference |
+| DELETE | `/api/company-calendar-events/preferences/{preference_id}` | User | Delete event preference |
+
+## 5.13 Corporate Subscription (`/api/corporate-subscription`)
+
+| Method | Path | Access | Назначение |
+|---|---|---|---|
+| GET | `/api/corporate-subscription/company` | User | Current company |
+| POST | `/api/corporate-subscription/company` | User | Create company |
+| GET | `/api/corporate-subscription/company/members` | User | Company members |
+| POST | `/api/corporate-subscription/company/members` | User | Add member |
+| DELETE | `/api/corporate-subscription/company/members/{member_user_id}` | User | Remove member |
+
+## 5.14 Service endpoints
+
+| Method | Path | Access | Назначение |
+|---|---|---|---|
+| GET | `/` | Public | Health check |
+| GET | `/img/{file_path:path}` | Public | Static image отдача (в `webp`) |
+
+## 6) Загрузка файлов (multipart)
+
+Используются endpoint'ы:
+- `POST /api/auth/avatar` (field: `avatar`)
+- `POST /api/plants/{plant_id}/image` (field: `image`)
+- `POST /api/plants/{plant_id}/images` (field: `image`)
+- `POST /api/user-plants/{plant_id}/photo` (field: `file`)
+
+Поддерживаемые входные расширения:
+- `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`
+
+После загрузки сервер сохраняет результат в `.webp`.
+
+## 7) Пример запроса
+
+```bash
+curl -X GET 'http://localhost:5000/api/plants/'
 ```
 
----
-
-### 3. GET/POST `/auth/me`
-**Получить информацию о текущем пользователе**
-
-#### Заголовки:
-- `Authorization: session_token`
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "user": {
-    "id": 1,
-    "telegram_id": 123456789,
-    "name": "Иван Петров",
-    "phone": "+7 999 999 99 99",
-    "avatar": "base64_encoded_image_or_null"
-  },
-  "role": "customer"
-}
+```bash
+curl -X POST 'http://localhost:5000/api/auth/me' \
+  -H 'Authorization: <session_token>'
 ```
 
-#### Ошибки:
-- 401: Сессия истекла или невалидна
-
----
-
-### 4. POST `/auth/update_profile`
-**Обновить профиль пользователя**
-
-#### Заголовки:
-- `Authorization: session_token`
-
-#### Параметры запроса (JSON):
-```json
-{
-  "name": "Новое имя",
-  "phone": "+7 999 888 77 66"
-}
+```bash
+curl -X POST 'http://localhost:5000/api/auth/avatar' \
+  -H 'Authorization: <session_token>' \
+  -F 'avatar=@/path/to/avatar.png'
 ```
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "user": {
-    "id": 1,
-    "name": "Новое имя",
-    "phone": "+7 999 888 77 66"
-  }
-}
-```
-
----
-
-### 5. POST `/auth/avatar`
-**Загрузить или изменить аватарку пользователя**
-
-#### Заголовки:
-- `Authorization: session_token`
-- `Content-Type: multipart/form-data`
-
-#### Параметры (form-data):
-- `avatar` (file): Изображение (PNG, JPG, GIF, WebP, max 5MB)
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "message": "Avatar uploaded successfully"
-}
-```
-
-#### Ошибки:
-- 400: Неверный формат файла или размер
-- 401: Требуется аутентификация
-
----
-
-### 6. GET `/auth/avatar`
-**Получить аватарку пользователя**
-
-#### Заголовки:
-- `Authorization: session_token`
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "avatar": "base64_encoded_image"
-}
-```
-
----
-
-## 🛍️ Корзина и Избранное (Cart)
-
-### 1. GET `/cart/items`
-**Получить все товары в корзине**
-
-#### Заголовки:
-- `Authorization: session_token`
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "data": {
-    "items": [
-      {
-        "id": 1,
-        "plant_id": 1,
-        "quantity": 2,
-        "plant_unit_price": 1500.00,
-        "pot_color": "white",
-        "pot_size": "M",
-        "pot_material": "ceramic",
-        "pot_unit_price": 500.00,
-        "total_price": 4000.00
-      }
-    ],
-    "summary": {
-      "total_items": 2,
-      "total_price": 4000.00,
-      "items_count": 1
-    }
-  }
-}
-```
-
----
-
-### 2. POST `/cart/items`
-**Добавить товар в корзину**
-
-#### Заголовки:
-- `Authorization: session_token`
-
-#### Параметры запроса (JSON):
-```json
-{
-  "plant_id": 1,
-  "quantity": 2,
-  "pot_color": "white",
-  "pot_size": "M",
-  "pot_material": "ceramic"
-}
-```
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "data": {
-    "id": 1,
-    "plant_id": 1,
-    "quantity": 2,
-    "total_price": 4000.00
-  }
-}
-```
-
-#### Ошибки:
-- 400: Товар не найден или недостаточно в наличии
-- 401: Требуется аутентификация
-
----
-
-### 3. PUT `/cart/items/<item_id>`
-**Обновить количество товара в корзине**
-
-#### Заголовки:
-- `Authorization: session_token`
-
-#### Параметры пути:
-- `item_id` (int): ID товара в корзине
-
-#### Параметры запроса (JSON):
-```json
-{
-  "quantity": 3
-}
-```
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "message": "Корзина обновлена",
-  "data": {
-    "id": 1,
-    "quantity": 3,
-    "total_price": 6000.00
-  }
-}
-```
-
----
-
-### 4. DELETE `/cart/items/<item_id>`
-**Удалить товар из корзины**
-
-#### Заголовки:
-- `Authorization: session_token`
-
-#### Параметры пути:
-- `item_id` (int): ID товара в корзине
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "message": "Товар удален из корзины"
-}
-```
-
----
-
-### 5. DELETE `/cart/clear`
-**Очистить всю корзину**
-
-#### Заголовки:
-- `Authorization: session_token`
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "message": "Корзина очищена"
-}
-```
-
----
-
-### 6. GET `/cart/wishlist`
-**Получить избранные товары**
-
-#### Заголовки:
-- `Authorization: session_token`
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": 1,
-      "plant_id": 1,
-      "plant_name": "Фикус",
-      "plant_image": "image_url"
-    }
-  ]
-}
-```
-
----
-
-### 7. POST `/cart/wishlist`
-**Добавить товар в избранное**
-
-#### Заголовки:
-- `Authorization: session_token`
-
-#### Параметры запроса (JSON):
-```json
-{
-  "plant_id": 1
-}
-```
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "message": "Товар добавлен в избранное"
-}
-```
-
----
-
-### 8. DELETE `/cart/wishlist/<plant_id>`
-**Удалить товар из избранного**
-
-#### Заголовки:
-- `Authorization: session_token`
-
-#### Параметры пути:
-- `plant_id` (int): ID растения
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "message": "Товар удален из избранного"
-}
-```
-
----
-
-### 9. GET `/cart/wishlist/check/<plant_id>`
-**Проверить, есть ли товар в избранном**
-
-#### Заголовки:
-- `Authorization: session_token`
-
-#### Параметры пути:
-- `plant_id` (int): ID растения
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "in_wishlist": true
-}
-```
-
----
-
-### 10. GET `/cart/pot/price`
-**Получить цену горшка**
-
-#### Query параметры:
-- `material_id` (int): ID материала горшка
-- `size_id` (int): ID размера горшка
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "price": 500.00
-}
-```
-
----
-
-## 🌿 Растения (Plants)
-
-### 1. GET `/plants/`
-**Получить список растений с фильтрами**
-
-#### Query параметры:
-- `category_id` (int, опционально): Фильтр по категории
-- `in_stock` (bool, опционально): Только в наличии (true/false)
-- `plant_type` (string, опционально): Тип растения
-- `search` (string, опционально): Поиск по названию или описанию
-- `min_price` (float, опционально): Минимальная цена
-- `max_price` (float, опционально): Максимальная цена
-- `min_rating` (float, опционально): Минимальный рейтинг (0-5)
-- `max_rating` (float, опционально): Максимальный рейтинг (0-5)
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": 1,
-      "name": "Фикус",
-      "description": "Красивое растение",
-      "base_price": 1500.00,
-      "category_id": 1,
-      "plant_type": "Декоративное",
-      "height_cm": 50,
-      "in_stock": true,
-      "stock_quantity": 10,
-      "rating": 4.5,
-      "image_url": "image_url"
-    }
-  ],
-  "count": 1
-}
-```
-
----
-
-### 2. GET `/plants/<plant_id>`
-**Получить информацию о конкретном растении**
-
-#### Параметры пути:
-- `plant_id` (int): ID растения
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "data": {
-    "id": 1,
-    "name": "Фикус",
-    "description": "Красивое растение",
-    "base_price": 1500.00,
-    "category": {
-      "id": 1,
-      "name": "Декоративные"
-    },
-    "supplier": {
-      "id": 1,
-      "name": "Поставщик 1"
-    },
-    "height_cm": 50,
-    "care_instructions": "Поливать 2 раза в неделю",
-    "light_requirements": "partial_shade",
-    "watering_frequency": "2 times a week",
-    "in_stock": true,
-    "stock_quantity": 10,
-    "rating": 4.5,
-    "image_url": "image_url"
-  }
-}
-```
-
----
-
-### 3. POST `/plants/`
-**Создать новое растение (только администратор)**
-
-#### Заголовки:
-- `Authorization: session_token` (Admin)
-
-#### Параметры запроса (JSON):
-```json
-{
-  "name": "Новое растение",
-  "description": "Описание",
-  "base_price": 2000.00,
-  "category_id": 1,
-  "plant_type": 1,
-  "height_cm": 60,
-  "care_instructions": "Инструкции",
-  "light_requirements": "partial_shade",
-  "watering_frequency": "2 times a week",
-  "supplier_id": 1,
-  "stock_quantity": 5
-}
-```
-
-#### Успешный ответ (201):
-```json
-{
-  "success": true,
-  "data": {
-    "id": 2,
-    "name": "Новое растение"
-  }
-}
-```
-
----
-
-### 4. PUT `/plants/<plant_id>`
-**Обновить информацию о растении (только администратор)**
-
-#### Заголовки:
-- `Authorization: session_token` (Admin)
-
-#### Параметры пути:
-- `plant_id` (int): ID растения
-
-#### Параметры запроса (JSON):
-```json
-{
-  "name": "Обновленное название",
-  "base_price": 2500.00,
-  "stock_quantity": 20
-}
-```
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "data": {
-    "id": 1,
-    "name": "Обновленное название"
-  }
-}
-```
-
----
-
-### 5. DELETE `/plants/<plant_id>`
-**Удалить растение (только администратор)**
-
-#### Заголовки:
-- `Authorization: session_token` (Admin)
-
-#### Параметры пути:
-- `plant_id` (int): ID растения
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "message": "Plant deleted successfully"
-}
-```
-
----
-
-### 6. POST `/plants/<plant_id>/image`
-**Загрузить изображение растения (только администратор)**
-
-#### Заголовки:
-- `Authorization: session_token` (Admin)
-- `Content-Type: multipart/form-data`
-
-#### Параметры (form-data):
-- `image` (file): Изображение (PNG, JPG, GIF, WebP, max 16MB)
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "image_url": "image_filename.jpg"
-}
-```
-
----
-
-### 7. DELETE `/plants/<plant_id>/image`
-**Удалить изображение растения (только администратор)**
-
-#### Заголовки:
-- `Authorization: session_token` (Admin)
-
-#### Параметры пути:
-- `plant_id` (int): ID растения
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "message": "Image deleted successfully"
-}
-```
-
----
-
-### 8. PATCH `/plants/<plant_id>/stock`
-**Обновить наличие и количество товара (только администратор)**
-
-#### Заголовки:
-- `Authorization: session_token` (Admin)
-
-#### Параметры пути:
-- `plant_id` (int): ID растения
-
-#### Параметры запроса (JSON):
-```json
-{
-  "stock_quantity": 15,
-  "in_stock": true
-}
-```
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "data": {
-    "id": 1,
-    "stock_quantity": 15,
-    "in_stock": true
-  }
-}
-```
-
----
-
-### 9. GET `/plants/with-images`
-**Получить растения с изображениями**
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": 1,
-      "name": "Фикус",
-      "image_url": "image_url"
-    }
-  ]
-}
-```
-
----
-
-### 10. GET `/plants/top-rated`
-**Получить растения с высоким рейтингом**
-
-#### Query параметры:
-- `limit` (int, опционально): Количество растений (default: 10)
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": 1,
-      "name": "Фикус",
-      "rating": 4.8
-    }
-  ]
-}
-```
-
----
-
-## 📂 Категории (Categories)
-
-### 1. GET `/categories/`
-**Получить все категории**
-
-#### Query параметры:
-- `only_parents` (bool, опционально): Только корневые категории (true/false)
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": 1,
-      "name": "Декоративные",
-      "description": "Описание",
-      "parent_id": null,
-      "subcategories": [
-        {
-          "id": 2,
-          "name": "Фикусы"
-        }
-      ]
-    }
-  ],
-  "count": 1
-}
-```
-
----
-
-### 2. GET `/categories/<category_id>`
-**Получить информацию о категории**
-
-#### Параметры пути:
-- `category_id` (int): ID категории
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "data": {
-    "id": 1,
-    "name": "Декоративные",
-    "description": "Описание",
-    "parent_id": null,
-    "parent": null,
-    "subcategories": [],
-    "plants_count": 5
-  }
-}
-```
-
----
-
-### 3. POST `/categories/`
-**Создать новую категорию (только администратор)**
-
-#### Заголовки:
-- `Authorization: session_token` (Admin)
-
-#### Параметры запроса (JSON):
-```json
-{
-  "name": "Новая категория",
-  "description": "Описание",
-  "parent_id": null
-}
-```
-
-#### Успешный ответ (201):
-```json
-{
-  "success": true,
-  "data": {
-    "id": 3,
-    "name": "Новая категория"
-  }
-}
-```
-
----
-
-### 4. PUT `/categories/<category_id>`
-**Обновить категорию (только администратор)**
-
-#### Заголовки:
-- `Authorization: session_token` (Admin)
-
-#### Параметры пути:
-- `category_id` (int): ID категории
-
-#### Параметры запроса (JSON):
-```json
-{
-  "name": "Обновленная категория",
-  "description": "Новое описание"
-}
-```
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "data": {
-    "id": 1,
-    "name": "Обновленная категория"
-  }
-}
-```
-
----
-
-### 5. DELETE `/categories/<category_id>`
-**Удалить категорию (только администратор)**
-
-#### Заголовки:
-- `Authorization: session_token` (Admin)
-
-#### Параметры пути:
-- `category_id` (int): ID категории
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "message": "Category deleted successfully"
-}
-```
-
-#### Ошибки:
-- 400: Категория содержит товары или подкатегории
-
----
-
-### 6. GET `/categories/<category_id>/plants`
-**Получить растения в категории**
-
-#### Параметры пути:
-- `category_id` (int): ID категории
-
-#### Query параметры:
-- `in_stock` (bool, опционально): Только в наличии
-- `plant_type` (string, опционально): Тип растения
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "data": {
-    "category": {
-      "id": 1,
-      "name": "Декоративные"
-    },
-    "plants": [
-      {
-        "id": 1,
-        "name": "Фикус"
-      }
-    ],
-    "count": 1
-  }
-}
-```
-
----
-
-### 7. GET `/categories/stats`
-**Получить статистику по категориям (только администратор)**
-
-#### Заголовки:
-- `Authorization: session_token` (Admin)
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "category_id": 1,
-      "category_name": "Декоративные",
-      "plants_count": 5,
-      "total_stock": 50
-    }
-  ]
-}
-```
-
----
-
-## 👥 Сотрудники (Employees)
-
-### 1. GET `/users`
-**Получить список пользователей (исключая сотрудников, только администратор)**
-
-#### Заголовки:
-- `Authorization: session_token` (Admin)
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": 1,
-      "telegram_id": 123456789,
-      "name": "Иван Петров",
-      "phone": "+7 999 999 99 99"
-    }
-  ]
-}
-```
-
----
-
-### 2. GET `/debug/whoami`
-**Получить информацию о текущем пользователе (отладка)**
-
-#### Заголовки:
-- `Authorization: session_token`
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "user": {
-    "id": 1,
-    "telegram_id": 123456789,
-    "name": "Иван Петров"
-  },
-  "is_admin": true
-}
-```
-
----
-
-### 3. GET `/employees`
-**Получить список всех сотрудников (только администратор)**
-
-#### Заголовки:
-- `Authorization: session_token` (Admin)
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": 1,
-      "telegram_id": 123456789,
-      "position_id": 1,
-      "position_title": "Менеджер",
-      "salary": 50000.00,
-      "hire_date": "2025-01-01T00:00:00",
-      "is_active": true,
-      "user_info": {
-        "name": "Иван Петров",
-        "phone": "+7 999 999 99 99"
-      }
-    }
-  ]
-}
-```
-
----
-
-### 4. GET `/employees/<employee_id>`
-**Получить информацию о сотруднике (только администратор)**
-
-#### Заголовки:
-- `Authorization: session_token` (Admin)
-
-#### Параметры пути:
-- `employee_id` (int): ID сотрудника
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "data": {
-    "id": 1,
-    "telegram_id": 123456789,
-    "position_title": "Менеджер",
-    "salary": 50000.00,
-    "is_active": true,
-    "user_info": {
-      "name": "Иван Петров",
-      "phone": "+7 999 999 99 99"
-    }
-  }
-}
-```
-
----
-
-### 5. POST `/employees/assign`
-**Назначить пользователя сотрудником (только администратор)**
-
-#### Заголовки:
-- `Authorization: session_token` (Admin)
-
-#### Параметры запроса (JSON):
-```json
-{
-  "user_id": 1,
-  "telegram_id": 123456789,
-  "position_id": 1,
-  "salary": 50000.00
-}
-```
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "message": "Employee assigned successfully"
-}
-```
-
-#### Ошибки:
-- 400: Пользователь не найден, позиция не существует
-- 403: Требуется права администратора
-
----
-
-### 6. POST `/employees/deactivate`
-**Деактивировать сотрудника или обновить его данные (только администратор)**
-
-#### Заголовки:
-- `Authorization: session_token` (Admin)
-
-#### Параметры запроса (JSON):
-```json
-{
-  "user_id": 1,
-  "telegram_id": 123456789,
-  "is_active": false,
-  "position_id": 2,
-  "salary": 55000.00
-}
-```
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "message": "Employee updated successfully"
-}
-```
-
----
-
-## 💳 Платежи (Payments)
-
-### 1. POST `/payments/create`
-**Создать платежную ссылку через Yookassa**
-
-#### Заголовки:
-- `Authorization: session_token`
-- `Content-Type: application/json`
-
-#### Параметры запроса (JSON):
-```json
-{
-  "items": [
-    {
-      "plant_id": 1,
-      "quantity": 2,
-      "plant_price": 1500.00
-    },
-    {
-      "plant_id": 2,
-      "quantity": 1,
-      "plant_price": 2500.00
-    }
-  ],
-  "amount": 5500.00,
-  "delivery_address": "Москва, ул. Тверская, 1"
-}
-```
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "data": {
-    "payment_url": "https://yookassa.ru/payments/confirmation_url",
-    "payment_link_id": 42,
-    "order_id": 10,
-    "amount": 5500.00,
-    "expires_at": "2026-01-27T12:34:56"
-  }
-}
-```
-
-#### Ошибки:
-- 400: Товар не найден, недостаточно в наличии, неверная сумма, отсутствует адрес
-- 401: Требуется аутентификация
-- 500: Ошибка платежной системы
-
-#### Проверки безопасности:
-- ✓ Проверка сессии токена
-- ✓ Проверка наличия товаров в БД
-- ✓ Проверка доступности товаров (in_stock=true)
-- ✓ Проверка достаточного количества на складе
-- ✓ Проверка совпадения цены товара с БД
-- ✓ Проверка совпадения суммы
-- ✓ Обязательный адрес доставки
-
----
-
-### 2. GET `/payments/status/<payment_link_id>`
-**Получить статус платежа**
-
-#### Заголовки:
-- `Authorization: session_token`
-
-#### Параметры пути:
-- `payment_link_id` (int): ID ссылки платежа
-
-#### Успешный ответ (200):
-```json
-{
-  "success": true,
-  "data": {
-    "id": 42,
-    "user_id": 1,
-    "order_id": 10,
-    "amount": 5500.00,
-    "payment_url": "https://yookassa.ru/payments/confirmation_url",
-    "status": "pending",
-    "created_at": "2026-01-26T12:34:56",
-    "expires_at": "2026-01-27T12:34:56",
-    "payment_system_id": "2aae8a61-00fa-40e5-9c95-d8d7e5bd37c0",
-    "payment_confirmed_at": null
-  }
-}
-```
-
-#### Ошибки:
-- 401: Требуется аутентификация
-- 403: Доступ запрещен (чужой платеж)
-- 404: Платеж не найден
-
----
-
-### 3. POST `/payments/callback`
-**Webhook от Yookassa для уведомления об оплате (автоматический)**
-
-#### Параметры запроса (JSON от Yookassa):
-```json
-{
-  "event": "payment.succeeded",
-  "object": {
-    "id": "2aae8a61-00fa-40e5-9c95-d8d7e5bd37c0",
-    "status": "succeeded",
-    "amount": {
-      "value": "5500.00",
-      "currency": "RUB"
-    }
-  }
-}
-```
-
-#### Ответ (200):
-```json
-{
-  "success": true
-}
-```
-
-#### Автоматические действия:
-- Обновляет `payment_link.status = "completed"`
-- Обновляет `order.status = "processing"`
-- Обновляет `order.is_paid = true`
-
----
-
-## 🖼️ Статические файлы
-
-### GET `/api/img/<filename>`
-**Получить изображение растения**
-
-#### Параметры пути:
-- `filename` (string): Имя файла изображения
-
-#### Ответ:
-Возвращает изображение с соответствующим MIME типом (image/jpeg, image/png и т.д.)
-
-#### Пример:
-```
-GET /api/img/abc123def456_flower.jpg
-```
-
-
-## 📋 Типы ролей
-
-| Роль | Описание |
-|------|----------|
-| `customer` | Обычный пользователь/покупатель |
-| `employee` | Сотрудник магазина |
-| `admin` | Администратор (ID=4) |
-
----
-
-## 🔧 Конфигурация окружения (.env)
-
-```dotenv
-SECRET_KEY="your_secret_key"
-DATABASE_URL="sqlite:///flower_shop.db"
-DEBUG=True
-PORT=5000
-
-BOT_TOKEN="your_bot_token"
-API_BASE_URL="http://localhost:5000/api"
-
-YOOKASSA_SHOP_ID="your_shop_id"
-YOOKASSA_API_KEY="your_api_key"
-YOOKASSA_RETURN_URL="http://localhost:5000/api/payments/callback"
-```
-
----
-
-## 📝 Примечания
-
-1. **Аутентификация**: Используйте session_token, полученный из `/auth/verify`
-2. **Валидация**: Все входные данные валидируются на сервере
-3. **Логирование**: Все операции логируются для отладки
-4. **Транзакции**: Все операции БД используют транзакции для целостности данных
-5. **Безопасность**: Реализована защита от SQL injection, XSS и других уязвимостей
-6. **Изображения**: Все изображения сжимаются и оптимизируются на сервере
-7. **Платежи**: Поддерживается интеграция с Yookassa для безопасных платежей
-
----
