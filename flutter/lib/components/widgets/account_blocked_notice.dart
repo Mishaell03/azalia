@@ -26,7 +26,7 @@ class AccountBlockedNotice extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.not_interested, size: 40 , color: AppColors.brown),
+            Icon(Icons.not_interested, size: 40, color: AppColors.brown),
             const SizedBox(height: 10),
             Text(
               'Аккаунт удален или деактивирован',

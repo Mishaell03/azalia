@@ -72,8 +72,7 @@ class Plant {
       recommendedPotSize:
           json['recommended_pot_size_name']?.toString() ??
           json['recommended_pot_size']?.toString(),
-      recommendedPotSizeId:
-          (json['recommended_pot_size_id'] as num?)?.toInt(),
+      recommendedPotSizeId: (json['recommended_pot_size_id'] as num?)?.toInt(),
       rating: (json['rating'] as num?)?.toDouble(),
       imageUrl: imageUrl,
       productImages: productImages,
@@ -100,7 +99,10 @@ class Plant {
     return firstImage['image_url']?.toString();
   }
 
-  static List<String> _extractGallery(Map<String, dynamic> json, String? fallback) {
+  static List<String> _extractGallery(
+    Map<String, dynamic> json,
+    String? fallback,
+  ) {
     final images = json['images'];
     if (images is List) {
       final list = images

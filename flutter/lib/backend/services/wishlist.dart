@@ -40,9 +40,12 @@ class WishlistService {
       ApiConfig.wishlist,
       body: {
         'plant_id': plantId,
-        if (potSize != null && potSize.trim().isNotEmpty) 'pot_size': potSize.trim(),
-        if (potMaterial != null && potMaterial.trim().isNotEmpty) 'pot_material': potMaterial.trim(),
-        if (potColor != null && potColor.trim().isNotEmpty) 'pot_color': potColor.trim(),
+        if (potSize != null && potSize.trim().isNotEmpty)
+          'pot_size': potSize.trim(),
+        if (potMaterial != null && potMaterial.trim().isNotEmpty)
+          'pot_material': potMaterial.trim(),
+        if (potColor != null && potColor.trim().isNotEmpty)
+          'pot_color': potColor.trim(),
       },
     );
     if (response['success'] != true) {
@@ -55,9 +58,7 @@ class WishlistService {
 
   /// Удалить товар из избранного
   static Future<void> removeFromWishlist(int plantId) async {
-    final response = await _api.delete(
-      ApiConfig.wishlistRemove(plantId),
-    );
+    final response = await _api.delete(ApiConfig.wishlistRemove(plantId));
     if (response['success'] != true) {
       throw Exception(
         response['error'] ?? 'Не удалось удалить из списка желаний',
@@ -67,9 +68,7 @@ class WishlistService {
 
   /// Проверить, находится ли товар в избранном
   static Future<bool> checkWishlist(int plantId) async {
-    final response = await _api.get(
-      ApiConfig.wishlistCheck(plantId),
-    );
+    final response = await _api.get(ApiConfig.wishlistCheck(plantId));
 
     if (response['success'] != true) {
       throw Exception(
@@ -77,9 +76,7 @@ class WishlistService {
       );
     }
 
-    return WishlistCheckResponse
-        .fromJson(response['data'])
-        .inWishlist;
+    return WishlistCheckResponse.fromJson(response['data']).inWishlist;
   }
 
   static Future<Set<int>> getWishlistPlantIds() async {
@@ -223,7 +220,7 @@ class CartWishlistService {
       }
     } catch (e) {
       debugPrint('CartWishlistService: Ошибка избранного - $e');
-      if (e.toString().contains('не авторизован') || 
+      if (e.toString().contains('не авторизован') ||
           e.toString().contains('Unauthorized')) {
         invalidateCache();
         throw Exception('не авторизован');
@@ -270,7 +267,7 @@ class CartWishlistService {
       }
 
       // debugPrint('CartWishlistService: Добавление в корзину');
-      
+
       final request = AddToCartRequest(
         plantId: plant.id,
         potMaterial: potMaterial,
@@ -284,7 +281,7 @@ class CartWishlistService {
       // debugPrint('CartWishlistService: Успешно добавлено в корзину');
     } catch (e) {
       debugPrint('CartWishlistService: Ошибка добавления в корзину - $e');
-      if (e.toString().contains('не авторизован') || 
+      if (e.toString().contains('не авторизован') ||
           e.toString().contains('Unauthorized')) {
         invalidateCache();
         throw Exception('не авторизован');
@@ -351,12 +348,16 @@ class CartWishlistService {
         throw Exception('не авторизован');
       }
 
-      debugPrint('CartWishlistService: Удаление всех записей товара из корзины');
-      
+      debugPrint(
+        'CartWishlistService: Удаление всех записей товара из корзины',
+      );
+
       // Получаем корзину и находим все записи с таким plant_id
       final cart = await CartService.getCart();
-      final itemsToRemove = cart.items.where((item) => item.plantId == plant.id).toList();
-      
+      final itemsToRemove = cart.items
+          .where((item) => item.plantId == plant.id)
+          .toList();
+
       if (itemsToRemove.isEmpty) {
         debugPrint('CartWishlistService: Товар не найден в корзине');
         return;
@@ -368,17 +369,21 @@ class CartWishlistService {
           await CartService.removeFromCart(item.id);
           debugPrint('CartWishlistService: Удалена запись ${item.id}');
         } catch (e) {
-          debugPrint('CartWishlistService: Ошибка удаления записи ${item.id} - $e');
+          debugPrint(
+            'CartWishlistService: Ошибка удаления записи ${item.id} - $e',
+          );
           // Продолжаем удаление остальных записей даже если одна не удалилась
         }
       }
 
       _cartPlantIds?.remove(plant.id);
-      
+
       debugPrint('CartWishlistService: Все записи товара удалены из корзины');
     } catch (e) {
-      debugPrint('CartWishlistService: Ошибка удаления всех записей из корзины - $e');
-      if (e.toString().contains('не авторизован') || 
+      debugPrint(
+        'CartWishlistService: Ошибка удаления всех записей из корзины - $e',
+      );
+      if (e.toString().contains('не авторизован') ||
           e.toString().contains('Unauthorized')) {
         invalidateCache();
         throw Exception('не авторизован');

@@ -26,17 +26,14 @@ class ProfileService {
 
       final session = SessionService();
       final token = await session.getToken();
-      
+
       if (token == null || token.isEmpty) {
         throw ProfileException(message: 'Сессия недействительна');
       }
 
       final response = await _api.post(
         ApiConfig.updateProfile,
-        body: {
-          'name': name.trim(),
-          'phone': phone.trim(),
-        },
+        body: {'name': name.trim(), 'phone': phone.trim()},
       );
 
       if (response['success'] == true) {
@@ -78,7 +75,7 @@ class ProfileService {
     try {
       final session = SessionService();
       final token = await session.getToken();
-      
+
       if (token == null || token.isEmpty) {
         throw ProfileException(message: 'Сессия недействительна');
       }
@@ -118,7 +115,7 @@ class ProfileService {
     try {
       final session = SessionService();
       final token = await session.getToken();
-      
+
       if (token == null || token.isEmpty) {
         throw ProfileException(message: 'Сессия недействительна');
       }
@@ -127,7 +124,8 @@ class ProfileService {
 
       if (response['success'] == true) {
         debugPrint('ProfileService: Аватарка успешно получена');
-        return response['avatar'] as String? ?? response['avatar_url'] as String?;
+        return response['avatar'] as String? ??
+            response['avatar_url'] as String?;
       } else {
         debugPrint('ProfileService: Аватарка не найдена');
         return null;

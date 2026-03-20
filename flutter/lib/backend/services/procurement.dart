@@ -14,14 +14,18 @@ class ProcurementService {
   }
 
   Future<List<Map<String, dynamic>>> getMissingProducts(int storeId) async {
-    final response = await _api.get(ApiConfig.procurementMissingProducts(storeId));
+    final response = await _api.get(
+      ApiConfig.procurementMissingProducts(storeId),
+    );
     final data = response['data'] as Map<String, dynamic>? ?? const {};
     final items = data['items'] as List? ?? const [];
     return items.whereType<Map<String, dynamic>>().toList();
   }
 
   Future<List<Map<String, dynamic>>> getCatalogProducts(int storeId) async {
-    final response = await _api.get(ApiConfig.procurementCatalogProducts(storeId));
+    final response = await _api.get(
+      ApiConfig.procurementCatalogProducts(storeId),
+    );
     final data = response['data'] as Map<String, dynamic>? ?? const {};
     final items = data['items'] as List? ?? const [];
     return items.whereType<Map<String, dynamic>>().toList();
@@ -34,13 +38,23 @@ class ProcurementService {
     return items.whereType<Map<String, dynamic>>().toList();
   }
 
-  Future<Map<String, dynamic>> getHistory({int? storeId, int limit = 200}) async {
-    final response = await _api.get(ApiConfig.procurementHistory(storeId: storeId, limit: limit));
+  Future<Map<String, dynamic>> getHistory({
+    int? storeId,
+    int limit = 200,
+  }) async {
+    final response = await _api.get(
+      ApiConfig.procurementHistory(storeId: storeId, limit: limit),
+    );
     return response['data'] as Map<String, dynamic>? ?? const {};
   }
 
-  Future<Map<String, dynamic>> getReceipts({int? storeId, int limit = 200}) async {
-    final response = await _api.get(ApiConfig.procurementReceipts(storeId: storeId, limit: limit));
+  Future<Map<String, dynamic>> getReceipts({
+    int? storeId,
+    int limit = 200,
+  }) async {
+    final response = await _api.get(
+      ApiConfig.procurementReceipts(storeId: storeId, limit: limit),
+    );
     return response['data'] as Map<String, dynamic>? ?? const {};
   }
 
@@ -54,7 +68,8 @@ class ProcurementService {
       body: {
         'purchase_order_id': purchaseOrderId,
         'items': items,
-        if (comment != null && comment.trim().isNotEmpty) 'comment': comment.trim(),
+        if (comment != null && comment.trim().isNotEmpty)
+          'comment': comment.trim(),
       },
     );
     return response['data'] as Map<String, dynamic>? ?? const {};
@@ -89,7 +104,8 @@ class ProcurementService {
       body: {
         'store_id': storeId,
         'cart_item_ids': cartItemIds,
-        if (comment != null && comment.trim().isNotEmpty) 'comment': comment.trim(),
+        if (comment != null && comment.trim().isNotEmpty)
+          'comment': comment.trim(),
       },
     );
     return response['data'] as Map<String, dynamic>? ?? const {};

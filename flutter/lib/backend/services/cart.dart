@@ -15,9 +15,7 @@ class CartService {
     }
 
     final cart = CartResponse.fromJson(response['data']);
-    final hydratedItems = await Future.wait(
-      cart.items.map(_hydrateCartItem),
-    );
+    final hydratedItems = await Future.wait(cart.items.map(_hydrateCartItem));
 
     return CartResponse(items: hydratedItems, summary: cart.summary);
   }
@@ -163,14 +161,19 @@ class PotService {
     String? color,
   }) async {
     final params = <String, String>{
-      if (material != null && material.trim().isNotEmpty) 'material': material.trim(),
+      if (material != null && material.trim().isNotEmpty)
+        'material': material.trim(),
       if (size != null && size.trim().isNotEmpty) 'size': size.trim(),
       if (color != null && color.trim().isNotEmpty) 'color': color.trim(),
     };
-    final url = Uri.parse(ApiConfig.potOptions).replace(queryParameters: params).toString();
+    final url = Uri.parse(
+      ApiConfig.potOptions,
+    ).replace(queryParameters: params).toString();
     final response = await _api.get(url);
     if (response['success'] != true) {
-      throw Exception(response['error'] ?? 'Не удалось загрузить доступность опций');
+      throw Exception(
+        response['error'] ?? 'Не удалось загрузить доступность опций',
+      );
     }
     return response['data'] as Map<String, dynamic>? ?? const {};
   }

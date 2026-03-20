@@ -10,11 +10,11 @@ class SelectedItemsService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final jsonString = prefs.getString(_selectedItemsKey);
-      
+
       if (jsonString == null || jsonString.isEmpty) {
         return [];
       }
-      
+
       final List<dynamic> jsonList = jsonDecode(jsonString);
       return jsonList.cast<int>();
     } catch (e) {

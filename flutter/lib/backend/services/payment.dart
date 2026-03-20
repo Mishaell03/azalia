@@ -33,10 +33,7 @@ class PaymentService {
       body['store_id'] = storeId;
     }
 
-    final response = await _api.post(
-      ApiConfig.paymentGenerateLink,
-      body: body,
-    );
+    final response = await _api.post(ApiConfig.paymentGenerateLink, body: body);
 
     // Берём только data из ответа
     final data = response['data'] as Map<String, dynamic>?;
@@ -48,9 +45,7 @@ class PaymentService {
 
   /// получить ссылку на оплату
   Future<PaymentLink> getPaymentLink(int linkId) async {
-    final response = await _api.get(
-      ApiConfig.paymentLink(linkId),
-    );
+    final response = await _api.get(ApiConfig.paymentLink(linkId));
 
     final data = response['data'] as Map<String, dynamic>?;
     if (data == null) {
@@ -62,16 +57,12 @@ class PaymentService {
 
   /// отменить ссылку
   Future<void> cancelPaymentLink(int linkId) async {
-    await _api.post(
-      ApiConfig.paymentCancel(linkId),
-    );
+    await _api.post(ApiConfig.paymentCancel(linkId));
   }
 
   /// статус ссылки
   Future<PaymentLink> checkPaymentLinkStatus(int linkId) async {
-    final response = await _api.get(
-      ApiConfig.paymentLinkStatus(linkId),
-    );
+    final response = await _api.get(ApiConfig.paymentLinkStatus(linkId));
 
     final data = response['data'] as Map<String, dynamic>?;
     if (data == null) {
@@ -83,9 +74,7 @@ class PaymentService {
 
   /// проверить статус заказа
   Future<OrderStatusResponse> checkOrderStatus(int orderId) async {
-    final response = await _api.get(
-      ApiConfig.orderStatus(orderId),
-    );
+    final response = await _api.get(ApiConfig.orderStatus(orderId));
 
     final data = response['data'] as Map<String, dynamic>?;
     if (data == null) {
@@ -129,10 +118,7 @@ class PaymentService {
       body['store_id'] = storeId;
     }
 
-    final response = await _api.post(
-      ApiConfig.paymentAvailability,
-      body: body,
-    );
+    final response = await _api.post(ApiConfig.paymentAvailability, body: body);
     return response['data'] as Map<String, dynamic>? ?? const {};
   }
 }

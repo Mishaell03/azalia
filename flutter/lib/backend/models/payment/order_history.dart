@@ -1,19 +1,30 @@
+Map<String, dynamic> _asMap(dynamic value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) {
+    return value.map(
+      (key, val) => MapEntry(key.toString(), val),
+    );
+  }
+  return const {};
+}
+
+List<Map<String, dynamic>> _asMapList(dynamic value) {
+  if (value is! List) return const [];
+  return value.map(_asMap).where((item) => item.isNotEmpty).toList();
+}
+
 class OrderHistoryListResponse {
   final List<OrderHistorySummary> items;
   final OrderHistoryPagination pagination;
 
-  OrderHistoryListResponse({
-    required this.items,
-    required this.pagination,
-  });
+  OrderHistoryListResponse({required this.items, required this.pagination});
 
   factory OrderHistoryListResponse.fromJson(Map<String, dynamic> json) {
+    final items = _asMapList(json['items']);
     return OrderHistoryListResponse(
-      items: (json['items'] as List? ?? const [])
-          .map((item) => OrderHistorySummary.fromJson(item))
-          .toList(),
+      items: items.map(OrderHistorySummary.fromJson).toList(),
       pagination: OrderHistoryPagination.fromJson(
-        json['pagination'] as Map<String, dynamic>? ?? const {},
+        _asMap(json['pagination']),
       ),
     );
   }
@@ -87,8 +98,8 @@ class OrderHistorySummary {
       itemsCount: (json['items_count'] as num?)?.toInt() ?? 0,
       createdAt: json['created_at']?.toString() ?? '',
       updatedAt: json['updated_at']?.toString() ?? '',
-      payment: json['payment'] is Map<String, dynamic>
-          ? OrderHistoryPayment.fromJson(json['payment'])
+      payment: _asMap(json['payment']).isNotEmpty
+          ? OrderHistoryPayment.fromJson(_asMap(json['payment']))
           : null,
     );
   }
@@ -163,18 +174,14 @@ class OrderHistoryDetail {
       assignedEmployeeId: (json['assigned_employee_id'] as num?)?.toInt(),
       createdAt: json['created_at']?.toString() ?? '',
       updatedAt: json['updated_at']?.toString() ?? '',
-      items: (json['items'] as List? ?? const [])
-          .map((item) => OrderHistoryItem.fromJson(item))
-          .toList(),
-      payment: json['payment'] is Map<String, dynamic>
-          ? OrderHistoryPayment.fromJson(json['payment'])
+      items: _asMapList(json['items']).map(OrderHistoryItem.fromJson).toList(),
+      payment: _asMap(json['payment']).isNotEmpty
+          ? OrderHistoryPayment.fromJson(_asMap(json['payment']))
           : null,
-      refunds: (json['refunds'] as List? ?? const [])
-          .map((item) => OrderRefund.fromJson(item))
-          .toList(),
-      statusHistory: (json['status_history'] as List? ?? const [])
-          .map((item) => OrderStatusHistoryItem.fromJson(item))
-          .toList(),
+      refunds: _asMapList(json['refunds']).map(OrderRefund.fromJson).toList(),
+      statusHistory: _asMapList(
+        json['status_history'],
+      ).map(OrderStatusHistoryItem.fromJson).toList(),
     );
   }
 }
@@ -226,7 +233,7 @@ class OrderHistoryItem {
       discountAmount: (json['discount_amount'] as num?)?.toDouble() ?? 0,
       totalPrice: (json['total_price'] as num?)?.toDouble() ?? 0,
       imageUrl: json['image_url']?.toString(),
-      pot: OrderItemPot.fromJson(json['pot'] as Map<String, dynamic>? ?? const {}),
+      pot: OrderItemPot.fromJson(_asMap(json['pot'])),
       createdAt: json['created_at']?.toString() ?? '',
     );
   }
@@ -370,9 +377,7 @@ class OrderStatusHistoryItem {
       newStatus: json['new_status']?.toString() ?? '',
       newStatusCode: json['new_status_code']?.toString() ?? '',
       changedAt: json['changed_at']?.toString() ?? '',
-      changedBy: OrderStatusChangedBy.fromJson(
-        json['changed_by'] as Map<String, dynamic>? ?? const {},
-      ),
+      changedBy: OrderStatusChangedBy.fromJson(_asMap(json['changed_by'])),
     );
   }
 }
@@ -381,10 +386,7 @@ class OrderStatusChangedBy {
   final int? employeeId;
   final String? employeeName;
 
-  OrderStatusChangedBy({
-    required this.employeeId,
-    required this.employeeName,
-  });
+  OrderStatusChangedBy({required this.employeeId, required this.employeeName});
 
   factory OrderStatusChangedBy.fromJson(Map<String, dynamic> json) {
     return OrderStatusChangedBy(

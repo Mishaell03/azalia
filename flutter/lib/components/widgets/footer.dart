@@ -32,7 +32,6 @@ IconData _iconFromString(String name) {
   }
 }
 
-
 class AppFooter extends StatefulWidget {
   final List<FooterItems> items;
 

@@ -103,8 +103,10 @@ class AddToWishlistRequest {
     return {
       'plant_id': plantId,
       if (potSize != null && potSize!.trim().isNotEmpty) 'pot_size': potSize,
-      if (potMaterial != null && potMaterial!.trim().isNotEmpty) 'pot_material': potMaterial,
-      if (potColor != null && potColor!.trim().isNotEmpty) 'pot_color': potColor,
+      if (potMaterial != null && potMaterial!.trim().isNotEmpty)
+        'pot_material': potMaterial,
+      if (potColor != null && potColor!.trim().isNotEmpty)
+        'pot_color': potColor,
     };
   }
 }

@@ -3,26 +3,31 @@ class ApiConfig {
     'API_BASE_URL',
     defaultValue: 'http://127.0.0.1:5000/api',
   );
-  // static const String baseURL = 'https://www.nebinance.ru/api';
-  // static const String baseURL = 'http://127.0.0.1:5000/api';
+
   static const Duration timeout = Duration(seconds: 10);
   static final Uri _baseUri = Uri.parse(baseURL);
 
   // admin employees
   static const String whoAmI = '$baseURL/debug/whoami';
   static const String users = '$baseURL/users';
+
   static String updateUser(int id) => '$baseURL/users/$id';
   static const String employees = '$baseURL/employees';
   static const String adminCompanies = '$baseURL/admin/companies';
   static const String adminSubscriptionPlans =
       '$baseURL/admin/subscription-plans';
+
   static String adminSubscriptionPlanById(String planId) =>
       '$baseURL/admin/subscription-plans/$planId';
+
   static String employee(int id) => '$baseURL/employees/$id';
+
   static String updateAdmin(int userId) => '$baseURL/admins/$userId';
   static const String assignEmployee = '$baseURL/employees/assign';
+
   static String employeeDeactivate(int id) =>
       '$baseURL/employees/$id/deactivate';
+
   static String adminAnalytics({int? storeId, int days = 30, int top = 7}) {
     final params = <String, String>{
       'days': '$days',
@@ -35,15 +40,20 @@ class ApiConfig {
   }
 
   static const String warehouseProducts = '$baseURL/warehouse/products';
+
   static String warehouseAdjustProduct(int productId) =>
       '$baseURL/warehouse/products/$productId/adjust';
   static const String procurementStores = '$baseURL/procurement/stores';
+
   static String procurementMissingProducts(int storeId) =>
       '$baseURL/procurement/missing-products?store_id=$storeId';
+
   static String procurementCatalogProducts(int storeId) =>
       '$baseURL/procurement/catalog-products?store_id=$storeId';
+
   static String procurementCart(int storeId) =>
       '$baseURL/procurement/cart?store_id=$storeId';
+
   static String procurementHistory({int? storeId, int limit = 200}) {
     final params = <String, String>{
       'limit': '$limit',
@@ -65,6 +75,7 @@ class ApiConfig {
   }
 
   static const String procurementCartItems = '$baseURL/procurement/cart/items';
+
   static String procurementCartItemById(int cartItemId) =>
       '$baseURL/procurement/cart/items/$cartItemId';
   static const String procurementCheckout =
@@ -74,23 +85,34 @@ class ApiConfig {
 
   // payments
   static String get paymentGenerateLink => '$baseURL/payments/generate-link';
+
   static String paymentLink(int linkId) => '$baseURL/payments/link/$linkId';
+
   static String paymentCancel(int linkId) =>
       '$baseURL/payments/link/$linkId/cancel';
+
   static String paymentLinkStatus(int linkId) =>
       '$baseURL/payments/status/link/$linkId';
+
   static String orderStatus(int orderId) =>
       '$baseURL/payments/status/order/$orderId';
+
   static String get paymentStores => '$baseURL/payments/stores';
+
   static String get paymentAvailability => '$baseURL/payments/availability';
+
   static String orders({int limit = 20, int offset = 0}) =>
       '$baseURL/payments/orders?limit=$limit&offset=$offset';
+
   static String orderDetails(int orderId) =>
       '$baseURL/payments/orders/$orderId';
+
   static String orderCancel(int orderId) =>
       '$baseURL/payments/orders/$orderId/cancel';
+
   static String orderAddress(int orderId) =>
       '$baseURL/payments/orders/$orderId/address';
+
   static String adminOrders({
     int limit = 30,
     int offset = 0,
@@ -118,19 +140,25 @@ class ApiConfig {
 
   static String adminOrderDetails(int orderId) =>
       '$baseURL/payments/admin/orders/$orderId';
+
   static String adminOrderAccept(int orderId) =>
       '$baseURL/payments/admin/orders/$orderId/accept';
+
   static String adminOrderStatus(int orderId) =>
       '$baseURL/payments/admin/orders/$orderId/status';
+
   static String adminOrderClose(int orderId) =>
       '$baseURL/payments/admin/orders/$orderId/close';
+
   static String adminOrderMarkPaid(int orderId) =>
       '$baseURL/payments/admin/orders/$orderId/mark-paid';
+
   static String adminOrderRefund(int orderId) =>
       '$baseURL/payments/admin/orders/$orderId/refund';
 
   // auth
   static const String authVerify = '$baseURL/auth/verify';
+
   static String authCheckStatus(String code) =>
       '$baseURL/auth/check_status/$code';
   static const String authValidateToken = '$baseURL/auth/validate_token';
@@ -145,16 +173,21 @@ class ApiConfig {
       '$baseURL/important-dates/holiday-preferences/options';
   static const String importantDatePreferencesOptions =
       '$baseURL/important-dates/preferences/options';
+
   static String importantDatePreferences(int importantDateId) =>
       '$baseURL/important-dates/$importantDateId/preferences';
+
   static String importantDatePreferenceById(int preferenceId) =>
       '$baseURL/important-dates/preferences/$preferenceId';
   static const String plantCareDates = '$baseURL/plant-care-dates';
   static const String userPlants = '$baseURL/user-plants';
   static const String userPlantLimits = '$baseURL/user-plants/limits';
+
   static String userPlantById(int plantId) => '$baseURL/user-plants/$plantId';
+
   static String userPlantCare(int plantId) =>
       '$baseURL/user-plants/$plantId/care';
+
   static String userPlantPhoto(int plantId) =>
       '$baseURL/user-plants/$plantId/photo';
   static const String companyCalendarEvents =
@@ -163,14 +196,17 @@ class ApiConfig {
       '$baseURL/company-calendar-events/organizations';
   static const String companyCalendarPreferenceOptions =
       '$baseURL/company-calendar-events/preferences/options';
+
   static String companyCalendarPreferences(int eventId) =>
       '$baseURL/company-calendar-events/$eventId/preferences';
+
   static String companyCalendarPreferenceById(int preferenceId) =>
       '$baseURL/company-calendar-events/preferences/$preferenceId';
   static const String corporateCompany =
       '$baseURL/corporate-subscription/company';
   static const String corporateCompanyMembers =
       '$baseURL/corporate-subscription/company/members';
+
   static String corporateCompanyMemberByUser(int userId, {int? companyId}) {
     final base = '$baseURL/corporate-subscription/company/members/$userId';
     if (companyId == null) return base;
@@ -180,14 +216,18 @@ class ApiConfig {
   // plants
   static const String plants = '$baseURL/plants/';
   static const String plantsAdminCreate = '$baseURL/plants/admin/create';
+
   static String plantsId(int id) => '$baseURL/plants/$id';
   static const String categories = '$baseURL/plants/categories';
   static const String adminCategories = '$baseURL/categories';
+
   static String adminCategoryById(int id) => '$baseURL/categories/$id';
   static const String adminCategoriesCreate =
       '$baseURL/categories/admin/create';
+
   static String adminCategoryDeletionCheck(int id) =>
       '$baseURL/categories/admin/$id/deletion-check';
+
   static String adminCategoryDelete(int id) =>
       '$baseURL/categories/admin/$id/delete';
   static const String filters = '$baseURL/plants/filters';
@@ -195,11 +235,14 @@ class ApiConfig {
 
   // cart & wishlist
   static const String cartItems = '$baseURL/cart/items';
+
   static String cartItemId(int id) => '$baseURL/cart/items/$id';
   static const String cartClear = '$baseURL/cart/clear';
   static const String wishlist = '$baseURL/cart/wishlist';
+
   static String wishlistCheck(int plantId) =>
       '$baseURL/cart/wishlist/check/$plantId';
+
   static String wishlistRemove(int plantId) =>
       '$baseURL/cart/wishlist/$plantId';
 
@@ -229,6 +272,7 @@ class ApiConfig {
   static const String potOptions = '$baseURL/pot/options';
   static const String potVariants = '$baseURL/pot/variants';
   static const String potPrices = '$baseURL/pot/prices';
+
   static String potPriceByParams(
     String material,
     String size, {

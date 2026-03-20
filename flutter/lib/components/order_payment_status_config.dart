@@ -107,10 +107,14 @@ class OrderPaymentStatusConfig {
   static Color paymentColor(String status) {
     final code = normalize(status);
     if (code == 'paid') return AppColors.success;
-    if (code == 'failed' || code == 'refunded' || code == 'partially_refunded') {
+    if (code == 'failed' ||
+        code == 'refunded' ||
+        code == 'partially_refunded') {
       return AppColors.error;
     }
-    if (code == 'pending' || code == 'authorized' || code == 'awaiting_payment') {
+    if (code == 'pending' ||
+        code == 'authorized' ||
+        code == 'awaiting_payment') {
       return AppColors.brown;
     }
     return AppColors.grey;

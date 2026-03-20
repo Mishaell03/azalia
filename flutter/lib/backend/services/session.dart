@@ -6,7 +6,9 @@ import 'package:azalia/backend/models/auth.dart';
 
 class SessionService {
   static final SessionService _instance = SessionService._internal();
+
   factory SessionService() => _instance;
+
   SessionService._internal();
 
   static const String _keyUser = 'session_user';
@@ -22,15 +24,21 @@ class SessionService {
   Position? _currentPosition;
 
   User? get currentUser => _currentUser;
+
   String? get sessionToken => _sessionToken;
+
   bool get isLoggedIn => _currentUser != null && _sessionToken != null;
+
   bool get isEmployee => _isEmployee;
+
   Position? get currentPosition => _currentPosition;
+
   bool get hasActiveSession =>
       _currentUser != null &&
       _sessionToken != null &&
       _sessionToken!.isNotEmpty &&
       isTokenValid;
+
   bool get isTokenValid =>
       _tokenExpiresAt != null && _tokenExpiresAt!.isAfter(DateTime.now());
 

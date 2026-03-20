@@ -125,9 +125,9 @@ class _CartButtonState extends State<CartButton> {
 
       final errorMessage = AppErrors.isUnauthorizedError(e.toString())
           ? AppErrors.unauthorizedCartMessage
-          : (_isInCart 
-              ? 'Не удалось удалить из корзины'
-              : 'Не удалось добавить в корзину');
+          : (_isInCart
+                ? 'Не удалось удалить из корзины'
+                : 'Не удалось добавить в корзину');
 
       if (mounted && widget.showSnackbar) {
         ScaffoldMessenger.of(context).showSnackBar(

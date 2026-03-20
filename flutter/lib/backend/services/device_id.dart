@@ -7,7 +7,7 @@ class DeviceService {
   static Future<String> getDeviceId() async {
     try {
       final deviceInfo = await _deviceInfo.deviceInfo;
-      
+
       if (deviceInfo is AndroidDeviceInfo) {
         return deviceInfo.id;
       } else if (deviceInfo is IosDeviceInfo) {
@@ -34,10 +34,7 @@ class DeviceService {
     try {
       final url = await generateTelegramLink();
       final uri = Uri.parse(url);
-      final result = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
+      final result = await launchUrl(uri, mode: LaunchMode.externalApplication);
       return result;
     } catch (e) {
       return false;
@@ -48,10 +45,7 @@ class DeviceService {
     try {
       final url = await generateTelegramSupport();
       final uri = Uri.parse(url);
-      final result = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
+      final result = await launchUrl(uri, mode: LaunchMode.externalApplication);
       return result;
     } catch (e) {
       return false;

@@ -89,7 +89,7 @@ class AppText {
     fontFamily: "MontserratAlternates",
   );
   static const medium_8 = TextStyle(
-    fontSize:10,
+    fontSize: 10,
     fontWeight: FontWeight.w500,
     fontFamily: "MontserratAlternates",
   );

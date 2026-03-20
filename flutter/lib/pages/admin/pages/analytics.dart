@@ -185,9 +185,11 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
       builder: (context, constraints) {
         const spacing = 8.0;
         const minCardWidth = 280.0;
-        final showTwoColumns = constraints.maxWidth >= (minCardWidth * 2 + spacing);
-        final cardWidth =
-            showTwoColumns ? (constraints.maxWidth - spacing) / 2 : constraints.maxWidth;
+        final showTwoColumns =
+            constraints.maxWidth >= (minCardWidth * 2 + spacing);
+        final cardWidth = showTwoColumns
+            ? (constraints.maxWidth - spacing) / 2
+            : constraints.maxWidth;
         return Wrap(
           spacing: spacing,
           runSpacing: spacing,
@@ -531,11 +533,10 @@ class _AdminPageAnalyticsState extends State<AdminPageAnalytics> {
             fitInsideHorizontally: true,
             fitInsideVertically: true,
             tooltipPadding: const EdgeInsets.all(10),
-            getTooltipItem: (group, groupIndex, rod, rodIndex) =>
-                BarTooltipItem(
-                  '${_shortDate(_subscriptionSeries[group.x.toInt()].date)}\n${rod.toY.toInt()} подписок',
-                  AppText.medium_14.copyWith(color: AppColors.white),
-                ),
+            getTooltipItem: (group, groupIndex, rod, rodIndex) => BarTooltipItem(
+              '${_shortDate(_subscriptionSeries[group.x.toInt()].date)}\n${rod.toY.toInt()} подписок',
+              AppText.medium_14.copyWith(color: AppColors.white),
+            ),
           ),
         ),
         titlesData: FlTitlesData(

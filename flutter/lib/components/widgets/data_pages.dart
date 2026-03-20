@@ -18,7 +18,11 @@ const List<FooterItems> adminFooterItems = [
     route: '/admin/users',
     isSvg: false,
   ),
-  FooterItems(icon: 'workspace_premium_outlined', route: '/admin/settings', isSvg: false),
+  FooterItems(
+    icon: 'workspace_premium_outlined',
+    route: '/admin/settings',
+    isSvg: false,
+  ),
 ];
 
 const List<HeaderItems> adminHeaderItems = [
